@@ -1,0 +1,16 @@
+<!-- src/main/resources/static/test.html -->
+<!DOCTYPE html>
+<html>
+<body>
+<a href="/oauth2/authorization/google">구글 로그인 테스트</a>
+<div id="result"></div>
+<script>
+    // URL에 accessToken이 있으면 출력
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('accessToken');
+    if (token) {
+        document.getElementById('result').innerText = 'AccessToken: ' + token;
+    }
+</script>
+</body>
+</html>

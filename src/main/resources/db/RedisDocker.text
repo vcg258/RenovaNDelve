@@ -1,0 +1,5 @@
+레디스 도커 설치
+ • 리눅스 / 맥 기준 (~/docker/redis/data 저장하고 싶은 본인 경로 적으면 됨)
+docker run -d --name redis -p 6379:6379 -v ~/docker/redis/data:/data redis:7.2 redis-server --appendonly yes
+ • 윈도우 기준 (C:\Users\docker\redis\data 저장하고 싶은 본인 경로 적으면 됨)
+docker run -d --name redis -p 6379:6379 -v C:\Users\docker\redis\data:/data redis:7.2 redis-server --appendonly yes

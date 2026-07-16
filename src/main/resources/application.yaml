@@ -1,0 +1,116 @@
+spring:
+  application:
+    name: RenovaNDelve
+
+  config:
+    import: optional:file:.env[.properties]
+
+# 정적 리소스에 대해 캐시 사용 안함
+  web:
+    resources:
+      cache:
+        cache-control:
+          no-cache: true
+          no-store: true
+          must-revalidate: true
+
+# JPA 초기 INSERT 설정
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:db/data.sql
+  jpa:
+    defer-datasource-initialization: true
+    hibernate:
+      ddl-auto: update # 테이블 자동 생성
+    properties:
+#      javax.persistence.schema-generation.scripts.action: create # 엔티티 변경시 init.sql 추출 하기 위한 설정
+#      javax.persistence.schema-generation.scripts.create-target: init.sql # 엔티티 변경시 init.sql 추출 하기 위한 설정
+      hibernate:
+        format_sql: true #쿼리문 보여주는 설정
+    show-sql: true #쿼리문 보여주는 설정
+
+  # OpenAI
+  ai:
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: always # JdbcChatMemory 테이블 자동 생성
+
+    vectorstore:
+      pgvector:
+        initialize-schema: true # VectorStore 테이블 자동 생성 설정
+
+    # OpenAI API Key
+    openai:
+      api-key: ${OPENAI_API_KEY}
+
+      # 임베딩 모델 설정
+      embedding:
+        options:
+          model: text-embedding-3-small
+          dimensions: 1536 # 차원수
+      # LLM 모델 설정
+      chat:
+        options:
+          model: gpt-4o-mini
+
+# Upload Config
+  servlet:
+    multipart:
+      enabled: true
+      max-request-size: 30MB
+      max-file-size: 10MB
+
+# JSON 설정 (날짜 변환 @JsonFormat)
+  jackson:
+    date-format: yyyy-MM-dd'T'HH:mm:ss.SSS'Z'
+    time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
+
+#PostgreSQL 설정
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/renova_n_delve?currentSchema=public
+    username: postgres
+    password: postgres
+
+# Redis 설정
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  # Auth2 Google
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: 972477145934-8rh7h31q6dme93klmfj3i0aks06akfn2.apps.googleusercontent.com
+            client-secret: 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
+            scope:
+              - email
+              - profile
+
+#Logging 설정
+logging:
+  level:
+    org:
+      springframework: INFO
+      springframework.ai: DEBUG
+#      springframework.beans.factory: DEBUG
+    com:
+      renovandelve: DEBUG
+  pattern:
+    console: "%clr(%-5level){green} %clr(%logger{36}.%M\\(\\)){cyan}: %msg%n"
+
+# JWT SECRET KEY
+renovaNDelve:
+  jwt:
+    secret: ${JWT_SECRET_KEY}
+  ai:
+    # 서버 기동 시 RDB 몬스터 -> VectorStore 자동 임베딩 동기화 (비용: 몬스터 수 만큼의 임베딩 1회)
+    sync-monsters-on-startup: true

@@ -1,0 +1,108 @@
+### 회원가입
+POST http://localhost:8080/api/auth/signup
+Content-Type: application/json
+
+{
+  "loginId": "tester",
+  "password": "1234"
+}
+
+### 로그인 (응답의 accessToken을 아래 @token에 복사)
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "loginId": "tester",
+  "password": "1234"
+}
+
+### ====== 이하 요청은 Bearer 토큰 필요 ======
+@token = PASTE_ACCESS_TOKEN_HERE
+
+### 내 정보
+GET http://localhost:8080/api/member/me
+Authorization: Bearer {{token}}
+
+### 세팅 옵션 (장비/스킬/유물 + 예산)
+GET http://localhost:8080/api/game/options
+Authorization: Bearer {{token}}
+
+### 새 게임 시작 (기본 장비 + 기본 공격만)
+POST http://localhost:8080/api/game/new
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "difficulty": "NORMAL",
+  "weaponId": null,
+  "armorId": null,
+  "helmetId": null,
+  "skillIds": [],
+  "relicIds": []
+}
+
+### 현재 게임 뷰
+GET http://localhost:8080/api/game/current
+Authorization: Bearer {{token}}
+
+### 다음 노드 전진 (AI가 전투/조우 생성)
+POST http://localhost:8080/api/game/next
+Authorization: Bearer {{token}}
+
+### 스킬 사용 (slotId는 current 응답의 skillSlotDTO에서 확인)
+POST http://localhost:8080/api/game/battle/skill
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "slotId": 1,
+  "targetKeys": [0]
+}
+
+### 조우 선택
+POST http://localhost:8080/api/game/encounter
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "choiceIndex": 0
+}
+
+### 보상 스킵 -> 상점 오픈
+POST http://localhost:8080/api/game/reward
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemType": "SKIP",
+  "itemId": null
+}
+
+### 상점 조회 / 나가기
+GET http://localhost:8080/api/game/shop
+Authorization: Bearer {{token}}
+
+### 상점 나가기
+POST http://localhost:8080/api/game/shop/leave
+Authorization: Bearer {{token}}
+
+### 게임 종료 요약
+GET http://localhost:8080/api/game/summary
+Authorization: Bearer {{token}}
+
+### 랭킹
+GET http://localhost:8080/api/ranking?difficulty=NORMAL
+Authorization: Bearer {{token}}
+
+### 도감
+GET http://localhost:8080/api/collection
+Authorization: Bearer {{token}}
+
+### 가이드 챗봇
+POST http://localhost:8080/api/rag
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "question": "핏빛 반지랑 시너지 좋은 스킬 알려줘"
+}
