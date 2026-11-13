@@ -1,6 +1,7 @@
 package com.renovandelve.dto.request;
 
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -26,6 +27,17 @@ public record SignupRequest(
         @Size(min = 2, max = 12, message = "닉네임은 2~12자여야 합니다.")
         @Pattern(regexp = "^[가-힣a-zA-Z0-9]+$", message = "닉네임은 한글, 영문, 숫자만 사용할 수 있습니다.")
         String nickname,
+
+        // 아이디 찾기 / 비밀번호 재설정에 쓴다
+        @NotBlank(message = "이름을 입력해주세요.")
+        @Size(min = 2, max = 30, message = "이름은 2~30자여야 합니다.")
+        @Pattern(regexp = "^[가-힣a-zA-Z]+( [가-힣a-zA-Z]+)*$", message = "이름은 한글과 영문만 사용할 수 있습니다.")
+        String name,
+
+        @NotBlank(message = "이메일을 입력해주세요.")
+        @Email(message = "이메일 형식이 올바르지 않습니다.")
+        @Size(max = 254, message = "이메일이 너무 깁니다.")
+        String email,
 
         // 동의 여부는 화면 체크박스만 믿지 않고 서버에서도 검증한다 (API 직접 호출로 동의 없이 가입하는 것 방지)
         @NotNull(message = "이용약관에 동의해주세요.")

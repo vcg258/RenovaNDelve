@@ -1,6 +1,7 @@
 package com.renovandelve.controller;
 
 import com.renovandelve.domain.MemberEntity;
+import com.renovandelve.dto.request.ContactChangeRequest;
 import com.renovandelve.dto.request.NicknameChangeRequest;
 import com.renovandelve.dto.request.PasswordChangeRequest;
 import com.renovandelve.dto.request.SignupRequest;
@@ -100,6 +101,13 @@ public class MemberController {
     @PatchMapping("/member/nickname")
     public ResponseEntity<Void> changeNickname(@Valid @RequestBody NicknameChangeRequest request) {
         memberService.changeNickname(currentMemberService.getCurrentMember(), request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "이름·이메일 등록 / 변경", description = "아이디 찾기·비밀번호 찾기에 쓰는 정보입니다. 비밀번호가 있는 계정은 현재 비밀번호를 확인합니다.")
+    @PatchMapping("/member/contact")
+    public ResponseEntity<Void> changeContact(@Valid @RequestBody ContactChangeRequest request) {
+        memberService.changeContact(currentMemberService.getCurrentMember(), request);
         return ResponseEntity.noContent().build();
     }
 
