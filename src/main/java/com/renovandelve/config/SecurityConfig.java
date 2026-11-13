@@ -15,6 +15,7 @@ import com.renovandelve.util.JwtUtil;
 import com.renovandelve.util.RefreshCookieFactory;
 import com.renovandelve.filter.AuthRateLimitFilter;
 import com.renovandelve.service.redis.RateLimitService;
+import com.renovandelve.service.redis.TokenRevocationService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -41,6 +42,7 @@ public class SecurityConfig {
     private final LoginAttemptService loginAttemptService;
     private final RefreshCookieFactory refreshCookieFactory;
     private final RateLimitService rateLimitService;
+    private final TokenRevocationService tokenRevocationService;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity, Oauth2UserService oauth2UserService) throws Exception {
@@ -114,7 +116,7 @@ public class SecurityConfig {
 
     @Bean
     public TokenCheckFilter tokenCheckFilter() {
-        return new TokenCheckFilter(jwtUtil);
+        return new TokenCheckFilter(jwtUtil, tokenRevocationService);
     }
 
     @Bean

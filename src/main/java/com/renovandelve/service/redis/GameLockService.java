@@ -26,7 +26,9 @@ import java.util.function.Supplier;
 @Service
 public class GameLockService {
     private static final String KEY_PREFIX = "game:lock:";
-    // 노드 전진은 LLM 응답을 기다리므로 프론트 타임아웃(90초)보다 길게 잡는다
+    // 노드 전진은 LLM 응답을 기다리므로 프론트 타임아웃(90초)보다 길게 잡는다.
+    // 락 안에서 가장 오래 걸리는 AI 노드 생성은 GameEngineServiceImpl이 75초에서 끊고 폴백하므로
+    // 한 요청이 이 TTL을 넘겨 락이 먼저 풀리는 일은 없다
     private static final Duration LOCK_TTL = Duration.ofSeconds(120);
 
     private static final DefaultRedisScript<Long> RELEASE_SCRIPT = new DefaultRedisScript<>(

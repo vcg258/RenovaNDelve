@@ -2,6 +2,7 @@ package com.renovandelve.filter;
 
 import com.renovandelve.exception.AccessTokenException;
 import com.renovandelve.exception.enums.TokenError;
+import com.renovandelve.service.redis.TokenRevocationService;
 import com.renovandelve.util.JwtUtil;
 import com.renovandelve.util.TokenClaims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -27,6 +28,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class TokenCheckFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
+    private final TokenRevocationService tokenRevocationService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -53,7 +55,15 @@ public class TokenCheckFilter extends OncePerRequestFilter {
             String loginId = (String) claims.get("loginId");
             String role = (String) claims.getOrDefault("role", "USER");
 
+            // 정지·권한 변경·탈퇴·로그아웃 이전에 발급된 토큰은 만료 전이라도 받지 않는다.
+            // (만료로 응답하면 프론트가 재발급을 시도하고, 그 시점에 DB의 계정 상태·권한이 다시 확인된다)
+            long issuedAt = claims.get("iat") instanceof Number number ? number.longValue() : 0L;
+            if (tokenRevocationService.isRevoked(loginId, issuedAt)) {
+                throw new AccessTokenException(TokenError.EXPIRED);
+            }
+
             // 토큰의 role 클레임을 그대로 authority로 사용 -> 요청마다 DB 조회 없이 인가 판정
+            // (권한이 바뀌면 위 폐기 검사에 걸려 재발급을 거치므로 낡은 role이 남지 않는다)
             UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
                     loginId, null, List.of(new SimpleGrantedAuthority("ROLE_" + role)));
 

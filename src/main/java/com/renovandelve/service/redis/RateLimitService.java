@@ -14,8 +14,9 @@ import java.time.Duration;
  * - 인증 API: IP 단위 (무차별 대입, 계정 대량 생성, 아이디 수집 방어)
  * - LLM 호출 API: 회원 단위 (외부 API 비용 폭주 방어)
  *
- * Redis 장애 시에는 제한을 포기하고 통과시킨다(fail-open).
- * 요청 제한은 보조 방어선이므로, 이것 때문에 서비스 전체가 멈추는 쪽이 더 큰 손해다.
+ * Redis 장애 시의 동작은 호출하는 쪽이 고른다.
+ * - fail-open(기본): 제한을 포기하고 통과. 요청 제한은 보조 방어선이므로, 이것 때문에 로그인까지 막히는 쪽이 더 큰 손해다.
+ * - fail-closed: 거부. 통과시키면 곧바로 외부 API 비용이 나가는 경로(가이드 챗봇)에 쓴다.
  */
 @Log4j2
 @Service
@@ -34,6 +35,16 @@ public class RateLimitService {
      * @return 허용이면 0, 초과면 다시 시도할 수 있을 때까지 남은 초(최소 1)
      */
     public long retryAfterSeconds(String bucket, String subject, int limit, Duration window) {
+        return retryAfterSeconds(bucket, subject, limit, window, false);
+    }
+
+    /** Redis 장애로 횟수를 셀 수 없을 때 failClosed면 이 시간만큼 기다리라고 답한다 */
+    private static final long FAIL_CLOSED_RETRY_SECONDS = 30;
+
+    /**
+     * @param failClosed true면 Redis 장애 시 거부한다 (기본은 통과)
+     */
+    public long retryAfterSeconds(String bucket, String subject, int limit, Duration window, boolean failClosed) {
         String key = KEY_PREFIX + bucket + ":" + subject;
         try {
             Long count = redisTemplate.opsForValue().increment(key);
@@ -51,8 +62,8 @@ public class RateLimitService {
             }
             return Math.max(1, ttl);
         } catch (Exception e) {
-            log.warn("요청 제한 확인 실패(통과 처리) bucket={} 원인={}", bucket, e.getMessage());
-            return 0;
+            log.warn("요청 제한 확인 실패({}) bucket={} 원인={}", failClosed ? "거부 처리" : "통과 처리", bucket, e.getMessage());
+            return failClosed ? FAIL_CLOSED_RETRY_SECONDS : 0;
         }
     }
 }

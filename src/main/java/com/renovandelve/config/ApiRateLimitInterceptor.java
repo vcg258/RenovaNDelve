@@ -24,7 +24,15 @@ import java.time.Duration;
 public class ApiRateLimitInterceptor implements HandlerInterceptor {
     private final RateLimitService rateLimitService;
 
-    private record Rule(String bucket, int limit, Duration window, String message) {
+    /**
+     * @param failClosed Redis 장애로 횟수를 셀 수 없을 때 거부할지 여부.
+     *                   가이드 챗봇은 Redis 없이도 OpenAI를 호출할 수 있어 제한이 풀리면 비용이 그대로 나간다 -> 거부.
+     *                   게임 API는 세션이 Redis에 있어 어차피 진행되지 않으므로 기본값(통과)으로 둔다.
+     */
+    private record Rule(String bucket, int limit, Duration window, String message, boolean failClosed) {
+        Rule(String bucket, int limit, Duration window, String message) {
+            this(bucket, limit, window, message, false);
+        }
     }
 
     @Override
@@ -36,7 +44,8 @@ public class ApiRateLimitInterceptor implements HandlerInterceptor {
         String subject = authentication.getName();
 
         for (Rule rule : resolveRules(request.getRequestURI())) {
-            long retryAfter = rateLimitService.retryAfterSeconds(rule.bucket(), subject, rule.limit(), rule.window());
+            long retryAfter = rateLimitService.retryAfterSeconds(
+                    rule.bucket(), subject, rule.limit(), rule.window(), rule.failClosed());
             if (retryAfter > 0) {
                 response.setStatus(429);
                 response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfter));
@@ -52,8 +61,8 @@ public class ApiRateLimitInterceptor implements HandlerInterceptor {
     private Rule[] resolveRules(String path) {
         return switch (path) {
             case "/api/rag" -> new Rule[]{
-                    new Rule("guide:min", 8, Duration.ofMinutes(1), "안내자가 숨을 고르는 중입니다. 잠시 후 다시 물어보세요."),
-                    new Rule("guide:day", 150, Duration.ofDays(1), "오늘은 안내자에게 물을 수 있는 횟수를 모두 사용했습니다.")};
+                    new Rule("guide:min", 8, Duration.ofMinutes(1), "안내자가 숨을 고르는 중입니다. 잠시 후 다시 물어보세요.", true),
+                    new Rule("guide:day", 150, Duration.ofDays(1), "오늘은 안내자에게 물을 수 있는 횟수를 모두 사용했습니다.", true)};
             case "/api/game/next" -> new Rule[]{
                     new Rule("node:min", 20, Duration.ofMinutes(1), "너무 빠르게 전진하고 있습니다. 잠시 후 다시 시도해주세요.")};
             case "/api/game/new" -> new Rule[]{

@@ -76,7 +76,7 @@ cp .env.example .env
 ```
 
 - 서버: `http://localhost:8080` / Swagger: `http://localhost:8080/swagger-ui/index.html`
-- 기동 시 `db/data.sql`이 몬스터/스킬/장비/유물/필드 강도 시드를 자동 등록 (멱등)
+- 기동 시 Flyway가 스키마(`db/migration/V*.sql`)를 적용하고, 반복 마이그레이션 `R__seed_data.sql`이 몬스터/스킬/장비/유물/필드 강도 시드를 등록 (멱등, 내용이 바뀐 기동에서만 재실행)
 
 ### 4. (선택) 세계관 문서 ETL
 
@@ -189,7 +189,7 @@ RenovaNDelve/                  # Spring Boot 백엔드
  │   ├─ ai/                    # MonsterRagService(RAG), GuideService(Tools), EtlService, 프리페치
  │   └─ redis/                 # GameSession/StageCache/SecurityToken 저장소
  ├─ controller/                # Game / Member / Ranking / Collection / AI
- └─ resources/db/data.sql      # 멱등 시드 (몬스터/스킬/장비/유물/필드 강도)
+ └─ resources/db/migration/     # Flyway: V1 기준 스키마, R__seed_data 멱등 시드
 
 renova-delve-front/            # React 19 + Vite + TypeScript 프론트엔드
  ├─ src/api/                   # axios 클라이언트 (토큰 자동 재발급), 타입, API 함수

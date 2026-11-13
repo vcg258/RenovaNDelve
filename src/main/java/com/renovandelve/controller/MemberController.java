@@ -11,6 +11,7 @@ import com.renovandelve.service.PersonalDataService;
 import com.renovandelve.dto.response.GameHistoryDTO;
 import com.renovandelve.dto.response.AchievementDTO;
 import com.renovandelve.service.AchievementService;
+import com.renovandelve.service.redis.TokenRevocationService;
 import com.renovandelve.service.redis.SecurityTokenService;
 import com.renovandelve.util.JwtUtil;
 import com.renovandelve.util.RefreshCookieFactory;
@@ -37,6 +38,7 @@ public class MemberController {
     private final MemberService memberService;
     private final CurrentMemberService currentMemberService;
     private final SecurityTokenService securityTokenService;
+    private final TokenRevocationService tokenRevocationService;
     private final JwtUtil jwtUtil;
     private final RefreshCookieFactory refreshCookieFactory;
     private final PersonalDataService personalDataService;
@@ -125,6 +127,7 @@ public class MemberController {
                 String loginId = (String) jwtUtil.validateToken(refreshToken).get("loginId");
                 if (loginId != null) {
                     securityTokenService.logout(loginId);
+                    tokenRevocationService.revoke(loginId); // 발급된 AccessToken도 즉시 무효
                     log.info("로그아웃 처리 loginId={}", loginId);
                 }
             } catch (Exception e) {
