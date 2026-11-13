@@ -1,77 +1,73 @@
 package com.renovandelve.filter;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import com.renovandelve.exception.RefreshTokenException;
 import com.renovandelve.exception.enums.ErrorCase;
+import com.renovandelve.handler.LoginSuccessHandler;
+import com.renovandelve.repository.MemberRepository;
 import com.renovandelve.service.redis.SecurityTokenService;
 import com.renovandelve.util.JwtUtil;
+import com.renovandelve.util.RefreshCookieFactory;
+import com.renovandelve.util.TokenClaims;
 import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.MalformedJwtException;
-import io.jsonwebtoken.security.SignatureException;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseCookie;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
-import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Date;
 import java.util.Map;
 
+/**
+ * AccessToken 재발급 필터.
+ *
+ * 보안상 지키는 것:
+ * - 토큰 값은 절대 로그에 남기지 않는다 (로그 유출 = 세션 탈취)
+ * - RefreshToken은 httpOnly 쿠키로만 오가며, 응답 본문에는 싣지 않는다
+ * - typ=refresh 인 토큰만 재발급에 사용할 수 있다
+ */
 @Log4j2
 public class RefreshTokenFilter extends OncePerRequestFilter {
     private final String refreshPath;
     private final JwtUtil jwtUtil;
     private final SecurityTokenService securityTokenService; // 레디스
+    private final MemberRepository memberRepository;
+    private final RefreshCookieFactory refreshCookieFactory;
 
-    public RefreshTokenFilter(String refreshPath, JwtUtil jwtUtil, @Qualifier("securityRedisTemplate") SecurityTokenService securityTokenService) {
+    public RefreshTokenFilter(String refreshPath, JwtUtil jwtUtil,
+                              SecurityTokenService securityTokenService,
+                              MemberRepository memberRepository,
+                              RefreshCookieFactory refreshCookieFactory) {
         this.refreshPath = refreshPath;
         this.jwtUtil = jwtUtil;
         this.securityTokenService = securityTokenService;
+        this.memberRepository = memberRepository;
+        this.refreshCookieFactory = refreshCookieFactory;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        String path = request.getRequestURI();
-
         // 요청경로 refreshPath 아니면 Pass
-        if (!path.startsWith(refreshPath)) {
-            log.info("skip Refreshing token...");
+        if (!refreshPath.equals(request.getRequestURI())) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        String refreshToken = null;
-        if (request.getCookies() != null) {
-            Cookie[] cookies = request.getCookies();
-            for (Cookie cookie : cookies) {
-                if (cookie.getName().equals("refreshToken")) {
-                    refreshToken = cookie.getValue();
-                    break;
-                }
-            }
-        }
-
-        log.info("Refreshing Token...");
+        // 본문의 AccessToken은 선택 사항 (새로고침 직후에는 메모리 토큰이 없다)
         Map<String, String> tokens = parseRequestJson(request);
-        if (tokens == null) {
-            new RefreshTokenException(ErrorCase.BAD_ACCESS).sendResponseError(response);
-            return;
-        }
-        String accessToken = tokens.get("accessToken");
-
-        log.info("AccessToken : {}", accessToken);
-        log.info("RefreshToken : {}", refreshToken);
+        String accessToken = tokens == null ? null : tokens.get("accessToken");
 
         // AccessToken 검증
         try {
@@ -82,28 +78,28 @@ public class RefreshTokenFilter extends OncePerRequestFilter {
         }
 
         // 쿠키에 RefreshToken이 아예 없으면 (만료/삭제) 재로그인 필요
+        String refreshToken = readRefreshCookie(request);
         if (refreshToken == null || refreshToken.isBlank()) {
-            log.info("RefreshToken 쿠키 없음 - 재로그인 필요");
             new RefreshTokenException(ErrorCase.BAD_REFRESH).sendResponseError(response);
             return;
         }
 
-        Map<String, Object> refreshClaims = null;
+        Map<String, Object> refreshClaims;
         try {
             refreshClaims = checkRefreshToken(refreshToken);
-            log.info("RefreshToken 전달 확인용 : {}", refreshClaims);
         } catch (RefreshTokenException e) {
             e.sendResponseError(response);
             return;
         }
 
         // 쿠키로 들어가있는 리프레시
-        String loginId = (String) refreshClaims.get("loginId");
+        String loginId = (String) refreshClaims.get(TokenClaims.LOGIN_ID);
         // 레디스에 저장된 리프레시
-        String RedisRefresh = securityTokenService.getRefreshToken(loginId);
+        String redisRefresh = securityTokenService.getRefreshToken(loginId);
 
-        if (RedisRefresh == null || !RedisRefresh.equals(refreshToken)) {
-            log.error("refreshToken이 DB와 일치 하지 않음 (탈취)");
+        if (redisRefresh == null || !constantTimeEquals(redisRefresh, refreshToken)) {
+            // 서명은 유효한데 서버 보관분과 다르다 = 이미 폐기/교체된 토큰의 재사용 (탈취 의심)
+            log.warn("RefreshToken 불일치 - 폐기된 토큰 재사용 의심 loginId={}", loginId);
             new RefreshTokenException(ErrorCase.BAD_REFRESH).sendResponseError(response);
             return;
         }
@@ -111,42 +107,50 @@ public class RefreshTokenFilter extends OncePerRequestFilter {
         // JWT 라이브러리는 exp를 Integer로 돌려줄 수 있음 -> (long) 직접 캐스팅 시 ClassCastException으로
         // 토큰 재발급 전체가 500으로 실패하던 버그. Number로 안전하게 변환한다.
         long exp = ((Number) refreshClaims.get("exp")).longValue();
-        Date expiredTime = new Date(exp * 1000);
-        Date currentTime = new Date(System.currentTimeMillis());
+        long gapTime = new Date(exp * 1000).getTime() - System.currentTimeMillis();
 
-        long gapTime = (long) (expiredTime.getTime() - currentTime.getTime());
-        log.info("-------------------------------------------");
-        log.info("currentTime: {}", currentTime);
-        log.info("expiredTime: {}", expiredTime);
-        log.info("gapTime: {}", gapTime);
-
-        String accessTokenValue = jwtUtil.generateToken(Map.of("loginId", loginId), 30);
-
-        // 리프레시 12시간도 안남았으면 재발급
-        long reissuancePeriod = 1000 * 60 * 60 * 12;
-        if (gapTime < reissuancePeriod) {
-            long expiredToken = 60 * 24; // TODO 하루만 지정 (분단위)
-            long expiredCookie = 60 * 60 * 24; // 위와 동일 (쿠키는 초단위)
-
-            String newRefresh = jwtUtil.generateToken(Map.of("loginId", loginId), expiredToken);
-
-            // 재발급 리프레시 새로운 값으로 다시 추가
-            securityTokenService.saveRefreshToken(loginId, newRefresh, expiredToken);
-
-            ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", newRefresh)
-                    .httpOnly(true)
-                    .secure(false)
-                    .path("/")
-                    .maxAge(expiredCookie)
-                    .sameSite("Strict")
-                    .build();
-
-            response.setHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
+        // 계정 상태/권한을 매 재발급 시점에 다시 확인
+        // -> 운영자가 계정을 정지시키면 다음 재발급부터 즉시 차단되고, 권한 변경도 반영된다.
+        var member = memberRepository.findByLoginId(loginId).orElse(null);
+        if (member == null || member.getStatus() == null || !member.getStatus().canLogin()) {
+            log.info("정지/탈퇴 계정의 토큰 재발급 차단 loginId={}", loginId);
+            securityTokenService.logout(loginId);
+            new RefreshTokenException(ErrorCase.BAD_REFRESH).sendResponseError(response);
+            return;
         }
-        log.info("Refresh Token result");
-        log.info("accessToken : {}", accessTokenValue);
+        String role = member.getRole().name();
 
-        sendToken(accessTokenValue, refreshToken, response);
+        String accessTokenValue = jwtUtil.generateToken(
+                TokenClaims.access(loginId, role), LoginSuccessHandler.ACCESS_TOKEN_MINUTES);
+
+        // 리프레시 12시간도 안남았으면 재발급 (슬라이딩 만료)
+        long reissuancePeriod = 1000L * 60 * 60 * 12;
+        if (gapTime < reissuancePeriod) {
+            String newRefresh = jwtUtil.generateToken(
+                    TokenClaims.refresh(loginId, role), LoginSuccessHandler.REFRESH_TOKEN_MINUTES);
+
+            // 재발급 리프레시 새로운 값으로 다시 추가 (이전 값은 이 시점에 무효가 된다)
+            securityTokenService.saveRefreshToken(loginId, newRefresh, LoginSuccessHandler.REFRESH_TOKEN_MINUTES);
+            response.setHeader(HttpHeaders.SET_COOKIE,
+                    refreshCookieFactory.issue(newRefresh, LoginSuccessHandler.REFRESH_COOKIE_SECONDS));
+        }
+
+        sendToken(accessTokenValue, response);
+    }
+
+    private String readRefreshCookie(HttpServletRequest request) {
+        if (request.getCookies() == null) return null;
+        for (Cookie cookie : request.getCookies()) {
+            if (RefreshCookieFactory.NAME.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
+    }
+
+    /** 비교 시간으로 토큰 내용을 추측하지 못하도록 상수 시간 비교 */
+    private boolean constantTimeEquals(String a, String b) {
+        return MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8), b.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
@@ -155,19 +159,15 @@ public class RefreshTokenFilter extends OncePerRequestFilter {
      */
     private void checkAccessToken(String accessToken) {
         if (accessToken == null) {
-            log.info("null은 재접속 통과"); // ViewData에 들어가있기 때문에 새로고침하면 날아감 그래서 Pass
-            return;
+            return; // 메모리 보관이라 새로고침하면 사라진다 -> 없는 것은 정상
         }
         try {
             jwtUtil.validateToken(accessToken); // 검증
         } catch (ExpiredJwtException e) {
-            log.info("AccessToken Expired"); // 만료
-        } catch (MalformedJwtException e) {
-            log.info("Malformed AccessToken");
-            throw new RefreshTokenException(ErrorCase.BAD_ACCESS); // 토큰 형식 잘못됨
-        } catch (SignatureException e) {
-            log.info("BadSignatured AccessToken");
-            throw new RefreshTokenException(ErrorCase.BAD_ACCESS); // 서명 위조
+            // 만료된 AccessToken을 들고 재발급을 요청하는 것이 정상 흐름
+        } catch (JwtException | IllegalArgumentException e) {
+            log.info("재발급 요청의 AccessToken이 유효하지 않음: {}", e.getClass().getSimpleName());
+            throw new RefreshTokenException(ErrorCase.BAD_ACCESS); // 형식 오류 / 서명 위조
         }
     }
 
@@ -178,46 +178,42 @@ public class RefreshTokenFilter extends OncePerRequestFilter {
      * @throws RefreshTokenException 토큰 검증 실패시 예외
      */
     private Map<String, Object> checkRefreshToken(String refreshToken) throws RefreshTokenException {
+        Map<String, Object> claims;
         try {
-            return jwtUtil.validateToken(refreshToken); // 검증
+            claims = jwtUtil.validateToken(refreshToken); // 검증
         } catch (ExpiredJwtException e) {
-            log.info("RefreshToken Exception"); // 만료
             throw new RefreshTokenException(ErrorCase.OLD_REFRESH); // 만료
-        } catch (MalformedJwtException e) {
-            log.info("RefreshToken Malformed");
-            throw new RefreshTokenException(ErrorCase.BAD_REFRESH); // 형식 잘못됨
-        } catch (SignatureException e) {
-            log.info("RefreshToken BadSignatured");
-            throw new RefreshTokenException(ErrorCase.BAD_REFRESH); // 서명 위조
+        } catch (JwtException | IllegalArgumentException e) {
+            log.info("RefreshToken이 유효하지 않음: {}", e.getClass().getSimpleName());
+            throw new RefreshTokenException(ErrorCase.BAD_REFRESH); // 형식 오류 / 서명 위조
         }
+        // AccessToken을 쿠키에 넣어 재발급을 받으려는 시도 차단
+        if (!TokenClaims.isRefresh(claims)) {
+            throw new RefreshTokenException(ErrorCase.BAD_REFRESH);
+        }
+        return claims;
     }
 
     /**
-     * 토큰 발권
-     * @param accessTokenValue AccessToken 값
-     * @param refreshTokenValue RefreshToken 값
-     * @param response 응답
-     * @throws IOException 잘못된 형식의 값이 들어갈때 예외
+     * AccessToken 응답. RefreshToken은 httpOnly 쿠키로만 전달하고 본문에 싣지 않는다.
+     * (본문에 실으면 스크립트가 읽을 수 있어 httpOnly의 의미가 사라진다)
      */
-    private void sendToken(String accessTokenValue, String refreshTokenValue, HttpServletResponse response) throws IOException {
-        Map<String, Object> keyMap = Map.of("accessToken", accessTokenValue, "refreshToken", refreshTokenValue);
-        Gson gson = new Gson();
-        String jsonStr = gson.toJson(keyMap);
+    private void sendToken(String accessTokenValue, HttpServletResponse response) throws IOException {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().println(jsonStr);
+        response.getWriter().println(new Gson().toJson(Map.of("accessToken", accessTokenValue)));
     }
 
     /**
      * Json 직렬화 역직렬화
      * @param request 요청값
-     * @return Json <-> Map
+     * @return Json <-> Map (본문이 없거나 잘못된 형식이면 null)
      */
+    @SuppressWarnings("unchecked")
     private Map<String, String> parseRequestJson(HttpServletRequest request) {
-        try (Reader reader = new InputStreamReader(request.getInputStream())) {
-            Gson gson = new Gson();
-            return gson.fromJson(reader, Map.class);
-        } catch (IOException e) {
-            log.error(e.getMessage());
+        try (Reader reader = new InputStreamReader(request.getInputStream(), StandardCharsets.UTF_8)) {
+            return new Gson().fromJson(reader, Map.class);
+        } catch (IOException | JsonSyntaxException | ClassCastException e) {
+            log.info("재발급 요청 본문 파싱 실패: {}", e.getClass().getSimpleName());
         }
         return null;
     }

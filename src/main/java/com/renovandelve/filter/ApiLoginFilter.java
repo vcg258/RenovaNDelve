@@ -1,12 +1,13 @@
 package com.renovandelve.filter;
 
 import com.google.gson.Gson;
+import com.renovandelve.handler.LoginAttemptService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.security.authentication.AuthenticationServiceException;
-import org.springframework.security.authentication.InternalAuthenticationServiceException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -19,15 +20,17 @@ import java.util.Map;
 
 @Log4j2
 public class ApiLoginFilter extends AbstractAuthenticationProcessingFilter {
-    public ApiLoginFilter(String defaultFilterProcessesUrl) {
+    private final LoginAttemptService loginAttemptService;
+
+    public ApiLoginFilter(String defaultFilterProcessesUrl, LoginAttemptService loginAttemptService) {
         super(defaultFilterProcessesUrl);
+        this.loginAttemptService = loginAttemptService;
     }
 
     @Override
-    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) throws AuthenticationException, IOException, ServletException {
-        log.info("로그인 검증 메서드 진입");
+    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
+            throws AuthenticationException, IOException, ServletException {
         if (request.getMethod().equalsIgnoreCase("GET")) {
-            log.error("GET 접근 불가능");
             throw new AuthenticationServiceException("GET 메서드는 지원하지 않습니다.");
         }
 
@@ -35,15 +38,24 @@ public class ApiLoginFilter extends AbstractAuthenticationProcessingFilter {
         if (jsonData == null) {
             throw new AuthenticationServiceException("요청 데이터 없음");
         }
-        log.info("API JSON 로그인 데이터 = {}", jsonData);
 
-        // 아직 인증되지 않은 토큰 생성
+        String loginId = String.valueOf(jsonData.get("loginId"));
+        // 실패 핸들러가 대상 계정을 알 수 있도록 요청 속성에 보관
+        request.setAttribute("loginId", loginId);
+
+        // 실패 횟수는 "계정 + 접속 IP" 단위로 센다.
+        // 계정 단위로만 세면 공격자가 남의 아이디로 일부러 5번 틀려 정상 사용자를 잠글 수 있다(계정 잠금 DoS).
+        String attemptKey = LoginAttemptService.attemptKey(loginId, request.getRemoteAddr());
+        request.setAttribute(LoginAttemptService.ATTEMPT_KEY_ATTRIBUTE, attemptKey);
+
+        // 무차별 대입 차단: 임계치 초과 시 비밀번호 검증 자체를 시도하지 않는다
+        if (loginAttemptService.isBlocked(attemptKey)) {
+            throw new LockedException("로그인 시도 횟수 초과");
+        }
+
         UsernamePasswordAuthenticationToken authenticationToken =
-                new UsernamePasswordAuthenticationToken(
-                        jsonData.get("loginId"),
-                        jsonData.get("password")
-                );
-        // 검증매니저에게 검증
+                new UsernamePasswordAuthenticationToken(loginId, jsonData.get("password"));
+
         return getAuthenticationManager().authenticate(authenticationToken);
     }
 
@@ -54,8 +66,7 @@ public class ApiLoginFilter extends AbstractAuthenticationProcessingFilter {
      */
     private Map<String, Object> parseRequestJson(HttpServletRequest request) {
         try (Reader reader = new InputStreamReader(request.getInputStream())) {
-            Gson gson = new Gson();
-            return gson.fromJson(reader, Map.class);
+            return new Gson().fromJson(reader, Map.class);
         } catch (IOException e) {
             log.error(e.getMessage());
         }

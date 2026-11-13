@@ -26,24 +26,15 @@ public class Oauth2UserService extends DefaultOAuth2UserService {
 
         Map<String, Object> attributes = oAuth2User.getAttributes();
         String socialId = (String) attributes.get("sub");
-        String email = (String) attributes.get("email");
+        // 개인정보 최소 수집: 서비스가 쓰는 것은 제공자 고유 ID(sub)뿐이다.
+        // - 이메일은 어디에도 쓰지 않으므로 읽지도, 로그에 남기지도 않는다.
+        // - 구글 AccessToken은 로그인 이후 구글 API를 호출하지 않으므로 DB에 저장하지 않는다.
+        //   (평문 저장된 제3자 토큰은 DB 유출 시 그대로 2차 피해가 된다)
+        log.info("OAuth2 로그인 시도");
 
-        String socialToken = userRequest.getAccessToken().getTokenValue();
-
-        log.info("OAuth2 로그인 시도 - socialId: {}, email: {}", socialId, email);
-
-        memberRepository.findBySocialId(socialId)
-                .ifPresentOrElse(memberEntity -> {
-                            memberEntity.updateSocialToken(socialToken);
-                            memberRepository.save(memberEntity);
-                        },
-                        () -> memberRepository.save(
-                                MemberEntity.builder()
-                                        .socialId(socialId)
-                                        .socialToken(socialToken)
-                                        .build()
-                        )
-                );
+        if (memberRepository.findBySocialId(socialId).isEmpty()) {
+            memberRepository.save(MemberEntity.builder().socialId(socialId).build());
+        }
 
         return oAuth2User;
     }
