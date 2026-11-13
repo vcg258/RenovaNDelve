@@ -1,0 +1,40 @@
+# 운영 프로파일 (--spring.profiles.active=prod)
+# application.yaml(로컬 개발 기본값) 위에 덮어쓰는 값만 둔다.
+
+spring:
+  jpa:
+    hibernate:
+      # 운영에서는 엔티티 변경이 스키마를 자동으로 바꾸지 못하게 한다 (검증만).
+      # 스키마 변경은 마이그레이션 도구(Flyway 등)로 버전 관리하는 것이 표준이다.
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+server:
+  # 리버스 프록시(Nginx, ALB) 뒤에서 실제 접속 IP와 HTTPS 여부를 인식 -> IP 단위 요청 제한이 정확해진다
+  forward-headers-strategy: native
+  error:
+    include-message: never
+    include-stacktrace: never
+
+# API 문서는 운영에 노출하지 않는다 (공격자에게 전체 엔드포인트 목록을 주는 셈)
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    org:
+      springframework: INFO
+      # DEBUG면 프롬프트 전문(사용자가 챗봇에 입력한 내용 포함)이 로그에 남는다
+      springframework.ai: INFO
+    com:
+      renovandelve: INFO
+
+renovaNDelve:
+  cookie:
+    secure: true

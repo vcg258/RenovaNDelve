@@ -6,7 +6,9 @@ import com.renovandelve.domain.GameEquipmentEntity;
 import com.renovandelve.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.domain.skillentity.SkillEntity;
 import com.renovandelve.dto.*;
+import com.renovandelve.dto.response.AlignmentDTO;
 import com.renovandelve.dto.response.StatusDTO;
+import com.renovandelve.engine.Pact;
 import com.renovandelve.engine.RelicEffects;
 import org.springframework.stereotype.Component;
 
@@ -89,6 +91,8 @@ public class StatusAssembler {
                 .relicInventoryDTO(relicInventoryDTO)
                 .skillSlotDTO(skillSlotDTO)
                 .relicSynergies(relicSynergies)
+                .pacts(Pact.titles(Pact.parse(gameState.getPacts())))
+                .alignment(AlignmentDTO.from(gameState.alignment()))
                 .build();
     }
 

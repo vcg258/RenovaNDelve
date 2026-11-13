@@ -9,6 +9,7 @@ import com.renovandelve.domain.relicentity.Rarity;
 import com.renovandelve.domain.relicentity.RelicEntity;
 import com.renovandelve.domain.skillentity.SkillEntity;
 import com.renovandelve.domain.weaponentity.WeaponEntity;
+import com.renovandelve.engine.Pact;
 import com.renovandelve.engine.ShopStockItem;
 import com.renovandelve.repository.*;
 import jakarta.transaction.Transactional;
@@ -56,7 +57,8 @@ public class ShopServiceImpl implements ShopService {
     @Override
     public List<ShopStockItem> generateStock(GameStateEntity gameState) {
         int stage = gameState.getCurrentStage();
-        double stageFactor = 1.0 + 0.15 * (stage - 1); // 깊이 내려갈수록 물가 상승
+        double stageFactor = (1.0 + 0.15 * (stage - 1)) // 깊이 내려갈수록 물가 상승
+                * (Pact.parse(gameState.getPacts()).contains(Pact.GREED_TAX) ? 1.3 : 1.0); // 서약: 탐욕의 세금
 
         List<ShopStockItem> stock = new ArrayList<>();
 

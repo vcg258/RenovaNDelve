@@ -7,6 +7,7 @@ import java.util.List;
  */
 public record EncounterDTO(
         String text,
-        List<String> choices
+        List<String> choices,
+        List<String> factions   // 각 선택지가 속한 세력 (HEAVEN / ABYSS / HUMAN), choices와 같은 순서
 ) {
 }

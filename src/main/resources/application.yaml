@@ -73,15 +73,15 @@ spring:
 #PostgreSQL 설정
   datasource:
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://localhost:5432/renova_n_delve?currentSchema=public
-    username: postgres
-    password: postgres
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/renova_n_delve?currentSchema=public}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
 
 # Redis 설정
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
   # Auth2 Google
   security:
@@ -89,8 +89,9 @@ spring:
       client:
         registration:
           google:
-            client-id: 972477145934-8rh7h31q6dme93klmfj3i0aks06akfn2.apps.googleusercontent.com
-            client-secret: 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
+            # 시크릿은 저장소에 두지 않는다 (.env 또는 환경변수로 주입). 미설정 시 구글 로그인만 동작하지 않는다.
+            client-id: ${GOOGLE_CLIENT_ID:unset}
+            client-secret: ${GOOGLE_CLIENT_SECRET:unset}
             scope:
               - email
               - profile
@@ -112,5 +113,21 @@ renovaNDelve:
   jwt:
     secret: ${JWT_SECRET_KEY}
   ai:
-    # 서버 기동 시 RDB 몬스터 -> VectorStore 자동 임베딩 동기화 (비용: 몬스터 수 만큼의 임베딩 1회)
-    sync-monsters-on-startup: true
+    # 서버 기동 시 RDB(몬스터/장비/스킬/유물/소모품) -> VectorStore 증분 동기화
+    # 변경된 행만 재임베딩하므로 2회차부터는 임베딩 API 호출이 거의 발생하지 않는다.
+    sync-on-startup: true
+
+  # RefreshToken 쿠키의 Secure 속성 (HTTPS 전용). 로컬 개발은 false, 운영은 true (application-prod.yaml)
+  cookie:
+    secure: ${COOKIE_SECURE:false}
+
+  # 개인정보 보관 기간
+  privacy:
+    # AI 대화 기록(가이드 챗봇 / 게임 서사)은 마지막 이용 후 이 기간이 지나면 자동 파기
+    chat-retention-days: 30
+
+  # 최초 관리자 계정 (관리자가 한 명도 없을 때만 생성됨)
+  # password를 비워두면 서버가 임의 생성해 기동 로그에 1회만 출력한다.
+  admin:
+    login-id: ${ADMIN_LOGIN_ID:admin}
+    password: ${ADMIN_PASSWORD:}

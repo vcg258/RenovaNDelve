@@ -29,6 +29,18 @@ public class BattleServiceImpl implements BattleService {
     public static final String BUFF_POISON = "POISON";
     public static final String BUFF_STUN = "STUN";
 
+    // 몬스터 행동 예고 (SessionMonster.intent)
+    public static final String INTENT_ATTACK = "ATTACK"; // 일반 공격
+    public static final String INTENT_HEAVY = "HEAVY";   // 강공: 피해 1.6배. 미리 보이므로 방어/기절로 대응할 수 있다
+    public static final String INTENT_GUARD = "GUARD";   // 방어 태세: 이번 턴 받는 타격 피해 절반, 공격하지 않음
+
+    private static final double HEAVY_MULTIPLIER = 1.6;
+    private static final double GUARD_DAMAGE_TAKEN = 0.5;
+    private static final double ENRAGE_ATK_MULTIPLIER = 1.3;
+    // 방어력이 공격력을 넘어서면 모든 피해가 1이 되어 후반 전투가 무의미해진다.
+    // 공격력의 일정 비율은 방어력과 무관하게 항상 들어오도록 하한을 둔다.
+    private static final double MIN_DAMAGE_RATIO = 0.15;
+
     private static final double BURN_AUTO_CLEAR_CHANCE = 0.30;
     private static final double CRIT_MULTIPLIER = 1.5;
 
@@ -54,8 +66,15 @@ public class BattleServiceImpl implements BattleService {
                 int raw = crit ? (int) (baseDamage * CRIT_MULTIPLIER) : baseDamage;
                 int damage = Math.max(1, raw - target.getDef());
 
+                // 방어 태세인 적은 타격 피해를 절반만 받는다 (출혈·화상·독은 그대로 들어간다)
+                boolean guarding = INTENT_GUARD.equals(target.getIntent());
+                if (guarding) {
+                    damage = Math.max(1, (int) (damage * GUARD_DAMAGE_TAKEN));
+                }
+
                 target.damage(damage);
-                log.add("%s에게 %d의 피해%s".formatted(target.getName(), damage, crit ? " (치명타!)" : ""));
+                log.add("%s에게 %d의 피해%s%s".formatted(target.getName(), damage,
+                        crit ? " (치명타!)" : "", guarding ? " (방어 태세에 막힘)" : ""));
 
                 // [유물 시너지] 피의 사냥: 치명타가 상처를 찢어 출혈을 남긴다
                 if (crit && critBleedStacks > 0 && target.isAlive()) {
@@ -125,7 +144,8 @@ public class BattleServiceImpl implements BattleService {
     }
 
     @Override
-    public int monsterAttackDamage(List<SessionMonster> monsters, int defense, int flatReduction, List<String> log) {
+    public int monsterAttackDamage(List<SessionMonster> monsters, int defense, int flatReduction,
+                                   double incomingMultiplier, List<String> log) {
         int totalDamage = 0;
         for (SessionMonster monster : monsters) {
             if (!monster.isAlive()) continue;
@@ -139,11 +159,59 @@ public class BattleServiceImpl implements BattleService {
                 continue;
             }
 
-            int damage = Math.max(1, monster.getAtk() - defense - flatReduction);
+            if (INTENT_GUARD.equals(monster.getIntent())) {
+                log.add("%s은(는) 방어 태세를 유지한다".formatted(monster.getName()));
+                continue;
+            }
+
+            boolean heavy = INTENT_HEAVY.equals(monster.getIntent());
+            int power = heavy ? (int) Math.round(monster.getAtk() * HEAVY_MULTIPLIER) : monster.getAtk();
+            int floor = Math.max(1, (int) Math.ceil(power * MIN_DAMAGE_RATIO));
+            int damage = Math.max(floor, power - defense - flatReduction);
+            damage = Math.max(1, (int) Math.round(damage * incomingMultiplier));
+
             totalDamage += damage;
-            log.add("%s의 공격! %d의 피해".formatted(monster.getName(), damage));
+            log.add("%s의 %s! %d의 피해".formatted(monster.getName(), heavy ? "강공" : "공격", damage));
         }
         return totalDamage;
+    }
+
+    @Override
+    public void rollIntents(List<SessionMonster> monsters) {
+        for (SessionMonster monster : monsters) {
+            if (!monster.isAlive()) continue;
+            monster.setIntent(nextIntent(monster.getMonsterType(), monster.getIntent(), random.nextDouble()));
+        }
+    }
+
+    /**
+     * 등급별 행동 확률. 강한 적일수록 강공 빈도가 높다.
+     * 같은 특수 행동(강공/방어)을 두 턴 연속으로 하지 않게 해, 예고를 보고 대응할 틈을 보장한다.
+     * (난수를 인자로 받는 순수 함수 -> 단위 테스트 가능)
+     */
+    static String nextIntent(short monsterType, String previous, double roll) {
+        double heavyChance = switch (monsterType) { case 2 -> 0.30; case 1 -> 0.22; default -> 0.12; };
+        double guardChance = switch (monsterType) { case 2 -> 0.10; case 1 -> 0.15; default -> 0.12; };
+
+        if (roll < heavyChance) {
+            return INTENT_HEAVY.equals(previous) ? INTENT_ATTACK : INTENT_HEAVY;
+        }
+        if (roll < heavyChance + guardChance) {
+            return INTENT_GUARD.equals(previous) ? INTENT_ATTACK : INTENT_GUARD;
+        }
+        return INTENT_ATTACK;
+    }
+
+    @Override
+    public void applyEnrage(List<SessionMonster> monsters, List<String> log) {
+        for (SessionMonster monster : monsters) {
+            if (!monster.isAlive() || monster.getMonsterType() != 2 || monster.isEnraged()) continue;
+            if (monster.getCurrentHp() * 2 <= monster.getMaxHp()) {
+                monster.setEnraged(true);
+                monster.setAtk((int) Math.round(monster.getAtk() * ENRAGE_ATK_MULTIPLIER));
+                log.add("%s이(가) 격노한다! 공격력이 크게 상승했다".formatted(monster.getName()));
+            }
+        }
     }
 
     @Override

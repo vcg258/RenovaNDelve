@@ -160,7 +160,7 @@ public class BattleResultServiceImpl implements BattleResultService {
         }
         updateRanking(gameState, clearTime);
 
-        gameState.deactivate();
+        gameState.finish(cleared);
         gameStateRepository.save(gameState);
         log.info("게임 세션 종료 gameStateId={} cleared={}", gameState.getGameStateId(), cleared);
 
@@ -170,7 +170,7 @@ public class BattleResultServiceImpl implements BattleResultService {
     /* HELPER METHODS */
 
     private MemberDTO toMemberDTO(MemberEntity m) {
-        return MemberDTO.builder().memberId(m.getMemberId()).loginId(m.getLoginId()).build();
+        return MemberDTO.builder().memberId(m.getMemberId()).loginId(m.displayName()).build();
     }
 
     private SkillDTO toSkillDTO(SkillEntity s) {

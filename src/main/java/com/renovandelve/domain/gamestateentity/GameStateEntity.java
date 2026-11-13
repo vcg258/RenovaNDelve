@@ -1,6 +1,8 @@
 package com.renovandelve.domain.gamestateentity;
 
 import com.renovandelve.domain.*;
+import com.renovandelve.engine.Alignment;
+import com.renovandelve.engine.Faction;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.*;
@@ -58,6 +60,25 @@ public class GameStateEntity { //제외
     @Column(nullable = false)
     private Boolean hasPhoenix = false; // 불사조의 깃털 흭득 여부 (게임 내 1회)
 
+    // 성향: 조우 이벤트에서 각 세력의 방식을 택한 횟수 (기존 행을 위해 DB 기본값 0)
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "integer not null default 0")
+    private int heavenAffinity = 0;
+
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "integer not null default 0")
+    private int abyssAffinity = 0;
+
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "integer not null default 0")
+    private int humanAffinity = 0;
+
+    @Column(length = 120)
+    private String pacts; // 이번 원정에 건 서약 (Pact 이름을 쉼표로 구분). 없으면 NULL
+
+    @Column(length = 20)
+    private String result; // 종료 결과 (CLEAR / DEFEAT / ABANDON). 진행 중이거나 과거 기록이면 NULL
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt; // 세션 시작 일시
 
@@ -103,6 +124,34 @@ public class GameStateEntity { //제외
      * 세션 종료 (게임 오버 / 클리어 공통)
      */
     public void deactivate() {
+        this.isActive = false;
+        // 클리어/패배로 끝난 게임은 finish()가 먼저 결과를 기록한다. 그 외(포기, 새 게임 시작, 강제 종료)는 ABANDON
+        if (this.result == null) {
+            this.result = "ABANDON";
+        }
+    }
+
+    /**
+     * 성향 누적: 조우 이벤트에서 해당 세력의 방식을 택했다
+     */
+    public void gainAffinity(Faction faction) {
+        if (faction == null) return;
+        switch (faction) {
+            case HEAVEN -> this.heavenAffinity++;
+            case ABYSS -> this.abyssAffinity++;
+            case HUMAN -> this.humanAffinity++;
+        }
+    }
+
+    public Alignment alignment() {
+        return new Alignment(heavenAffinity, abyssAffinity, humanAffinity);
+    }
+
+    /**
+     * 클리어 / 패배 결과 기록 (모험 기록 화면용)
+     */
+    public void finish(boolean cleared) {
+        this.result = cleared ? "CLEAR" : "DEFEAT";
         this.isActive = false;
     }
 

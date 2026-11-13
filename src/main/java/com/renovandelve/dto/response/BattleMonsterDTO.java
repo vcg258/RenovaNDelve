@@ -16,6 +16,8 @@ public record BattleMonsterDTO(
         int atk,
         int def,
         Map<String, Integer> buffs, // BLEED / BURN / POISON / STUN -> 스택
-        String description
+        String description,
+        String intent,          // 이번 턴 행동 예고: ATTACK(공격) / HEAVY(강공) / GUARD(방어 태세)
+        boolean enraged         // 보스 격노 상태
 ) {
 }

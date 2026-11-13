@@ -12,6 +12,7 @@ public record GameViewDTO(
         NodeDTO node,
         RewardViewDTO reward,
         List<ShopItemDTO> shop,
-        GameSummaryDTO summary
+        GameSummaryDTO summary,
+        Integer shopRerollCost   // 상점 단계일 때 다음 재입고 비용 (그 외 단계는 null)
 ) {
 }

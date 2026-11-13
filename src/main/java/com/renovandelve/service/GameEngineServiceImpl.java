@@ -15,7 +15,11 @@ import com.renovandelve.dto.response.*;
 import com.renovandelve.engine.*;
 import com.renovandelve.repository.*;
 import com.renovandelve.service.ai.MonsterRagService;
+import com.renovandelve.service.ai.RunReviewService;
 import com.renovandelve.service.redis.GameSessionService;
+import com.renovandelve.service.redis.StageCacheService;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.UserMessage;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -43,6 +47,9 @@ public class GameEngineServiceImpl implements GameEngineService {
     private final ShopService shopService;
     private final GameSessionService gameSessionService;
     private final StatusAssembler statusAssembler;
+    private final RunReviewService runReviewService;
+    private final ChatMemory chatMemory;
+    private final StageCacheService stageCacheService;
 
     private final Random random = new Random();
 
@@ -50,6 +57,12 @@ public class GameEngineServiceImpl implements GameEngineService {
     private static final int NODES_PER_STAGE = 10;
     private static final double BASE_CRIT_CHANCE = 0.08;
     private static final double DAGGER_CRIT_BONUS = 0.15;
+    private static final double PLAYER_GUARD_MULTIPLIER = 0.4; // 방어 태세: 받는 피해 60% 감소
+    private static final double BOSS_REST_HEAL_RATIO = 0.35;   // 모닥불 휴식 회복량 (최대 HP 비율)
+    private static final int REST_TRAIN_ATTACK = 3;            // 모닥불 단련: 공격력 영구 상승
+    private static final int REST_TRAIN_DEFENSE = 1;           // 모닥불 단련: 방어력 영구 상승
+    private static final int SHOP_REROLL_BASE_COST = 40;
+    private static final int SHOP_REROLL_STEP = 30;
 
     /* ==================== 조회 ==================== */
 
@@ -58,7 +71,7 @@ public class GameEngineServiceImpl implements GameEngineService {
     public GameViewDTO getView(MemberEntity member) {
         Optional<GameStateEntity> active = gameStateRepository.findByMember_MemberIdAndIsActiveTrue(member.getMemberId());
         if (active.isEmpty()) {
-            return new GameViewDTO("NONE", null, null, null, null, null);
+            return new GameViewDTO("NONE", null, null, null, null, null, null);
         }
         GameStateEntity gameState = active.get();
         GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
@@ -73,21 +86,23 @@ public class GameEngineServiceImpl implements GameEngineService {
                     node = new NodeDTO(session.getNodeType(), session.getStory(), toBattleMonsterDTOs(session.getMonsters()), null);
             case GameSession.PHASE_ENCOUNTER ->
                     node = new NodeDTO("ENCOUNTER", session.getStory(),
-                            null, new EncounterDTO(session.getStory(), choiceLabels(session)));
+                            null, new EncounterDTO(session.getStory(), choiceLabels(session), choiceFactions(session)));
             case GameSession.PHASE_REWARD -> reward = toRewardView(session.getReward());
             case GameSession.PHASE_SHOP -> shop = toShopItems(session.getShop());
             case GameSession.PHASE_GAMEOVER, GameSession.PHASE_CLEAR -> summary = buildSummary(gameState, session);
             default -> { /* EXPLORE */ }
         }
 
-        return new GameViewDTO(session.getPhase(), statusAssembler.toStatusDTO(gameState), node, reward, shop, summary);
+        Integer rerollCost = GameSession.PHASE_SHOP.equals(session.getPhase()) ? rerollCost(gameState, session) : null;
+        return new GameViewDTO(session.getPhase(), statusAssembler.toStatusDTO(gameState), node, reward, shop, summary,
+                rerollCost);
     }
 
     /* ==================== 노드 진행 ==================== */
 
     @Override
     @Transactional
-    public NodeDTO nextNode(MemberEntity member) {
+    public NodeDTO nextNode(MemberEntity member, String pathValue) {
         GameStateEntity gameState = activeGame(member);
         GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
 
@@ -98,9 +113,10 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
         if (GameSession.PHASE_ENCOUNTER.equals(session.getPhase())) {
             return new NodeDTO("ENCOUNTER", session.getStory(), null,
-                    new EncounterDTO(session.getStory(), choiceLabels(session)));
+                    new EncounterDTO(session.getStory(), choiceLabels(session), choiceFactions(session)));
         }
         requirePhase(session, GameSession.PHASE_EXPLORE, "지금은 이동할 수 없습니다.");
+        PathChoice path = PathChoice.parse(pathValue);
 
         gameState.moveToNextNode();
         gameStateRepository.save(gameState);
@@ -123,9 +139,13 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         if ("BATTLE".equals(ai.type()) && ai.monsters() != null && !ai.monsters().isEmpty()) {
             List<SessionMonster> monsters = buildSessionMonsters(ai.monsters(), gameState);
+            applyPath(monsters, path);           // 갈림길 선택에 따른 적 강도 / 기습
+            applyPacts(monsters, pacts(gameState)); // 서약으로 스스로 건 제약
+            battleService.rollIntents(monsters); // 첫 턴 행동 예고
             String nodeType = resolveNodeType(node, monsters);
 
             session.setPhase(GameSession.PHASE_BATTLE);
+            session.setPath(path.name());
             session.setNodeType(nodeType);
             session.setStory(ai.story());
             session.setMonsters(monsters);
@@ -137,10 +157,11 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         // 인카운터
         Encounter encounter = ai.encounter() != null ? ai.encounter()
-                : new Encounter("어둠 속에서 무언가가 움직인다.", List.of("이곳을 빠르게 벗어난다", "조심스럽게 다가간다"));
+                : new Encounter("빛과 그림자가 동시에 당신을 부른다.", List.of());
         List<EncounterChoice> choices = buildEncounterChoices(encounter, gameState);
 
         session.setPhase(GameSession.PHASE_ENCOUNTER);
+        session.setPath(PathChoice.SAFE.name()); // 조우 이벤트에는 길 선택이 영향을 주지 않는다
         session.setNodeType("ENCOUNTER");
         session.setStory(ai.story() != null ? ai.story() : encounter.text());
         session.setMonsters(new ArrayList<>());
@@ -148,7 +169,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         gameSessionService.save(session);
 
         return new NodeDTO("ENCOUNTER", session.getStory(), null,
-                new EncounterDTO(encounter.text(), choiceLabels(session)));
+                new EncounterDTO(encounter.text(), choiceLabels(session), choiceFactions(session)));
     }
 
     /* ==================== 전투 ==================== */
@@ -177,7 +198,8 @@ public class GameEngineServiceImpl implements GameEngineService {
         List<String> log = new ArrayList<>();
         log.add("[%s] 사용!".formatted(skill.getName()));
 
-        int attack = (int) Math.round((character.getAttack() + session.getTempAtkBonus()) * effects.getAttackMultiplier());
+        int attack = (int) Math.round((character.getAttack() + session.getTempAtkBonus())
+                * effects.getAttackMultiplier() * gameState.alignment().attackMultiplier());
         double critChance = BASE_CRIT_CHANCE + effects.getCritBonus() + daggerCritBonus(gameState);
 
         List<SessionMonster> targets = resolveTargets(session, skill, request.targetKeys());
@@ -200,7 +222,29 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
 
         // 3) 몬스터 반격
-        return processMonsterCounterattack(gameState, session, character, effects, log);
+        return processMonsterCounterattack(gameState, session, character, effects, 1.0, log);
+    }
+
+    @Override
+    @Transactional
+    public TurnResultDTO guard(MemberEntity member) {
+        GameStateEntity gameState = activeGame(member);
+        GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
+        requirePhase(session, GameSession.PHASE_BATTLE, "전투 중이 아닙니다.");
+
+        GameCharacterEntity character = character(gameState);
+        RelicEffects effects = relicEffects(gameState);
+        List<String> log = new ArrayList<>();
+        log.add("방어 태세! 몸을 낮추고 공격에 대비한다");
+
+        // 공격을 포기하는 대신: 받는 피해 감소 + 모든 스킬 쿨타임 1턴 진행
+        battleService.updateCoolTimes(gameState.getGameSkillSlot(), null, effects.getCooldownReduction());
+        battleService.applyDotDamage(session.getMonsters(), log);
+
+        if (battleService.isAllMonsterDead(session.getMonsters())) {
+            return processVictory(gameState, session, character, effects, log);
+        }
+        return processMonsterCounterattack(gameState, session, character, effects, PLAYER_GUARD_MULTIPLIER, log);
     }
 
     @Override
@@ -237,7 +281,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         if (battleService.isAllMonsterDead(session.getMonsters())) {
             return processVictory(gameState, session, character, effects, log);
         }
-        return processMonsterCounterattack(gameState, session, character, effects, log);
+        return processMonsterCounterattack(gameState, session, character, effects, 1.0, log);
     }
 
     /* ==================== 인카운터 ==================== */
@@ -257,6 +301,14 @@ public class GameEngineServiceImpl implements GameEngineService {
         EncounterChoice choice = choices.get(request.choiceIndex());
         GameCharacterEntity character = character(gameState);
         String outcome = applyEncounterEffect(gameState, character, choice);
+
+        // 선택이 성향으로 쌓이고, AI 대화 기록에 남아 다음 장면과 결말이 이 선택을 이어받는다
+        Faction faction = Faction.parse(choice.getFaction());
+        gameState.gainAffinity(faction);
+        remember(gameState, "[플레이어의 선택] 상황: %s / %s선택: %s / 결과: %s / 현재 성향: %s".formatted(
+                shorten(session.getStory()), faction == null ? "" : "(" + faction.label() + "의 방식) ",
+                choice.getLabel(), outcome, gameState.alignment().describe()));
+        invalidatePrefetchedNode(gameState);
 
         gameState.gainScore(10 * gameState.getCurrentStage());
         gameStateRepository.save(gameState);
@@ -308,6 +360,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         session.setReward(null);
         session.setPhase(GameSession.PHASE_SHOP);
         session.setShop(shopService.generateStock(gameState));
+        session.setShopRerolls(0);
         gameSessionService.save(session);
 
         return statusAssembler.toStatusDTO(gameState);
@@ -350,12 +403,57 @@ public class GameEngineServiceImpl implements GameEngineService {
 
     @Override
     @Transactional
+    public GameViewDTO rerollShop(MemberEntity member) {
+        GameStateEntity gameState = activeGame(member);
+        GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
+        requirePhase(session, GameSession.PHASE_SHOP, "상점 이용 단계가 아닙니다.");
+
+        // 비용은 서버가 계산한다. 골드가 부족하면 deductGold가 예외를 던지고 재고는 그대로 남는다.
+        gameState.deductGold(rerollCost(gameState, session));
+        gameStateRepository.save(gameState);
+
+        session.setShop(shopService.generateStock(gameState));
+        session.setShopRerolls(session.getShopRerolls() + 1);
+        gameSessionService.save(session);
+
+        return getView(member);
+    }
+
+    @Override
+    @Transactional
+    public RunReviewDTO getRunReview(MemberEntity member) {
+        GameStateEntity gameState = gameStateRepository
+                .findTopByMember_MemberIdOrderByCreatedAtDesc(member.getMemberId())
+                .orElseThrow(() -> new NoSuchElementException("게임 기록이 없습니다."));
+
+        // 마지막 전투 정보가 세션에 있어야 회고할 수 있다 (세션 TTL 24시간이 지나면 회고는 제공하지 않는다)
+        GameSession session = gameSessionService.get(gameState.getGameStateId());
+        if (session == null) return null;
+
+        boolean cleared = GameSession.PHASE_CLEAR.equals(session.getPhase());
+        if (!cleared && !GameSession.PHASE_GAMEOVER.equals(session.getPhase())) return null;
+
+        if (session.getReview() != null || session.isReviewAttempted()) {
+            return session.getReview();
+        }
+
+        RunReviewDTO review = runReviewService.review(gameState, session, cleared);
+        session.setReview(review);
+        session.setReviewAttempted(true);
+        gameSessionService.save(session);
+        return review;
+    }
+
+    @Override
+    @Transactional
     public GameViewDTO leaveShop(MemberEntity member) {
         GameStateEntity gameState = activeGame(member);
         GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
         requirePhase(session, GameSession.PHASE_SHOP, "상점 이용 단계가 아닙니다.");
 
-        session.setPhase(GameSession.PHASE_EXPLORE);
+        // 보스를 쓰러뜨린 직후에는 다음 구역으로 내려가기 전 모닥불에 들른다
+        long node = gameState.getCurrentNodeId() == null ? 0 : gameState.getCurrentNodeId();
+        session.setPhase(node >= NODES_PER_STAGE ? GameSession.PHASE_REST : GameSession.PHASE_EXPLORE);
         session.setMonsters(new ArrayList<>());
         session.setChoices(new ArrayList<>());
         session.setShop(new ArrayList<>());
@@ -363,6 +461,54 @@ public class GameEngineServiceImpl implements GameEngineService {
         session.setTempDefBonus(0);
         gameSessionService.save(session);
 
+        return getView(member);
+    }
+
+    /**
+     * 모닥불: 스테이지 사이의 유일한 확정 회복 지점이자, 회복을 포기하고 다른 것을 얻을 수 있는 선택 지점.
+     * 체력이 넉넉하면 단련이나 서원이 이득이고, 위태로우면 쉬어야 한다. 정답이 상황에 따라 달라지게 하는 것이 목적이다.
+     */
+    @Override
+    @Transactional
+    public GameViewDTO chooseRest(MemberEntity member, String choiceValue) {
+        GameStateEntity gameState = activeGame(member);
+        GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
+        requirePhase(session, GameSession.PHASE_REST, "모닥불 앞이 아닙니다.");
+
+        GameCharacterEntity character = character(gameState);
+        String choice = choiceValue == null ? "" : choiceValue.trim().toUpperCase();
+        String story;
+
+        switch (choice) {
+            case "HEAL" -> {
+                int healed = healing(gameState, (int) (character.getMaxHp() * BOSS_REST_HEAL_RATIO));
+                character.heal(healed);
+                story = "모닥불 곁에서 눈을 붙였다. HP %d 회복.".formatted(healed);
+            }
+            case "TRAIN" -> {
+                character.applyAttackDelta(REST_TRAIN_ATTACK);
+                character.applyDefenseDelta(REST_TRAIN_DEFENSE);
+                story = "쉬지 않고 검을 갈았다. 공격력 +%d, 방어력 +%d.".formatted(REST_TRAIN_ATTACK, REST_TRAIN_DEFENSE);
+            }
+            case "HEAVEN", "ABYSS", "HUMAN" -> {
+                Faction faction = Faction.valueOf(choice);
+                gameState.gainAffinity(faction);
+                story = switch (faction) {
+                    case HEAVEN -> "불빛 너머의 흰 빛에 무릎을 꿇었다. 천상 성향 +1.";
+                    case ABYSS -> "불씨 속의 속삭임에 이름을 내주었다. 마계 성향 +1.";
+                    case HUMAN -> "누구에게도 빌지 않고 스스로에게 맹세했다. 인간 성향 +1.";
+                };
+                remember(gameState, "[플레이어의 선택] 보스를 쓰러뜨린 뒤 모닥불 앞에서 %s에 서원했다. 현재 성향: %s"
+                        .formatted(faction.label(), gameState.alignment().describe()));
+                invalidatePrefetchedNode(gameState);
+            }
+            default -> throw new IllegalArgumentException("알 수 없는 선택입니다: " + choiceValue);
+        }
+
+        gameStateRepository.save(gameState);
+        session.setStory(story);
+        session.setPhase(GameSession.PHASE_EXPLORE);
+        gameSessionService.save(session);
         return getView(member);
     }
 
@@ -390,6 +536,58 @@ public class GameEngineServiceImpl implements GameEngineService {
                 .orElseThrow(() -> new IllegalStateException("캐릭터 정보가 없습니다."));
     }
 
+    /**
+     * 플레이어의 결정을 AI 대화 기록에 남긴다.
+     * MonsterRagService는 대화 기록(ChatMemory)을 읽어 서사를 잇기 때문에, 여기 남긴 한 줄이 이후 장면의 재료가 된다.
+     * 실패해도 게임 진행에는 영향이 없어야 한다.
+     */
+    private void remember(GameStateEntity gameState, String note) {
+        try {
+            chatMemory.add(conversationId(gameState), new UserMessage(note));
+        } catch (Exception e) {
+            log.warn("선택 기록 저장 실패 gameStateId={} 원인={}", gameState.getGameStateId(), e.getMessage());
+        }
+    }
+
+    /**
+     * 미리 만들어 둔 다음 노드를 버린다.
+     * 프리페치는 선택 "이전"의 기록으로 만들어졌으므로 그대로 쓰면 방금 내린 선택이 다음 장면에 반영되지 않는다.
+     * 조우 직후의 전진 한 번은 대기 시간이 생기지만, 선택이 곧바로 이야기에 이어지는 쪽을 택했다.
+     * (프리페치가 아직 생성 중이면 뒤늦게 저장될 수 있다. 그 경우 반영은 한 노드 늦어진다)
+     */
+    private void invalidatePrefetchedNode(GameStateEntity gameState) {
+        try {
+            int stage = gameState.getCurrentStage();
+            int node = gameState.getCurrentNodeId() == null ? 0 : gameState.getCurrentNodeId().intValue();
+            if (node >= NODES_PER_STAGE) {
+                stageCacheService.delete(conversationId(gameState), stage + 1, 1);
+            } else {
+                stageCacheService.delete(conversationId(gameState), stage, node + 1);
+            }
+        } catch (Exception e) {
+            log.warn("프리페치 무효화 실패: {}", e.getMessage());
+        }
+    }
+
+    /** 성향에 따른 결말 한 줄 (서버가 정하는 확정 결과. AI 요약은 이 줄을 근거로 살을 붙인다) */
+    private String endingLine(Alignment alignment) {
+        Faction dominant = alignment.dominant();
+        if (dominant == null) {
+            return "마계의 문이 닫혔다. 천상도 마계도 이 인간을 제 편이라 부르지 못했고, 왕국에는 주인 없는 새벽이 찾아온다.";
+        }
+        return switch (dominant) {
+            case HEAVEN -> "천상의 빛이 문을 봉인했다. 정화의 불은 멈췄고, 살아남은 자들은 하늘에 진 빚을 영원히 갚게 될 것이다.";
+            case ABYSS -> "문은 닫히지 않았다. 다만 이제 그 문의 주인은 왕이 아니라 당신이다.";
+            case HUMAN -> "인간의 손이 문을 닫았다. 누구의 가호도 없이. 천사와 악마는 처음으로 인간을 두려워하기 시작했다.";
+        };
+    }
+
+    private String shorten(String text) {
+        if (text == null) return "";
+        String flat = text.replaceAll("\\s+", " ").trim();
+        return flat.length() <= 120 ? flat : flat.substring(0, 120) + "...";
+    }
+
     private String conversationId(GameStateEntity gameState) {
         return "game-" + gameState.getGameStateId();
     }
@@ -410,6 +608,59 @@ public class GameEngineServiceImpl implements GameEngineService {
                     .map(inventory -> inventory.getRelic().getName())
                     .toList();
         return RelicEffects.of(names);
+    }
+
+    private Set<Pact> pacts(GameStateEntity gameState) {
+        return Pact.parse(gameState.getPacts());
+    }
+
+    /** 서약 효과: 적 HP / 공격력 상승, 보스 선제 격노 */
+    private void applyPacts(List<SessionMonster> monsters, Set<Pact> pacts) {
+        if (pacts.isEmpty()) return;
+        for (SessionMonster monster : monsters) {
+            if (pacts.contains(Pact.IRON_FOE)) {
+                int hp = Math.max(1, (int) Math.round(monster.getMaxHp() * 1.2));
+                monster.setMaxHp(hp);
+                monster.setCurrentHp(hp);
+            }
+            if (pacts.contains(Pact.FURY)) {
+                monster.setAtk(Math.max(1, (int) Math.round(monster.getAtk() * 1.15)));
+            }
+            if (pacts.contains(Pact.WRATHFUL_LORDS) && monster.getMonsterType() == 2) {
+                monster.setEnraged(true);
+                monster.setAtk(Math.max(1, (int) Math.round(monster.getAtk() * 1.3)));
+            }
+        }
+    }
+
+    /** 회복량 계산. 서약 '옅은 피'가 걸려 있으면 모든 회복이 절반이 된다 */
+    private int healing(GameStateEntity gameState, int amount) {
+        return pacts(gameState).contains(Pact.THIN_BLOOD) ? Math.max(1, amount / 2) : amount;
+    }
+
+    /** 재입고 비용: 횟수마다 오르고, 깊은 스테이지일수록 물가가 비싸다 */
+    private int rerollCost(GameStateEntity gameState, GameSession session) {
+        double stageFactor = (1.0 + 0.15 * (gameState.getCurrentStage() - 1))
+                * (pacts(gameState).contains(Pact.GREED_TAX) ? 1.3 : 1.0);
+        return (int) Math.round((SHOP_REROLL_BASE_COST + SHOP_REROLL_STEP * session.getShopRerolls()) * stageFactor);
+    }
+
+    /**
+     * 갈림길 효과 적용.
+     * 위험한 길: 적 HP·공격력 상승 / 은밀한 길: 기습으로 적 전원이 첫 턴에 움직이지 못한다
+     */
+    private void applyPath(List<SessionMonster> monsters, PathChoice path) {
+        for (SessionMonster monster : monsters) {
+            if (path.enemyMultiplier() != 1.0) {
+                int hp = Math.max(1, (int) Math.round(monster.getMaxHp() * path.enemyMultiplier()));
+                monster.setMaxHp(hp);
+                monster.setCurrentHp(hp);
+                monster.setAtk(Math.max(1, (int) Math.round(monster.getAtk() * path.enemyMultiplier())));
+            }
+            if (path.ambush()) {
+                monster.getBuffs().merge(BattleServiceImpl.BUFF_STUN, 1, Integer::sum);
+            }
+        }
     }
 
     private double daggerCritBonus(GameStateEntity gameState) {
@@ -436,21 +687,21 @@ public class GameEngineServiceImpl implements GameEngineService {
                 return AsyncStageResponseDTO.battle(fallbackStory(stage, true), monsters);
             }
             return AsyncStageResponseDTO.encounter(fallbackStory(stage, false),
-                    new Encounter("어둠 속에서 희미한 기척이 느껴진다.", List.of("서둘러 자리를 피한다", "정체를 확인한다")));
+                    new Encounter("머리 위에서는 희미한 종소리가, 발밑에서는 낮은 속삭임이 들려온다.", List.of()));
         }
     }
 
     private String fallbackStory(int stage, boolean battle) {
         String place = switch (stage) {
-            case 1 -> "무너진 왕궁의 정문";
+            case 1 -> "천상의 빛이 희미하게 걸린 무너진 정문";
             case 2 -> "왕실 기사단의 연무장";
             case 3 -> "궁정 마법사의 탑";
             case 4 -> "축축한 지하 묘지";
-            default -> "악마의 왕좌로 향하는 회랑";
+            default -> "마계의 문으로 향하는 회랑";
         };
         return battle
-                ? place + " — 짙은 어둠 너머에서 적의가 느껴진다. 무언가가 다가온다."
-                : place + " — 낯선 정적이 흐른다. 무슨 일이 일어날지 알 수 없다.";
+                ? place + " — 마계의 숨결에 뒤틀린 것이 어둠 너머에서 다가온다."
+                : place + " — 낯선 정적 속에서 빛과 그림자가 당신의 선택을 기다린다.";
     }
 
     private String resolveNodeType(int node, List<SessionMonster> monsters) {
@@ -477,7 +728,7 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         List<SessionMonster> monsters = new ArrayList<>();
         int key = 0;
-        for (MonsterDTO dto : monsterDTOs) {
+        for (MonsterDTO dto : limitElites(monsterDTOs, stage)) {
             double hpMult = switch (dto.monsterType()) { case 2 -> 3.2; case 1 -> 1.6; default -> 1.0; };
             double atkMult = switch (dto.monsterType()) { case 2 -> 1.7; case 1 -> 1.25; default -> 1.0; };
             double defMult = switch (dto.monsterType()) { case 2 -> 1.5; case 1 -> 1.2; default -> 1.0; };
@@ -498,6 +749,22 @@ public class GameEngineServiceImpl implements GameEngineService {
             monsters.add(monster);
         }
         return monsters;
+    }
+
+    /**
+     * 한 전투에 등장하는 엘리트 수 제한 (보스전 제외).
+     * AI는 서사에 어울리는 몬스터를 고를 뿐 난이도를 고려하지 않아, 초반 노드에 엘리트가 여럿 나오는 일이 있었다.
+     * 난이도는 서버의 책임이므로 여기서 조정한다: 스테이지 1~2는 엘리트 1마리, 그 이후는 2마리까지.
+     */
+    private List<MonsterDTO> limitElites(List<MonsterDTO> monsterDTOs, int stage) {
+        int allowed = stage <= 2 ? 1 : 2;
+        List<MonsterDTO> result = new ArrayList<>();
+        int elites = 0;
+        for (MonsterDTO dto : monsterDTOs) {
+            if (dto.monsterType() == 1 && ++elites > allowed) continue;
+            result.add(dto);
+        }
+        return result;
     }
 
     private double difficultyFactor(Difficulty difficulty) {
@@ -538,12 +805,23 @@ public class GameEngineServiceImpl implements GameEngineService {
         return List.of(alive.get(0));
     }
 
+    /**
+     * @param incomingMultiplier 플레이어가 받는 피해 배율 (방어 태세면 1.0 미만)
+     */
     private TurnResultDTO processMonsterCounterattack(GameStateEntity gameState, GameSession session,
                                                       GameCharacterEntity character, RelicEffects effects,
-                                                      List<String> log) {
+                                                      double incomingMultiplier, List<String> log) {
+        // 이번 턴 플레이어의 공격으로 보스 HP가 절반 아래로 떨어졌다면 격노
+        battleService.applyEnrage(session.getMonsters(), log);
+
         int defense = character.getDefense() + session.getTempDefBonus() + effects.getDefenseBonus();
-        int damage = battleService.monsterAttackDamage(session.getMonsters(), defense, effects.getFlatDamageReduction(), log);
+        int damage = battleService.monsterAttackDamage(session.getMonsters(), defense,
+                effects.getFlatDamageReduction(),
+                incomingMultiplier * gameState.alignment().damageTakenMultiplier(), log);
         character.takeDamage(damage);
+
+        // 다음 턴 행동 예고 (플레이어는 이것을 보고 공격/방어/대상을 정한다)
+        battleService.rollIntents(session.getMonsters());
 
         if (character.getCurrentHp() <= 0) {
             if (tryRevive(gameState, character, log)) {
@@ -591,7 +869,8 @@ public class GameEngineServiceImpl implements GameEngineService {
                                          GameCharacterEntity character, RelicEffects effects, List<String> log) {
         int stage = gameState.getCurrentStage();
         int node = gameState.getCurrentNodeId() == null ? 1 : gameState.getCurrentNodeId().intValue();
-        double multiplier = rewardMultiplier(gameState.getDifficulty());
+        PathChoice path = PathChoice.parse(session.getPath());
+        double multiplier = rewardMultiplier(gameState.getDifficulty()) * path.rewardMultiplier();
 
         int totalScore = 0, totalGold = 0, totalExp = 0;
         for (SessionMonster monster : session.getMonsters()) {
@@ -602,8 +881,9 @@ public class GameEngineServiceImpl implements GameEngineService {
             totalGold += score / 3;
             totalExp += switch (monster.getMonsterType()) { case 2 -> 200; case 1 -> 70; default -> 30; };
         }
-        totalScore = (int) (totalScore * multiplier);
-        totalGold = (int) (totalGold * multiplier * effects.getGoldMultiplier());
+        totalScore = (int) (totalScore * multiplier * Pact.scoreMultiplier(pacts(gameState)));
+        Alignment alignment = gameState.alignment();
+        totalGold = (int) (totalGold * multiplier * effects.getGoldMultiplier() * alignment.goldMultiplier());
 
         gameState.gainScore(totalScore);
         gameState.gainGold(totalGold);
@@ -612,6 +892,20 @@ public class GameEngineServiceImpl implements GameEngineService {
         log.add("승리! 점수 +%d, 골드 +%d, 경험치 +%d".formatted(totalScore, totalGold, totalExp));
         if (levelUps > 0) {
             log.add("레벨 업! Lv.%d (최대HP/공격/방어 상승)".formatted(character.getLevel()));
+        }
+
+        if (alignment.victoryHealRatio() > 0) {
+            int blessed = healing(gameState, Math.max(1, (int) (character.getMaxHp() * alignment.victoryHealRatio())));
+            character.heal(blessed);
+            log.add("천상의 가호가 상처를 감싼다. HP %d 회복".formatted(blessed));
+        }
+
+        // 보스를 쓰러뜨린 사실은 이후 서사가 이어받을 수 있게 기록해 둔다
+        if (node >= NODES_PER_STAGE) {
+            String bossName = session.getMonsters().stream()
+                    .filter(m -> m.getMonsterType() == 2).map(SessionMonster::getName).findFirst().orElse("구역의 지배자");
+            remember(gameState, "[플레이어의 선택] 스테이지 %d의 보스 '%s'을(를) 쓰러뜨리고 더 깊은 곳으로 내려간다."
+                    .formatted(stage, bossName));
         }
 
         // 쿨타임 초기화
@@ -624,7 +918,8 @@ public class GameEngineServiceImpl implements GameEngineService {
         boolean cleared = stage >= FINAL_STAGE && node >= NODES_PER_STAGE;
         if (cleared) {
             terminate(gameState, session, true);
-            log.add("마계 포탈이 봉인되었다. 왕국에 새벽이 찾아온다...");
+            log.add(endingLine(gameState.alignment()));
+            remember(gameState, "[모험의 결말] 악마화된 왕을 쓰러뜨렸다. " + endingLine(gameState.alignment()));
             gameSessionService.save(session);
             gameStateRepository.save(gameState);
             return new TurnResultDTO("WIN", log, toBattleMonsterDTOs(session.getMonsters()),
@@ -632,7 +927,13 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
 
         // 보상 후보 생성 -> REWARD 단계
-        session.setReward(buildRewardOptions(gameState, totalExp, totalGold));
+        // 강한 적일수록 유물을 고를 기회가 많다: 일반 1 / 엘리트 2 / 보스 3 (+ 위험한 길 보너스)
+        int relicOptions = switch (String.valueOf(session.getNodeType())) {
+            case "BOSS" -> 3;
+            case "ELITE" -> 2;
+            default -> 1;
+        } + path.bonusRelicOptions();
+        session.setReward(buildRewardOptions(gameState, totalExp, totalGold, relicOptions));
         session.setPhase(GameSession.PHASE_REWARD);
         gameSessionService.save(session);
         gameStateRepository.save(gameState);
@@ -641,7 +942,7 @@ public class GameEngineServiceImpl implements GameEngineService {
                 statusAssembler.toStatusDTO(gameState), toRewardView(session.getReward()), false, session.getPhase());
     }
 
-    private RewardOptions buildRewardOptions(GameStateEntity gameState, int exp, int gold) {
+    private RewardOptions buildRewardOptions(GameStateEntity gameState, int exp, int gold, int relicOptions) {
         RewardOptions options = new RewardOptions();
         options.setExp(exp);
         options.setGold(gold);
@@ -652,7 +953,7 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         List<RelicEntity> relics = new ArrayList<>(relicRepository.findByRelicNotOwner(gameState.getGameStateId()));
         Collections.shuffle(relics, random);
-        options.setRelicIds(relics.stream().limit(1).map(RelicEntity::getRelicId).collect(Collectors.toList()));
+        options.setRelicIds(relics.stream().limit(relicOptions).map(RelicEntity::getRelicId).collect(Collectors.toList()));
 
         List<ConsumableEntity> consumables = new ArrayList<>(consumableRepository.findAll());
         Collections.shuffle(consumables, random);
@@ -666,8 +967,9 @@ public class GameEngineServiceImpl implements GameEngineService {
         int value = consumable.getEffectValue();
         switch (consumable.getEffectType()) {
             case RECOVERY -> {
-                character.heal(value);
-                log.add("%s 사용: HP %d 회복".formatted(consumable.getName(), value));
+                int healed = healing(gameState, value);
+                character.heal(healed);
+                log.add("%s 사용: HP %d 회복".formatted(consumable.getName(), healed));
             }
             case ATTACK, GRANT -> {
                 session.setTempAtkBonus(session.getTempAtkBonus() + value);
@@ -696,55 +998,64 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
     }
 
+    /**
+     * 조우 선택지 구성. 선택지 문구는 AI가 쓰고(순서: 천상, 마계, 인간), 결과는 서버가 세력의 성격에 맞춰 정한다.
+     *
+     * - 천상: 안전하다. 회복을 주지만 가끔 헌물(골드)을 요구한다
+     * - 마계: 크게 주고 크게 가져간다. 유물·큰 골드 아니면 큰 피해
+     * - 인간: 중간. 스스로 뒤져서 골드나 소모품을 챙기고, 가끔 다친다
+     *
+     * 결과는 선택 전에 미리 굴려 세션에 숨겨 둔다(클라이언트에는 문구와 세력만 노출).
+     */
     private List<EncounterChoice> buildEncounterChoices(Encounter encounter, GameStateEntity gameState) {
         int stage = gameState.getCurrentStage();
+        List<String> texts = encounter.selections() == null ? List.of() : encounter.selections();
+        String heavenText = texts.size() > 0 ? texts.get(0) : "무릎을 꿇고 머리 위의 빛에 몸을 맡긴다";
+        String abyssText = texts.size() > 1 ? texts.get(1) : "발밑의 속삭임이 내민 손을 잡는다";
+        String humanText = texts.size() > 2 ? texts.get(2) : "어느 쪽에도 답하지 않고 스스로 길을 찾는다";
+
         List<EncounterChoice> choices = new ArrayList<>();
 
-        List<String> reasons = encounter.selections() == null ? List.of() : encounter.selections();
-        String fleeReason = !reasons.isEmpty() ? reasons.get(0) : "위험을 감수할 이유가 없다";
-        String negotiateReason = reasons.size() > 1 ? reasons.get(1) : "말이 통할지도 모른다";
+        // 천상
+        double heavenRoll = random.nextDouble();
+        if (heavenRoll < 0.55) choices.add(choice(Faction.HEAVEN, heavenText, "HEAL", 15, null));
+        else if (heavenRoll < 0.80) choices.add(choice(Faction.HEAVEN, heavenText, "NOTHING", 0, null));
+        else choices.add(choice(Faction.HEAVEN, heavenText, "GOLD_MINUS", 15 + stage * 8, null));
 
-        // 1. 도망: 안전하지만 얻는 것도 없다 (가끔 다침)
-        choices.add(choice("도망친다 — " + fleeReason,
-                random.nextDouble() < 0.35 ? "DAMAGE" : "NOTHING", 8 + stage * 2, null));
-
-        // 2. 협상: 골드가 오간다
-        double negotiateRoll = random.nextDouble();
-        if (negotiateRoll < 0.4) choices.add(choice("협상한다 — " + negotiateReason, "GOLD_MINUS", 20 + stage * 10, null));
-        else if (negotiateRoll < 0.7) choices.add(choice("협상한다 — " + negotiateReason, "GOLD_PLUS", 25 + stage * 12, null));
-        else choices.add(choice("협상한다 — " + negotiateReason, "NOTHING", 0, null));
-
-        // 3. 조사: 하이리스크 하이리턴
-        double investigateRoll = random.nextDouble();
-        if (investigateRoll < 0.22) {
-            List<ConsumableEntity> pool = consumableRepository.findAll();
-            if (!pool.isEmpty()) {
-                ConsumableEntity picked = pool.get(random.nextInt(pool.size()));
-                choices.add(choice("주변을 조사한다", "CONSUMABLE", 0, picked.getConsumableId()));
-            } else {
-                choices.add(choice("주변을 조사한다", "GOLD_PLUS", 30 + stage * 10, null));
-            }
-        } else if (investigateRoll < 0.32) {
-            List<RelicEntity> pool = relicRepository.findByRelicNotOwner(gameState.getGameStateId());
-            if (!pool.isEmpty()) {
-                RelicEntity picked = pool.get(random.nextInt(pool.size()));
-                choices.add(choice("주변을 조사한다", "RELIC", 0, picked.getRelicId()));
-            } else {
-                choices.add(choice("주변을 조사한다", "GOLD_PLUS", 30 + stage * 10, null));
-            }
-        } else if (investigateRoll < 0.55) {
-            choices.add(choice("주변을 조사한다", "GOLD_PLUS", 30 + stage * 10, null));
-        } else if (investigateRoll < 0.8) {
-            choices.add(choice("주변을 조사한다", "DAMAGE", 12 + stage * 3, null));
+        // 마계
+        double abyssRoll = random.nextDouble();
+        List<RelicEntity> relicPool = abyssRoll < 0.30
+                ? relicRepository.findByRelicNotOwner(gameState.getGameStateId()) : List.of();
+        if (!relicPool.isEmpty()) {
+            RelicEntity picked = relicPool.get(random.nextInt(relicPool.size()));
+            choices.add(choice(Faction.ABYSS, abyssText, "RELIC", 0, picked.getRelicId()));
+        } else if (abyssRoll < 0.58) {
+            choices.add(choice(Faction.ABYSS, abyssText, "GOLD_PLUS", 50 + stage * 20, null));
         } else {
-            choices.add(choice("주변을 조사한다", "HEAL", 20, null));
+            choices.add(choice(Faction.ABYSS, abyssText, "DAMAGE", 14 + stage * 4, null));
+        }
+
+        // 인간
+        double humanRoll = random.nextDouble();
+        List<ConsumableEntity> consumablePool = humanRoll >= 0.40 && humanRoll < 0.70
+                ? consumableRepository.findAll() : List.of();
+        if (!consumablePool.isEmpty()) {
+            ConsumableEntity picked = consumablePool.get(random.nextInt(consumablePool.size()));
+            choices.add(choice(Faction.HUMAN, humanText, "CONSUMABLE", 0, picked.getConsumableId()));
+        } else if (humanRoll < 0.70) {
+            choices.add(choice(Faction.HUMAN, humanText, "GOLD_PLUS", 25 + stage * 12, null));
+        } else if (humanRoll < 0.85) {
+            choices.add(choice(Faction.HUMAN, humanText, "DAMAGE", 6 + stage * 2, null));
+        } else {
+            choices.add(choice(Faction.HUMAN, humanText, "NOTHING", 0, null));
         }
 
         return choices;
     }
 
-    private EncounterChoice choice(String label, String effect, int value, Long refId) {
+    private EncounterChoice choice(Faction faction, String label, String effect, int value, Long refId) {
         EncounterChoice choice = new EncounterChoice();
+        choice.setFaction(faction.name());
         choice.setLabel(label);
         choice.setEffect(effect);
         choice.setValue(value);
@@ -755,35 +1066,35 @@ public class GameEngineServiceImpl implements GameEngineService {
     private String applyEncounterEffect(GameStateEntity gameState, GameCharacterEntity character, EncounterChoice choice) {
         switch (choice.getEffect()) {
             case "HEAL" -> {
-                int amount = character.getMaxHp() * choice.getValue() / 100;
+                int amount = healing(gameState, character.getMaxHp() * choice.getValue() / 100);
                 character.heal(amount);
-                return "따스한 기운이 몸을 감싼다. HP %d 회복.".formatted(amount);
+                return "흰 빛이 상처 위에 내려앉는다. HP %d 회복.".formatted(amount);
             }
             case "DAMAGE" -> {
                 character.takeDamage(choice.getValue());
-                return "함정이었다! HP %d 피해를 입었다.".formatted(choice.getValue());
+                return "대가는 피였다. HP %d 피해를 입었다.".formatted(choice.getValue());
             }
             case "GOLD_PLUS" -> {
                 gameState.gainGold(choice.getValue());
-                return "숨겨진 주머니를 발견했다. 골드 +%d.".formatted(choice.getValue());
+                return "손에 묵직한 금화가 쥐어졌다. 골드 +%d.".formatted(choice.getValue());
             }
             case "GOLD_MINUS" -> {
                 int loss = Math.min(gameState.getGold(), choice.getValue());
                 gameState.gainGold(-loss);
-                return "대가를 치르고 무사히 지나갔다. 골드 -%d.".formatted(loss);
+                return "헌물을 바치고 무사히 지나갔다. 골드 -%d.".formatted(loss);
             }
             case "CONSUMABLE" -> {
                 addConsumable(gameState, choice.getRefId());
                 String name = consumableRepository.findById(choice.getRefId()).map(ConsumableEntity::getName).orElse("무언가");
-                return "낡은 상자 안에서 [%s]을(를) 발견했다!".formatted(name);
+                return "잔해를 뒤져 [%s]을(를) 찾아냈다.".formatted(name);
             }
             case "RELIC" -> {
                 addRelic(gameState, choice.getRefId());
                 String name = relicRepository.findById(choice.getRefId()).map(RelicEntity::getName).orElse("무언가");
-                return "어둠 속에서 유물 [%s]이(가) 빛나고 있었다!".formatted(name);
+                return "계약이 성립했다. 유물 [%s]이(가) 손안에서 맥박친다.".formatted(name);
             }
             default -> {
-                return "아무 일도 일어나지 않았다. 조용히 발걸음을 옮긴다.";
+                return "아무 일도 일어나지 않았다. 다만 무언가가 당신을 지켜보고 있다.";
             }
         }
     }
@@ -844,7 +1155,7 @@ public class GameEngineServiceImpl implements GameEngineService {
             return monsterRagService.genarateGameOverStory(conversationId(gameState));
         } catch (Exception e) {
             log.warn("AI 서사 요약 실패: {}", e.getMessage());
-            return "황폐한 왕궁을 헤매던 모험가의 이야기는 여기서 막을 내렸다.";
+            return "천상과 마계 사이, 폐허가 된 왕궁을 헤매던 한 인간의 이야기는 여기서 막을 내렸다.";
         }
     }
 
@@ -870,7 +1181,14 @@ public class GameEngineServiceImpl implements GameEngineService {
         if (monsters == null) return List.of();
         return monsters.stream()
                 .map(m -> new BattleMonsterDTO(m.getKey(), m.getMonsterId(), m.getName(), m.getMonsterType(),
-                        m.getMaxHp(), m.getCurrentHp(), m.getAtk(), m.getDef(), m.getBuffs(), m.getDescription()))
+                        m.getMaxHp(), m.getCurrentHp(), m.getAtk(), m.getDef(), m.getBuffs(), m.getDescription(),
+                        m.getIntent() == null ? BattleServiceImpl.INTENT_ATTACK : m.getIntent(), m.isEnraged()))
+                .toList();
+    }
+
+    private List<String> choiceFactions(GameSession session) {
+        return session.getChoices().stream()
+                .map(choice -> choice.getFaction() == null ? "" : choice.getFaction())
                 .toList();
     }
 

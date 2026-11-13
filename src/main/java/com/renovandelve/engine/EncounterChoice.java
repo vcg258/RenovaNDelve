@@ -13,4 +13,5 @@ public class EncounterChoice {
     private String effect; // HEAL / DAMAGE / GOLD_PLUS / GOLD_MINUS / CONSUMABLE / RELIC / NOTHING
     private int value;
     private Long refId;    // CONSUMABLE / RELIC일 때 대상 ID
+    private String faction; // 이 선택지가 속한 세력 (HEAVEN / ABYSS / HUMAN). 성향 누적과 화면 표시에 쓰인다
 }

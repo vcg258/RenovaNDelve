@@ -11,7 +11,9 @@ import com.renovandelve.domain.skillentity.SkillEntity;
 import com.renovandelve.domain.weaponentity.WeaponEntity;
 import com.renovandelve.dto.*;
 import com.renovandelve.dto.request.NewGameRequest;
+import com.renovandelve.dto.response.PactDTO;
 import com.renovandelve.dto.response.SetupOptionsDTO;
+import com.renovandelve.engine.Pact;
 import com.renovandelve.repository.*;
 import com.renovandelve.service.redis.GameSessionService;
 import jakarta.transaction.Transactional;
@@ -36,8 +38,17 @@ public class GameStateServiceImpl implements GameStateService {
     private final GameSkillSlotRepository gameSkillSlotRepository;
     private final GameRelicInventoryRepository gameRelicInventoryRepository;
     private final GameSessionService gameSessionService;
+    private final CollectionWeaponRepository collectionWeaponRepository;
+    private final CollectionArmorRepository collectionArmorRepository;
+    private final CollectionHelmetRepository collectionHelmetRepository;
+    private final CollectionSkillRepository collectionSkillRepository;
+    private final CollectionRelicRepository collectionRelicRepository;
+    private final CollectionConsumableRepository collectionConsumableRepository;
 
-    public static final int STARTING_BUDGET = 800;   // 스타팅 포인트 예산
+    public static final int STARTING_BUDGET = 800;   // 스타팅 포인트 기본 예산
+    // 메타 진행: 도감에 등록한 항목 1종마다 다음 판의 예산이 늘어난다 (죽어도 남는 성장)
+    public static final int BUDGET_PER_COLLECTION = 5;
+    public static final int MAX_BONUS_BUDGET = 200;
     private static final int BASE_MAX_HP = 100;
     private static final int BASE_ATTACK = 10;
     private static final int BASE_DEFENSE = 5;
@@ -45,14 +56,17 @@ public class GameStateServiceImpl implements GameStateService {
     private static final String DEFAULT_SKILL_NAME = "기본 공격";
 
     @Override
-    public SetupOptionsDTO getSetupOptions() {
+    public SetupOptionsDTO getSetupOptions(MemberEntity member) {
+        int bonus = bonusBudget(member);
         return new SetupOptionsDTO(
-                STARTING_BUDGET,
+                STARTING_BUDGET + bonus,
+                bonus,
                 RecordMapper.mapList(weaponRepository.findAll(), WeaponDTO.class),
                 RecordMapper.mapList(armorRepository.findAll(), ArmorDTO.class),
                 RecordMapper.mapList(helmetRepository.findAll(), HelmetDTO.class),
                 skillRepository.findAll().stream().map(SkillInfoDTO::from).toList(),
-                RecordMapper.mapList(relicRepository.findAll(), RelicDTO.class)
+                RecordMapper.mapList(relicRepository.findAll(), RelicDTO.class),
+                Arrays.stream(Pact.values()).map(PactDTO::from).toList()
         );
     }
 
@@ -83,12 +97,16 @@ public class GameStateServiceImpl implements GameStateService {
         // 유물 결정
         List<RelicEntity> relics = resolveRelics(request.relicIds());
 
+        // 서약 (알 수 없는 코드는 400)
+        Set<Pact> pacts = Pact.fromCodes(request.pacts());
+
         // 예산 검증
         int cost = weapon.getScoreCost() + armor.getScoreCost() + helmet.getScoreCost()
                 + skills.stream().mapToInt(SkillEntity::getCost).sum()
                 + relics.stream().mapToInt(RelicEntity::getScoreCost).sum();
-        if (cost > STARTING_BUDGET) {
-            throw new IllegalArgumentException("스타팅 포인트 예산 초과: 사용 " + cost + " / 예산 " + STARTING_BUDGET);
+        int budget = STARTING_BUDGET + bonusBudget(member);
+        if (cost > budget) {
+            throw new IllegalArgumentException("스타팅 포인트 예산 초과: 사용 " + cost + " / 예산 " + budget);
         }
 
         // 세션 생성
@@ -99,6 +117,7 @@ public class GameStateServiceImpl implements GameStateService {
                 .currentNodeId(0L)
                 .gold(100)
                 .startingPoints(cost)
+                .pacts(pacts.isEmpty() ? null : Pact.serialize(pacts))
                 .build());
 
         // 장비 장착
@@ -151,6 +170,17 @@ public class GameStateServiceImpl implements GameStateService {
     }
 
     /* HELPER METHODS */
+
+    /** 도감 수집 수에 비례한 스타팅 포인트 보너스 */
+    private int bonusBudget(MemberEntity member) {
+        long collected = collectionWeaponRepository.countByMember(member)
+                + collectionArmorRepository.countByMember(member)
+                + collectionHelmetRepository.countByMember(member)
+                + collectionSkillRepository.countByMember(member)
+                + collectionRelicRepository.countByMember(member)
+                + collectionConsumableRepository.countByMember(member);
+        return (int) Math.min(MAX_BONUS_BUDGET, collected * BUDGET_PER_COLLECTION);
+    }
 
     private Difficulty parseDifficulty(String value) {
         if (value == null || value.isBlank()) return Difficulty.NORMAL;
