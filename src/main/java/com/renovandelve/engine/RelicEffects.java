@@ -58,28 +58,48 @@ public class RelicEffects {
         // 피의 사냥: 치명타가 상처를 찢어 출혈을 남긴다
         if (owned.contains("핏빛 반지") && owned.contains("사냥꾼의 눈")) {
             effects.critBleedStacks += 2;
-            effects.activeSynergies.add("🩸 피의 사냥 — 치명타 시 출혈 2스택 부여 (핏빛 반지 + 사냥꾼의 눈)");
+            effects.activeSynergies.add("피의 사냥 — 치명타 시 출혈 2스택 부여 (핏빛 반지 + 사냥꾼의 눈)");
         }
         // 비전 순환: 증폭된 마력이 부적을 타고 순환한다
         if (owned.contains("마력 증폭 수정") && owned.contains("고대의 부적")) {
             effects.skillDamageMultiplier += 0.10;
-            effects.activeSynergies.add("🔮 비전 순환 — 스킬 피해 추가 +10% (마력 증폭 수정 + 고대의 부적)");
+            effects.activeSynergies.add("비전 순환 — 스킬 피해 추가 +10% (마력 증폭 수정 + 고대의 부적)");
         }
         // 탐욕의 심연: 심연은 황금마저 집어삼킨다
         if (owned.contains("행운의 반지") && owned.contains("심연의 핵")) {
             effects.goldMultiplier += 0.25;
-            effects.activeSynergies.add("🪙 탐욕의 심연 — 골드 획득 추가 +25% (행운의 반지 + 심연의 핵)");
+            effects.activeSynergies.add("탐욕의 심연 — 골드 획득 추가 +25% (행운의 반지 + 심연의 핵)");
         }
         // 심연의 방벽: 어둠이 갑주가 되어 감싼다
         if (owned.contains("수호자의 문장") && owned.contains("심연의 핵")) {
             effects.flatDamageReduction += 2;
-            effects.activeSynergies.add("🛡 심연의 방벽 — 받는 피해 추가 -2 (수호자의 문장 + 심연의 핵)");
+            effects.activeSynergies.add("심연의 방벽 — 받는 피해 추가 -2 (수호자의 문장 + 심연의 핵)");
         }
-        // 사신의 계약: 3종 이상의 유물이 공명하면 모든 능력이 미약하게 상승
+        // 매의 호흡: 숨을 고를 틈이 생기면 급소가 더 잘 보인다
+        if (owned.contains("사냥꾼의 눈") && owned.contains("고대의 부적")) {
+            effects.critBonus += 0.05;
+            effects.activeSynergies.add("매의 호흡 — 치명타 확률 추가 +5% (사냥꾼의 눈 + 고대의 부적)");
+        }
+        // 피의 갈증: 심연이 흘린 피를 탐한다
+        if (owned.contains("핏빛 반지") && owned.contains("심연의 핵")) {
+            effects.bleedMultiplier += 0.25;
+            effects.activeSynergies.add("피의 갈증 — 출혈 피해 추가 +25% (핏빛 반지 + 심연의 핵)");
+        }
+        // 수호의 맥박: 부적이 문장의 힘을 되풀이해 깨운다
+        if (owned.contains("수호자의 문장") && owned.contains("고대의 부적")) {
+            effects.defenseBonus += 2;
+            effects.activeSynergies.add("수호의 맥박 — 방어력 추가 +2 (수호자의 문장 + 고대의 부적)");
+        }
+        // 황금 사냥: 값나가는 것부터 눈에 들어온다
+        if (owned.contains("행운의 반지") && owned.contains("사냥꾼의 눈")) {
+            effects.goldMultiplier += 0.10;
+            effects.activeSynergies.add("황금 사냥 — 골드 획득 추가 +10% (행운의 반지 + 사냥꾼의 눈)");
+        }
+        // 사신의 공명: 4종 이상의 유물이 공명하면 모든 능력이 미약하게 상승
         if (owned.size() >= 4) {
             effects.attackMultiplier += 0.05;
             effects.critBonus += 0.05;
-            effects.activeSynergies.add("💀 사신의 공명 — 유물 4개 이상: 공격력 +5%, 치명타 +5%");
+            effects.activeSynergies.add("사신의 공명 — 유물 4개 이상: 공격력 +5%, 치명타 +5%");
         }
 
         return effects;

@@ -3,6 +3,7 @@ package com.renovandelve.service;
 import com.renovandelve.domain.GameSkillSlotEntity;
 import com.renovandelve.domain.skillentity.SkillEntity;
 import com.renovandelve.engine.SessionMonster;
+import com.renovandelve.engine.SkillSynergies;
 
 import java.util.List;
 
@@ -28,9 +29,22 @@ public interface BattleService {
                            List<SessionMonster> targets, List<String> log);
 
     /**
+     * 플레이어 스킬 공격 적용 (스킬 조합 시너지 포함).
+     * @param synergies 보유 스킬 조합 효과: 대상 상태에 따른 피해 배율 (강공 준비 중 / 상태이상)
+     */
+    void applyPlayerAttack(SkillEntity skill, int attack, double critChance, double damageMultiplier,
+                           double bleedMultiplier, int critBleedStacks, SkillSynergies synergies,
+                           List<SessionMonster> targets, List<String> log);
+
+    /**
      * 스킬의 상태이상 부여
      */
     void applyStatusEffect(SkillEntity skill, List<SessionMonster> targets, List<String> log);
+
+    /**
+     * 스킬의 상태이상 부여 (스킬 조합 시너지로 얹는 추가 스택 포함)
+     */
+    void applyStatusEffect(SkillEntity skill, int extraStacks, List<SessionMonster> targets, List<String> log);
 
     /**
      * 턴 종료 도트 피해 (화상 / 독)

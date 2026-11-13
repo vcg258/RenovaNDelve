@@ -180,4 +180,51 @@ class BattleServiceImplTest {
         assertThat(BattleServiceImpl.nextIntent(boss, null, 0.99))
                 .isEqualTo(BattleServiceImpl.INTENT_ATTACK);
     }
+
+    /* ==================== 스킬 조합 시너지 ==================== */
+
+    private SkillEntity statusSkill(String name, int statusEffect, int stack) {
+        return SkillEntity.builder().name(name).target(Target.EnemySingle).attackCount(1)
+                .coefficient(BigDecimal.valueOf(1.0)).statusEffect((short) statusEffect).effectStack(stack).build();
+    }
+
+    @Test
+    @DisplayName("빈틈 찌르기: 강공을 준비 중인 적에게 주는 피해가 25% 늘고, 평범한 공격 예고에는 그대로다")
+    void comboPunishesHeavyIntent() {
+        com.renovandelve.engine.SkillSynergies synergies = com.renovandelve.engine.SkillSynergies.of(List.of(
+                statusSkill("기절 타격", 4, 1), skill(1.6, 1)));
+
+        SessionMonster heavy = monster(200, 10, 0, (short) 0);
+        heavy.setIntent(BattleServiceImpl.INTENT_HEAVY);
+        SessionMonster normal = monster(200, 10, 0, (short) 0);
+
+        battleService.applyPlayerAttack(skill(1.0, 1), 40, 0.0, 1.0, 1.0, 0, synergies, List.of(heavy), new ArrayList<>());
+        battleService.applyPlayerAttack(skill(1.0, 1), 40, 0.0, 1.0, 1.0, 0, synergies, List.of(normal), new ArrayList<>());
+
+        assertThat(heavy.getCurrentHp()).isEqualTo(200 - 50);
+        assertThat(normal.getCurrentHp()).isEqualTo(200 - 40);
+    }
+
+    @Test
+    @DisplayName("시너지가 없으면 새 경로의 계산 결과가 기존과 같다")
+    void noSynergyKeepsDamage() {
+        SessionMonster a = monster(100, 10, 5, (short) 0);
+        SessionMonster b = monster(100, 10, 5, (short) 0);
+
+        battleService.applyPlayerAttack(skill(1.6, 1), 20, 0.0, 1.0, 1.0, 0, List.of(a), new ArrayList<>());
+        battleService.applyPlayerAttack(skill(1.6, 1), 20, 0.0, 1.0, 1.0, 0,
+                com.renovandelve.engine.SkillSynergies.NONE, List.of(b), new ArrayList<>());
+
+        assertThat(b.getCurrentHp()).isEqualTo(a.getCurrentHp());
+    }
+
+    @Test
+    @DisplayName("상태이상 추가 스택: 스킬의 스택에 조합 보너스가 더해진다")
+    void extraStatusStacks() {
+        SessionMonster target = monster(100, 10, 0, (short) 0);
+
+        battleService.applyStatusEffect(statusSkill("맹독 단검", 3, 3), 1, List.of(target), new ArrayList<>());
+
+        assertThat(target.getBuffs().get(BattleServiceImpl.BUFF_POISON)).isEqualTo(4);
+    }
 }
