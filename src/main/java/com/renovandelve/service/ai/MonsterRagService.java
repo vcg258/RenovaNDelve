@@ -22,6 +22,7 @@ import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQ
 import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.core.Ordered;
 import org.springframework.stereotype.Service;
 
@@ -123,13 +124,14 @@ public class MonsterRagService {
      * @param referenceScore 압축기 / 확장기 기준의 변수
      * @return 몬스터 등장
      */
-    private List<MonsterDTO> battle(String storyText, double minScore, double referenceScore, boolean isBoss) {
+    private List<MonsterDTO> battle(String storyText, String sceneKeywords, double minScore, double referenceScore, boolean isBoss) {
         log.info("생성된 스토리 : {}", storyText);
         log.info("지정 최소 임계 점수 : {}", minScore);
         log.info("지정 최고 임계 점수 : {}", referenceScore);
 
-        // LLM이 만들어준 스토리를 키워드로 추출
-        String keyword = extractKeyword(storyText);
+        // 키워드는 스토리를 쓸 때 같은 응답으로 함께 받는다(LLM 호출 1회 절약).
+        // 모델이 키워드 줄을 빠뜨린 경우에만 예전처럼 따로 추출한다
+        String keyword = sceneKeywords != null ? sceneKeywords : extractKeyword(storyText);
         log.info("생성된 스토리에서 추출된 키워드 : {}", keyword);
 
         // RAG검색 최고 유사도
@@ -274,7 +276,10 @@ public class MonsterRagService {
                             현재 스테이지에 맞는 장소를 스스로 선택하되 이전에 방문한 장소와 겹치지 않게 하고,
                             그 장소에 막 들어선 장면을 써 주세요.
                             대화 기록에 "[플레이어의 선택]"이 있다면 가장 최근 선택의 여파가 이 장면에 드러나야 합니다.
-                        """.formatted(currentStage, currentNodeId))
+
+                            장면을 다 쓴 뒤, 줄을 바꿔 맨 마지막 줄에 아래 형식의 한 줄을 덧붙이세요.
+                            %s 이 장면의 장소, 분위기, 사물, 환경을 나타내는 낱말을 쉼표로 구분해 4~8개
+                        """.formatted(currentStage, currentNodeId, KEYWORD_MARKER))
                 .advisors(
                         MessageChatMemoryAdvisor.builder(chatMemory)
                                 .conversationId(conversationId).build()
@@ -291,7 +296,8 @@ public class MonsterRagService {
      * @return 전투 / 선택지 정보
      */
     public AsyncStageResponseDTO generateNextStory(int stage, int node, String conversationId) {
-        String storyText = generateStory(stage, node, conversationId);
+        Scene scene = parseScene(generateStory(stage, node, conversationId));
+        String storyText = scene.story();
 
         if (stage == 0 && node == 0) {
             throw new IllegalStateException("스테이지가 0이거나 노드가 0은 오류, 잘못된 접근");
@@ -300,7 +306,8 @@ public class MonsterRagService {
         boolean isBoss = node % 10 == 0;
         if (isBoss || Math.random() > 0.3) {
             log.info(isBoss ? "보스 노드 진입" : "전투 노드 진입");
-            return AsyncStageResponseDTO.battle(storyText, battle(storyText, 0.4, 0.5, isBoss));
+            return AsyncStageResponseDTO.battle(storyText,
+                    battle(storyText, scene.keywords(), MIN_SCORE, REFERENCE_SCORE, isBoss));
         }
         return AsyncStageResponseDTO.encounter(storyText, encounter(storyText, conversationId));
     }
@@ -330,7 +337,8 @@ public class MonsterRagService {
      * @return 히스토리 요약 내용
      */
     public String genarateGameOverStory(String conversationId) {
-        return chatClient.prompt()
+        // 대화 기록에 키워드 줄이 섞여 있어 모델이 요약 끝에도 따라 붙일 수 있다 -> 떼어낸다
+        return parseScene(chatClient.prompt()
                 .user("""
                         모험이 끝났습니다. 지금까지의 여정을 3~4문장으로 요약해 주세요.
                         - 대화 기록의 "[플레이어의 선택]"과 "[모험의 결말]" 줄을 근거로, 이 인간이 천상·마계·인간 중 어느 쪽에 기울었는지가 드러나게 씁니다.
@@ -342,8 +350,53 @@ public class MonsterRagService {
                                 .conversationId(conversationId).build()
                 )
                 .call()
-                .content();
+                .content()).story();
     }
+
+    /**
+     * 임계 점수 (2026-11-13 재측정).
+     * 기존 값(0.4 / 0.5)은 파일 업로드 문서 기준이었다. 지금의 임베딩 소스는 RDB 몬스터 설명이라 점수대가 다르다.
+     * 스테이지별 장면 키워드 12종으로 몬스터 문서만 검색해 보니 최고 유사도가 0.29~0.43에 분포했고,
+     * 0.4 기준으로는 12건 중 3건만 통과해 나머지는 전부 랜덤 몬스터로 떨어졌다. (하수구 -> 하수구 점액질 0.36,
+     * 인체실험실 -> 연금술 실패작 0.37 처럼 맞는 짝인데도 버려졌다)
+     * - MIN_SCORE 0.30: 이보다 낮으면 어울리는 몬스터가 없다고 보고 랜덤 출현
+     * - REFERENCE_SCORE 0.36: 분포의 중간. 넘으면 압축기, 못 넘으면 확장기
+     */
+    static final double MIN_SCORE = 0.30;
+    static final double REFERENCE_SCORE = 0.36;
+
+    /** 스토리 응답 끝에 붙는 키워드 줄의 머리말 */
+    static final String KEYWORD_MARKER = "키워드:";
+
+    /** 스토리 본문과, 같은 응답에 함께 온 키워드. 키워드 줄이 없으면 keywords는 null */
+    record Scene(String story, String keywords) {
+    }
+
+    /**
+     * 스토리 응답에서 마지막 "키워드:" 줄을 떼어낸다.
+     * 구조화 출력(.entity)을 쓰지 않은 이유: 이 호출은 ChatMemory에 저장되는데, 구조화 출력은
+     * 매 턴 JSON 스키마 설명을 사용자 메시지에 덧붙여 대화 기록을 부풀린다. 한 줄 규칙이 더 싸다.
+     */
+    static Scene parseScene(String raw) {
+        if (raw == null) return new Scene("", null);
+        int index = raw.lastIndexOf(KEYWORD_MARKER);
+        if (index < 0) return new Scene(raw.trim(), null);
+
+        String story = raw.substring(0, index).trim();
+        String keywords = raw.substring(index + KEYWORD_MARKER.length()).trim();
+        int lineEnd = keywords.indexOf('\n');
+        if (lineEnd >= 0) keywords = keywords.substring(0, lineEnd).trim();
+
+        // 본문 없이 키워드만 온 응답은 통째로 본문으로 본다
+        if (story.isEmpty()) return new Scene(raw.trim(), null);
+        return new Scene(story, keywords.isEmpty() ? null : keywords);
+    }
+
+    /**
+     * VectorStore에는 몬스터 외에 무기·갑옷·투구·스킬·유물·소모품 문서도 함께 들어 있다(GameDataEtlService).
+     * 몬스터를 고르는 검색이므로 몬스터 문서로 한정한다.
+     */
+    private static final String MONSTER_FILTER = "category == 'monster'";
 
     /**
      * 압축 쿼리 변환기
@@ -384,6 +437,7 @@ public class MonsterRagService {
                 .vectorStore(vectorStore) // 백터스토어에서 검색
                 .similarityThreshold(score) // 지정 임계점수
                 .topK(3) // 상위 3개
+                .filterExpression(new FilterExpressionBuilder().eq("category", "monster").build()) // 몬스터 문서만
                 .build();
     }
 
@@ -453,6 +507,7 @@ public class MonsterRagService {
     private double getMaxScore(String keyword) {
         SearchRequest.Builder searchRequest = SearchRequest.builder()
                 .query(keyword)
+                .filterExpression(MONSTER_FILTER) // 몬스터 문서만
                 .topK(3); // 상위 3개
 
         List<Document> documents = vectorStore.similaritySearch(searchRequest.build()); // 해당 키워드 검색
