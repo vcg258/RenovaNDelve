@@ -18,4 +18,9 @@ public interface ShopService {
      * 가격/재고 검증은 세션 재고(stockItem) 기준으로 이미 끝난 상태로 호출된다.
      */
     void applyPurchase(GameStateEntity gameState, MemberEntity member, ShopStockItem stockItem);
+
+    /**
+     * @param replaceSlotId 스킬을 살 때 버릴 슬롯 (슬롯이 가득 찼을 때 필수, 그 외에는 null)
+     */
+    void applyPurchase(GameStateEntity gameState, MemberEntity member, ShopStockItem stockItem, Long replaceSlotId);
 }
