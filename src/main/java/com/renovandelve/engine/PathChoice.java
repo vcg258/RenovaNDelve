@@ -9,22 +9,46 @@ package com.renovandelve.engine;
  */
 public enum PathChoice {
     /** 정면 돌파: 기본값 */
-    SAFE(1.0, 1.0, 0, false),
+    SAFE("정면으로 난 길", 1.0, 1.0, 0, false),
     /** 위험한 길: 적 HP·공격력 +25%, 점수·골드 +50%, 유물 보상 후보 +1 */
-    DANGER(1.25, 1.5, 1, false),
+    DANGER("위험한 길", 1.25, 1.5, 1, false),
     /** 은밀한 길: 기습으로 적 전원이 첫 턴 행동 불가, 대신 점수·골드 -30% */
-    AMBUSH(1.0, 0.7, 0, true);
+    AMBUSH("은밀한 길", 1.0, 0.7, 0, true);
 
+    private final String title;
     private final double enemyMultiplier;
     private final double rewardMultiplier;
     private final int bonusRelicOptions;
     private final boolean ambush;
 
-    PathChoice(double enemyMultiplier, double rewardMultiplier, int bonusRelicOptions, boolean ambush) {
+    PathChoice(String title, double enemyMultiplier, double rewardMultiplier, int bonusRelicOptions, boolean ambush) {
+        this.title = title;
         this.enemyMultiplier = enemyMultiplier;
         this.rewardMultiplier = rewardMultiplier;
         this.bonusRelicOptions = bonusRelicOptions;
         this.ambush = ambush;
+    }
+
+    public String title() {
+        return title;
+    }
+
+    /** 전투에 들어설 때 화면에 띄우는 한 줄: 이 길이 이번 전투에서 무엇을 바꿨는가. 기본 길은 null */
+    public String battleNote() {
+        return switch (this) {
+            case SAFE -> null;
+            case DANGER -> "위험한 길 — 적 HP·공격력 +25% 적용됨 · 승리 시 점수·골드 +50%, 유물 후보 +1";
+            case AMBUSH -> "은밀한 길 — 기습 성공: 적 전원이 첫 턴에 움직이지 못한다 · 승리 시 점수·골드 -30%";
+        };
+    }
+
+    /** 승리 로그에 붙이는 한 줄: 이 길이 보상을 어떻게 바꿨는가. 기본 길은 null */
+    public String rewardNote() {
+        return switch (this) {
+            case SAFE -> null;
+            case DANGER -> "위험한 길을 뚫었다: 점수·골드 +50%, 유물 후보 +1 (위 수치에 반영됨)";
+            case AMBUSH -> "은밀한 길의 대가: 점수·골드 -30% (위 수치에 반영됨)";
+        };
     }
 
     public double enemyMultiplier() {

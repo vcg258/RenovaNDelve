@@ -92,6 +92,10 @@ public class PlayerContextTools {
         List<String> synergies = RelicEffects.of(relicNames).getActiveSynergies();
         sb.append("[유물 조합 시너지] ").append(synergies.isEmpty() ? "발동 중인 조합 없음" : String.join(" / ", synergies)).append("\n");
 
+        List<String> skillSynergies = com.renovandelve.engine.SkillSynergies.of(game.getGameSkillSlot().stream()
+                .map(s -> s.getSkill()).filter(java.util.Objects::nonNull).toList()).getActiveSynergies();
+        sb.append("[스킬 조합 시너지] ").append(skillSynergies.isEmpty() ? "발동 중인 조합 없음" : String.join(" / ", skillSynergies)).append("\n");
+
         String consumables = game.getGameConsumableInventory().stream()
                 .filter(c -> c.getConsumable() != null)
                 .map(c -> c.getConsumable().getName())

@@ -39,6 +39,7 @@ public class GameSession {
     private List<ShopStockItem> shop = new ArrayList<>();
     private String summaryNarrative; // 종료 후 AI 요약 캐시
     private String path = "SAFE";    // 이번 노드에 고른 갈림길 (PathChoice 이름)
+    private String pathNote;         // 갈림길이 이번 노드에서 무엇을 바꿨는지 알려주는 한 줄 (화면 표시용)
     private int shopRerolls;         // 이번 상점에서 재입고한 횟수 (재입고 비용 상승)
     private RunReviewDTO review;     // 종료 후 AI 런 회고 캐시
     private boolean reviewAttempted; // 회고 생성을 이미 시도했는지 (실패 시 매 조회마다 LLM을 다시 부르지 않기 위함)

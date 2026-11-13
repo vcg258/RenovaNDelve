@@ -1,6 +1,15 @@
 package com.renovandelve.service;
 
 import com.renovandelve.domain.GameCharacterEntity;
+import com.renovandelve.domain.GameSkillSlotEntity;
+import com.renovandelve.domain.relicentity.RelicEntity;
+import com.renovandelve.domain.skillentity.SkillEntity;
+import com.renovandelve.domain.skillentity.Target;
+import com.renovandelve.dto.request.RewardSelectRequest;
+import com.renovandelve.dto.request.SkillUseRequest;
+import com.renovandelve.dto.response.TurnResultDTO;
+import com.renovandelve.engine.RewardOptions;
+import com.renovandelve.engine.SessionMonster;
 import com.renovandelve.domain.MemberEntity;
 import com.renovandelve.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.dto.MonsterDTO;
@@ -78,6 +87,7 @@ class GameEngineServiceImplTest {
     @Mock private RunReviewService runReviewService;
     @Mock private ChatMemory chatMemory;
     @Mock private StageCacheService stageCacheService;
+    @Mock private SkillSlotService skillSlotService;
 
     @InjectMocks private GameEngineServiceImpl engine;
 
@@ -291,5 +301,226 @@ class GameEngineServiceImplTest {
         assertThat(gameState.getHeavenAffinity()).isZero();
         verify(chatMemory).add(eq(CONVERSATION_ID), any(Message.class));
         verify(stageCacheService).delete(CONVERSATION_ID, 1, 3);
+    }
+
+    /* ==================== 갈림길 ==================== */
+
+    private NodeDTO enterBattle(String path) {
+        activeGame(1, 1);
+        session.setPhase(GameSession.PHASE_EXPLORE);
+        when(monsterRagService.chat(1, 2, CONVERSATION_ID)).thenReturn(AsyncStageResponseDTO.battle("서사",
+                List.of(monster("고블린", 0), monster("해골 병사", 0))));
+        return engine.nextNode(member, path);
+    }
+
+    @Test
+    @DisplayName("위험한 길: 적 공격력과 HP가 25% 오르고, 무엇이 적용됐는지 노드에 실려 나간다")
+    void dangerPathStrengthensEnemies() {
+        enterBattle("SAFE");
+        int safeAtk = session.getMonsters().get(0).getAtk();
+        assertThat(session.getPathNote()).isNull();
+
+        NodeDTO node = enterBattle("DANGER");
+        var danger = session.getMonsters().get(0);
+
+        assertThat(danger.getAtk()).isEqualTo((int) Math.round(safeAtk * 1.25));
+        // HP는 개체마다 +-10% 편차가 있으므로 범위로 본다: 기본 65 x 0.9 x 1.25 ~ 65 x 1.1 x 1.25
+        assertThat(danger.getMaxHp()).isBetween(72, 90).isEqualTo(danger.getCurrentHp());
+        assertThat(session.getPath()).isEqualTo("DANGER");
+        assertThat(node.path()).isEqualTo("DANGER");
+        assertThat(node.pathNote()).contains("위험한 길").contains("+25%");
+    }
+
+    @Test
+    @DisplayName("은밀한 길: 적 전원이 기절 1스택으로 시작하고 능력치는 그대로다")
+    void ambushPathStunsEveryEnemy() {
+        enterBattle("SAFE");
+        int safeAtk = session.getMonsters().get(0).getAtk();
+
+        NodeDTO node = enterBattle("AMBUSH");
+
+        assertThat(session.getMonsters()).hasSize(2).allSatisfy(monster -> {
+            assertThat(monster.getBuffs()).containsEntry(BattleServiceImpl.BUFF_STUN, 1);
+            assertThat(monster.getAtk()).isEqualTo(safeAtk);
+        });
+        assertThat(node.monsters()).allSatisfy(monster -> assertThat(monster.buffs()).containsKey("STUN"));
+        assertThat(node.pathNote()).contains("기습");
+    }
+
+    @Test
+    @DisplayName("알 수 없는 길 값은 기본 길로 처리한다")
+    void unknownPathFallsBackToSafe() {
+        NodeDTO node = enterBattle("TELEPORT");
+
+        assertThat(session.getPath()).isEqualTo("SAFE");
+        assertThat(node.pathNote()).isNull();
+    }
+
+    @Test
+    @DisplayName("조우 노드에서는 길 효과가 없고, 고른 길이 무시됐다는 안내가 나간다")
+    void encounterTellsPathWasIgnored() {
+        activeGame(1, 1);
+        when(monsterRagService.chat(1, 2, CONVERSATION_ID)).thenReturn(AsyncStageResponseDTO.encounter("서사",
+                new Encounter("상황", List.of("a", "b", "c"))));
+
+        NodeDTO node = engine.nextNode(member, "DANGER");
+
+        assertThat(node.path()).isNull();
+        assertThat(node.pathNote()).contains("위험한 길").contains("적용되지 않는다");
+    }
+
+    @Test
+    @DisplayName("새로고침(재진입)해도 적용된 길과 안내가 그대로 복원된다")
+    void pathNoteSurvivesReentry() {
+        enterBattle("DANGER");
+
+        NodeDTO again = engine.nextNode(member, "SAFE"); // 전투 중 재진입: 멱등
+
+        assertThat(again.path()).isEqualTo("DANGER");
+        assertThat(again.pathNote()).contains("위험한 길");
+    }
+
+    /** 스킬 한 번으로 전투가 끝나게 해 놓고 승리 처리를 돌린다 */
+    private TurnResultDTO winBattleOn(String path) {
+        GameCharacterEntity character = GameCharacterEntity.builder()
+                .currentHp(50).maxHp(50).attack(10).defense(3).build();
+        SkillEntity skill = SkillEntity.builder().skillId(1L).name("기본 공격").target(Target.EnemySingle).build();
+        GameSkillSlotEntity slot = GameSkillSlotEntity.builder().slotId(1L).slotIndex(0).skill(skill).build();
+        GameStateEntity gameState = GameStateEntity.builder()
+                .gameStateId(GAME_ID).currentStage(1).currentNodeId(3L)
+                .gameCharacter(new ArrayList<>(List.of(character)))
+                .gameSkillSlot(new ArrayList<>(List.of(slot)))
+                .build();
+        when(gameStateRepository.findByMember_MemberIdAndIsActiveTrue(1L)).thenReturn(Optional.of(gameState));
+
+        SessionMonster monster = new SessionMonster();
+        monster.setName("고블린");
+        monster.setMaxHp(10);
+        monster.setCurrentHp(10);
+        monster.setScoreReward(30);
+        session.setPhase(GameSession.PHASE_BATTLE);
+        session.setNodeType("BATTLE");
+        session.setPath(path);
+        session.setMonsters(new ArrayList<>(List.of(monster)));
+        when(battleService.isAllMonsterDead(any())).thenReturn(true);
+
+        TurnResultDTO result = engine.useSkill(member, new SkillUseRequest(1L, List.of()));
+        lastGame = gameState;
+        return result;
+    }
+
+    private GameStateEntity lastGame;
+
+    @Test
+    @DisplayName("갈림길의 보상 배율이 점수와 골드에 실제로 반영되고, 승리 로그에 드러난다")
+    void pathRewardMultiplierIsApplied() {
+        // 몬스터 점수 30 + 스테이지 1 보정 10 = 40, 골드는 그 1/3 = 13 (보통 난이도 배율 1.0)
+        TurnResultDTO safe = winBattleOn("SAFE");
+        assertThat(lastGame.getScore()).isEqualTo(40);
+        assertThat(lastGame.getGold()).isEqualTo(13);
+        assertThat(safe.log()).noneMatch(line -> line.contains("길"));
+
+        TurnResultDTO danger = winBattleOn("DANGER");
+        assertThat(lastGame.getScore()).isEqualTo(60);
+        assertThat(lastGame.getGold()).isEqualTo(19);
+        assertThat(danger.log()).anyMatch(line -> line.contains("위험한 길") && line.contains("+50%"));
+
+        TurnResultDTO ambush = winBattleOn("AMBUSH");
+        assertThat(lastGame.getScore()).isEqualTo(28);
+        assertThat(ambush.log()).anyMatch(line -> line.contains("은밀한 길") && line.contains("-30%"));
+    }
+
+    @Test
+    @DisplayName("위험한 길로 이기면 유물 후보가 하나 더 나온다")
+    void dangerPathAddsRelicOption() {
+        List<RelicEntity> pool = List.of(
+                RelicEntity.builder().relicId(1L).name("a").build(),
+                RelicEntity.builder().relicId(2L).name("b").build(),
+                RelicEntity.builder().relicId(3L).name("c").build());
+        when(relicRepository.findByRelicNotOwner(GAME_ID)).thenReturn(pool);
+
+        winBattleOn("SAFE");
+        assertThat(session.getReward().getRelicIds()).hasSize(1);
+
+        winBattleOn("DANGER");
+        assertThat(session.getReward().getRelicIds()).hasSize(2);
+    }
+
+    /* ==================== 단계별 가호의 보상 ==================== */
+
+    @Test
+    @DisplayName("마계 가호 3단계: 전투 보상의 유물 후보가 하나 늘어난다")
+    void thirdTierBlessingAddsRewardOption() {
+        List<RelicEntity> pool = List.of(
+                RelicEntity.builder().relicId(1L).name("a").build(),
+                RelicEntity.builder().relicId(2L).name("b").build(),
+                RelicEntity.builder().relicId(3L).name("c").build());
+        when(relicRepository.findByRelicNotOwner(GAME_ID)).thenReturn(pool);
+
+        winBattleOn("SAFE");
+        assertThat(session.getReward().getRelicIds()).hasSize(1);
+
+        // 같은 전투를 마계 성향 9로 다시 치른다
+        GameCharacterEntity character = GameCharacterEntity.builder().currentHp(50).maxHp(50).attack(10).defense(3).build();
+        SkillEntity skill = SkillEntity.builder().skillId(1L).name("기본 공격").target(Target.EnemySingle).build();
+        GameStateEntity abyss = GameStateEntity.builder()
+                .gameStateId(GAME_ID).currentStage(1).currentNodeId(3L).abyssAffinity(9)
+                .gameCharacter(new ArrayList<>(List.of(character)))
+                .gameSkillSlot(new ArrayList<>(List.of(
+                        GameSkillSlotEntity.builder().slotId(1L).slotIndex(0).skill(skill).build())))
+                .build();
+        when(gameStateRepository.findByMember_MemberIdAndIsActiveTrue(1L)).thenReturn(Optional.of(abyss));
+        session.setPhase(GameSession.PHASE_BATTLE);
+
+        engine.useSkill(member, new SkillUseRequest(1L, List.of()));
+
+        assertThat(session.getReward().getRelicIds()).hasSize(2);
+    }
+
+    /* ==================== 스킬 교체 ==================== */
+
+    @Test
+    @DisplayName("스킬 보상을 고르면 버릴 슬롯이 그대로 슬롯 규칙에 전달되고 상점 단계로 넘어간다")
+    void skillRewardPassesReplaceSlot() {
+        GameStateEntity gameState = activeGame(1, 3);
+        session.setPhase(GameSession.PHASE_REWARD);
+        RewardOptions options = new RewardOptions();
+        options.setSkillIds(new ArrayList<>(List.of(42L)));
+        session.setReward(options);
+
+        engine.selectReward(member, new RewardSelectRequest("SKILL", 42L, 5L));
+
+        verify(skillSlotService).learn(gameState, 42L, 5L);
+        assertThat(session.getPhase()).isEqualTo(GameSession.PHASE_SHOP);
+    }
+
+    @Test
+    @DisplayName("슬롯이 가득 차 스킬을 배우지 못하면 보상 단계에 그대로 머문다 (버릴 스킬을 고른 뒤 다시 요청할 수 있다)")
+    void fullSlotsKeepRewardPhase() {
+        GameStateEntity gameState = activeGame(1, 3);
+        session.setPhase(GameSession.PHASE_REWARD);
+        RewardOptions options = new RewardOptions();
+        options.setSkillIds(new ArrayList<>(List.of(42L)));
+        session.setReward(options);
+        when(skillSlotService.learn(gameState, 42L, null))
+                .thenThrow(new IllegalStateException(SkillSlotService.FULL_MESSAGE));
+
+        assertThatThrownBy(() -> engine.selectReward(member, new RewardSelectRequest("SKILL", 42L, null)))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(session.getPhase()).isEqualTo(GameSession.PHASE_REWARD);
+        assertThat(session.getReward()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("보상 후보에 없는 스킬은 교체 요청으로도 얻을 수 없다")
+    void rewardSkillMustBeOffered() {
+        activeGame(1, 3);
+        session.setPhase(GameSession.PHASE_REWARD);
+        session.setReward(new RewardOptions());
+
+        assertThatThrownBy(() -> engine.selectReward(member, new RewardSelectRequest("SKILL", 42L, 5L)))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(skillSlotService, never()).learn(any(), any(), any());
     }
 }

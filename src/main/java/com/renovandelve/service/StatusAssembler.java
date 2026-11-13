@@ -10,6 +10,7 @@ import com.renovandelve.dto.response.AlignmentDTO;
 import com.renovandelve.dto.response.StatusDTO;
 import com.renovandelve.engine.Pact;
 import com.renovandelve.engine.RelicEffects;
+import com.renovandelve.engine.SkillSynergies;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -83,6 +84,13 @@ public class StatusAssembler {
                 relicInventoryDTO.stream().map(r -> r.getRelic().name()).toList()
         ).getActiveSynergies();
 
+        // 발동 중인 스킬 조합 시너지
+        List<String> skillSynergies = gameState.getGameSkillSlot() == null ? List.of()
+                : SkillSynergies.of(gameState.getGameSkillSlot().stream()
+                    .filter(e -> e != null && e.getSkill() != null)
+                    .map(e -> e.getSkill())
+                    .toList()).getActiveSynergies();
+
         return StatusDTO.builder()
                 .stateDTO(stateDTO)
                 .characterDTO(characterDTO)
@@ -91,6 +99,8 @@ public class StatusAssembler {
                 .relicInventoryDTO(relicInventoryDTO)
                 .skillSlotDTO(skillSlotDTO)
                 .relicSynergies(relicSynergies)
+                .skillSynergies(skillSynergies)
+                .maxSkillSlots(SkillSlotService.MAX_SLOTS)
                 .pacts(Pact.titles(Pact.parse(gameState.getPacts())))
                 .alignment(AlignmentDTO.from(gameState.alignment()))
                 .build();
