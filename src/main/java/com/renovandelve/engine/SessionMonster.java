@@ -24,6 +24,8 @@ public class SessionMonster {
     private int scoreReward;
     private String description;
     private Map<String, Integer> buffs = new HashMap<>(); // BLEED/BURN/POISON/STUN -> 스택
+    private String intent;    // 이번 턴에 할 행동 예고 (ATTACK / HEAVY / GUARD). 플레이어에게 공개된다
+    private boolean enraged;  // 보스 격노 여부 (HP 50% 이하에서 1회 발동)
 
     public boolean isAlive() {
         return currentHp > 0;

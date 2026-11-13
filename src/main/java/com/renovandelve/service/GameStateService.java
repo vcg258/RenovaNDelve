@@ -12,7 +12,7 @@ public interface GameStateService {
     /**
      * 새 게임 세팅 화면용 선택지 목록 (장비 / 스킬 / 유물 + 예산)
      */
-    SetupOptionsDTO getSetupOptions();
+    SetupOptionsDTO getSetupOptions(MemberEntity member);
 
     /**
      * 새 게임 시작. 기존 진행 중 게임은 자동 종료 처리.

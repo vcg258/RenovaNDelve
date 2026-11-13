@@ -1,5 +1,6 @@
 package com.renovandelve.engine;
 
+import com.renovandelve.dto.response.RunReviewDTO;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -22,6 +23,7 @@ public class GameSession {
     public static final String PHASE_ENCOUNTER = "ENCOUNTER";
     public static final String PHASE_REWARD = "REWARD";
     public static final String PHASE_SHOP = "SHOP";
+    public static final String PHASE_REST = "REST"; // 보스 처치 후 모닥불: 휴식 / 단련 / 서원 중 하나를 고른다
     public static final String PHASE_GAMEOVER = "GAMEOVER";
     public static final String PHASE_CLEAR = "CLEAR";
 
@@ -36,4 +38,8 @@ public class GameSession {
     private RewardOptions reward;
     private List<ShopStockItem> shop = new ArrayList<>();
     private String summaryNarrative; // 종료 후 AI 요약 캐시
+    private String path = "SAFE";    // 이번 노드에 고른 갈림길 (PathChoice 이름)
+    private int shopRerolls;         // 이번 상점에서 재입고한 횟수 (재입고 비용 상승)
+    private RunReviewDTO review;     // 종료 후 AI 런 회고 캐시
+    private boolean reviewAttempted; // 회고 생성을 이미 시도했는지 (실패 시 매 조회마다 LLM을 다시 부르지 않기 위함)
 }

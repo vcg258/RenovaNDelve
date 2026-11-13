@@ -34,7 +34,7 @@ public class RankingController {
         List<RankingViewDTO> result = new ArrayList<>();
         int rank = 1;
         for (var entity : rankingRepository.findTop10ByDifficultyOrderByBestScoreDesc(parsed)) {
-            result.add(new RankingViewDTO(rank++, entity.getMember().getLoginId(), entity.getDifficulty(),
+            result.add(new RankingViewDTO(rank++, entity.getMember().displayName(), entity.getDifficulty(),
                     entity.getBestScore(), entity.getClearTime(), entity.getAchievedAt()));
         }
         return ResponseEntity.ok(result);

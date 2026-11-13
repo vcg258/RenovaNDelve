@@ -11,7 +11,12 @@ public record NewGameRequest(
         Long weaponId,          // null이면 기본 무기(scoreCost 0)
         Long armorId,           // null이면 기본 갑옷
         Long helmetId,          // null이면 기본 투구
+        @jakarta.validation.constraints.Size(max = 10, message = "선택한 스킬이 너무 많습니다.")
         List<Long> skillIds,    // 비어있으면 기본 공격만
+        @jakarta.validation.constraints.Size(max = 10, message = "선택한 서약이 너무 많습니다.")
+        List<String> pacts,     // 서약 코드 목록 (선택 사항)
+
+        @jakarta.validation.constraints.Size(max = 20, message = "선택한 유물이 너무 많습니다.")
         List<Long> relicIds     // 선택 사항
 ) {
 }

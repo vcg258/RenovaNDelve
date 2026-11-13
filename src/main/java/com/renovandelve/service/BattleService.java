@@ -38,11 +38,24 @@ public interface BattleService {
     void applyDotDamage(List<SessionMonster> monsters, List<String> log);
 
     /**
-     * 몬스터 일제 공격 -> 플레이어가 받는 총 피해량
+     * 몬스터 일제 행동 -> 플레이어가 받는 총 피해량.
+     * 각 몬스터는 예고된 행동(intent)대로 움직인다: 공격 / 강공(피해 1.6배) / 방어 태세(공격하지 않음)
      * @param defense 플레이어 총 방어력
      * @param flatReduction 유물로 인한 고정 피해 감소
+     * @param incomingMultiplier 플레이어가 받는 피해 배율 (방어 태세 중이면 1.0 미만)
      */
-    int monsterAttackDamage(List<SessionMonster> monsters, int defense, int flatReduction, List<String> log);
+    int monsterAttackDamage(List<SessionMonster> monsters, int defense, int flatReduction,
+                            double incomingMultiplier, List<String> log);
+
+    /**
+     * 다음 턴 행동 예고 결정. 전투 시작 시와 몬스터 턴이 끝날 때마다 호출한다.
+     */
+    void rollIntents(List<SessionMonster> monsters);
+
+    /**
+     * 보스 격노: HP가 절반 이하로 떨어지면 1회에 한해 공격력이 상승한다.
+     */
+    void applyEnrage(List<SessionMonster> monsters, List<String> log);
 
     /**
      * 몬스터 전멸 판정
