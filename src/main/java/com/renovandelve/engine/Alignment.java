@@ -9,14 +9,21 @@ package com.renovandelve.engine;
  *
  * 가호는 "가장 높은 성향이 임계치 이상이고 단독 1위"일 때만 발동한다.
  * 모든 선택지를 골고루 누르면 아무 가호도 얻지 못하므로, 한 길을 고집할 이유가 생긴다.
+ *
+ * 가호는 3단계다. 단독 1위인 세력의 점수가 3 / 6 / 9에 닿을 때마다 한 단계씩 오르고,
+ * 3단계에서는 전투 보상 후보가 하나 늘어난다. 1단계 수치는 단계가 없던 때와 같다.
  */
 public record Alignment(int heaven, int abyss, int human) {
     public static final int BLESSING_THRESHOLD = 3;
+    /** 단계별 필요 점수 (1단계, 2단계, 3단계) */
+    public static final int[] TIER_THRESHOLDS = {3, 6, 9};
+    public static final int MAX_TIER = TIER_THRESHOLDS.length;
 
-    private static final double HEAVEN_VICTORY_HEAL_RATIO = 0.06;
-    private static final double ABYSS_ATTACK_MULTIPLIER = 1.12;
-    private static final double ABYSS_DAMAGE_TAKEN_MULTIPLIER = 1.10;
-    private static final double HUMAN_GOLD_MULTIPLIER = 1.20;
+    // 인덱스 = 단계 (0은 가호 없음)
+    private static final double[] HEAVEN_VICTORY_HEAL_RATIO = {0.0, 0.06, 0.09, 0.12};
+    private static final double[] ABYSS_ATTACK_MULTIPLIER = {1.0, 1.12, 1.18, 1.24};
+    private static final double[] ABYSS_DAMAGE_TAKEN_MULTIPLIER = {1.0, 1.10, 1.12, 1.14};
+    private static final double[] HUMAN_GOLD_MULTIPLIER = {1.0, 1.20, 1.30, 1.40};
 
     /** 가호를 주는 세력. 없으면 null */
     public Faction dominant() {
@@ -31,35 +38,95 @@ public record Alignment(int heaven, int abyss, int human) {
         return Faction.HUMAN;
     }
 
+    /** 가호 단계 (0 = 없음, 1~3) */
+    public int tier() {
+        Faction dominant = dominant();
+        if (dominant == null) return 0;
+        int score = score(dominant);
+        int tier = 0;
+        for (int threshold : TIER_THRESHOLDS) {
+            if (score >= threshold) tier++;
+        }
+        return tier;
+    }
+
+    /** 다음 단계에 필요한 점수. 가호가 없거나 이미 최고 단계면 null */
+    public Integer nextTierAt() {
+        int tier = tier();
+        return tier == 0 || tier >= MAX_TIER ? null : TIER_THRESHOLDS[tier];
+    }
+
+    public int score(Faction faction) {
+        return switch (faction) {
+            case HEAVEN -> heaven;
+            case ABYSS -> abyss;
+            case HUMAN -> human;
+        };
+    }
+
+    private int tierOf(Faction faction) {
+        return dominant() == faction ? tier() : 0;
+    }
+
     /** 마계의 낙인: 공격력 상승 */
     public double attackMultiplier() {
-        return dominant() == Faction.ABYSS ? ABYSS_ATTACK_MULTIPLIER : 1.0;
+        return ABYSS_ATTACK_MULTIPLIER[tierOf(Faction.ABYSS)];
     }
 
     /** 마계의 낙인의 대가: 받는 피해 증가 */
     public double damageTakenMultiplier() {
-        return dominant() == Faction.ABYSS ? ABYSS_DAMAGE_TAKEN_MULTIPLIER : 1.0;
+        return ABYSS_DAMAGE_TAKEN_MULTIPLIER[tierOf(Faction.ABYSS)];
     }
 
     /** 인간의 의지: 골드 획득 증가 */
     public double goldMultiplier() {
-        return dominant() == Faction.HUMAN ? HUMAN_GOLD_MULTIPLIER : 1.0;
+        return HUMAN_GOLD_MULTIPLIER[tierOf(Faction.HUMAN)];
     }
 
     /** 천상의 가호: 전투 승리 시 최대 HP 대비 회복 비율 */
     public double victoryHealRatio() {
-        return dominant() == Faction.HEAVEN ? HEAVEN_VICTORY_HEAL_RATIO : 0.0;
+        return HEAVEN_VICTORY_HEAL_RATIO[tierOf(Faction.HEAVEN)];
+    }
+
+    /** 천상 3단계: 전투 보상의 소모품 후보 +1 */
+    public int bonusConsumableOptions() {
+        return tierOf(Faction.HEAVEN) >= MAX_TIER ? 1 : 0;
+    }
+
+    /** 마계 3단계: 전투 보상의 유물 후보 +1 */
+    public int bonusRelicOptions() {
+        return tierOf(Faction.ABYSS) >= MAX_TIER ? 1 : 0;
+    }
+
+    /** 인간 3단계: 전투 보상의 스킬 후보 +1 */
+    public int bonusSkillOptions() {
+        return tierOf(Faction.HUMAN) >= MAX_TIER ? 1 : 0;
     }
 
     /** 화면과 AI 안내자에게 보여줄 가호 설명. 없으면 null */
     public String blessing() {
         Faction dominant = dominant();
         if (dominant == null) return null;
-        return switch (dominant) {
-            case HEAVEN -> "천상의 가호 — 전투에서 승리할 때마다 최대 HP의 6% 회복";
-            case ABYSS -> "마계의 낙인 — 공격력 +12%, 대신 받는 피해 +10%";
-            case HUMAN -> "인간의 의지 — 골드 획득 +20%";
+        return blessingText(dominant, tier());
+    }
+
+    /** 특정 세력의 특정 단계 가호 설명 (화면의 단계표에도 쓴다) */
+    public static String blessingText(Faction faction, int tier) {
+        if (tier < 1 || tier > MAX_TIER) return null;
+        String stage = tier + "단계";
+        return switch (faction) {
+            case HEAVEN -> "천상의 가호 %s — 전투에서 승리할 때마다 최대 HP의 %d%% 회복%s".formatted(stage,
+                    percent(HEAVEN_VICTORY_HEAL_RATIO[tier]), tier >= MAX_TIER ? ", 보상의 소모품 후보 +1" : "");
+            case ABYSS -> "마계의 낙인 %s — 공격력 +%d%%, 대신 받는 피해 +%d%%%s".formatted(stage,
+                    percent(ABYSS_ATTACK_MULTIPLIER[tier] - 1), percent(ABYSS_DAMAGE_TAKEN_MULTIPLIER[tier] - 1),
+                    tier >= MAX_TIER ? ", 보상의 유물 후보 +1" : "");
+            case HUMAN -> "인간의 의지 %s — 골드 획득 +%d%%%s".formatted(stage,
+                    percent(HUMAN_GOLD_MULTIPLIER[tier] - 1), tier >= MAX_TIER ? ", 보상의 스킬 후보 +1" : "");
         };
+    }
+
+    private static int percent(double ratio) {
+        return (int) Math.round(ratio * 100);
     }
 
     /** AI에게 넘기는 한 줄 요약 */

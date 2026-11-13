@@ -8,14 +8,21 @@ package com.renovandelve.engine;
  * - HUMAN(인간): 의지와 실리. 누구의 손도 빌리지 않고 스스로 해결한다
  */
 public enum Faction {
-    HEAVEN("천상"),
-    ABYSS("마계"),
-    HUMAN("인간");
+    HEAVEN("천상", "질서와 자비. 조우에서 대체로 안전하지만 무언가를 내려놓아야 할 수 있다."),
+    ABYSS("마계", "욕망과 거래. 조우에서 크게 얻거나 크게 잃는다."),
+    HUMAN("인간", "의지와 실리. 누구의 힘도 빌리지 않고 스스로 챙긴다.");
 
     private final String label;
+    private final String tendency;
 
-    Faction(String label) {
+    Faction(String label, String tendency) {
         this.label = label;
+        this.tendency = tendency;
+    }
+
+    /** 조우 선택지에서 이 세력의 방식이 보이는 경향 (화면 안내용) */
+    public String tendency() {
+        return tendency;
     }
 
     public String label() {
