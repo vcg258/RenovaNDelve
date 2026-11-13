@@ -69,6 +69,20 @@ cp .env.example .env
 # JWT_SECRET_KEY, OPENAI_API_KEY 입력
 ```
 
+**메일 (선택)** — 아이디 찾기·비밀번호 찾기 메일을 보내려면 `.env`에 SMTP 계정을 넣습니다. 비워 두면 서버는 그대로 기동되고 메일만 나가지 않습니다(로그에 경고).
+
+```bash
+MAIL_USERNAME=네이버_아이디
+MAIL_PASSWORD=네이버_비밀번호_또는_애플리케이션_비밀번호
+# MAIL_FROM=네이버_아이디@naver.com   # 비우면 MAIL_USERNAME@naver.com
+# APP_BASE_URL=http://localhost:5173  # 재설정 링크가 가리킬 프론트 주소
+```
+
+- 네이버 메일 > 환경설정 > POP3/IMAP 설정에서 **POP3/SMTP 사용**을 켜야 합니다.
+- 2단계 인증을 쓰는 계정은 네이버 계정 보안 설정에서 **애플리케이션 비밀번호**를 발급받아 넣습니다.
+- 기본값은 `smtp.naver.com:465`(SSL)입니다. 587(STARTTLS)을 쓰려면 `MAIL_PORT=587`, `MAIL_SSL=false`.
+- 계정 정보는 저장소에 넣지 않습니다(`.env`는 git에서 제외).
+
 ### 3. 백엔드 실행
 
 ```bash
@@ -148,6 +162,10 @@ graph TD
 | POST | `/api/auth/login` | 로그인 → `{accessToken}` + Refresh 쿠키 |
 | POST | `/api/auth/refresh` | AccessToken 재발급 (쿠키 기반) |
 | POST | `/api/auth/logout` | RefreshToken 폐기 |
+| POST | `/api/auth/find-id` | 아이디 찾기 (이름 + 이메일 → 메일 발송, 응답은 항상 같음) |
+| POST | `/api/auth/password-reset/request` | 비밀번호 재설정 링크 요청 (아이디 + 이메일, 응답은 항상 같음) |
+| POST | `/api/auth/password-reset/confirm` | 1회용 토큰으로 새 비밀번호 설정 |
+| PATCH | `/api/member/contact` | 이름·이메일 등록 / 변경 |
 | GET | `/api/member/me` | 내 정보 |
 | GET | `/api/game/options` | 세팅 옵션 (장비/스킬/유물 + 예산 800pt) |
 | POST | `/api/game/new` | 새 게임 (예산 서버 검증) |

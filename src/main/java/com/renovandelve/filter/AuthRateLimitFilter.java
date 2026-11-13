@@ -53,6 +53,13 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             case "/api/auth/signup" -> new Rule("signup", 5, Duration.ofMinutes(10));
             // 중복 확인은 입력 중 디바운스 호출이 잦으므로 넉넉히 두되, 아이디 대량 수집은 막는다
             case "/api/auth/check-login-id", "/api/auth/check-nickname" -> new Rule("check", 40, Duration.ofMinutes(1));
+            // 메일이 나가는 요청: 남의 주소로 메일을 쏟아붓거나 계정 정보를 대입해 보는 것을 막는다
+            // (주소 단위 제한은 AccountRecoveryService가 따로 건다)
+            case "/api/auth/find-id", "/api/auth/password-reset/request" ->
+                    new Rule("recovery", 5, Duration.ofMinutes(10));
+            // 재설정 토큰은 256비트라 대입으로 맞힐 수 없지만, 시도 자체를 묶어 둔다
+            case "/api/auth/password-reset/check", "/api/auth/password-reset/confirm" ->
+                    new Rule("reset", 20, Duration.ofMinutes(10));
             case "/api/auth/refresh" -> new Rule("refresh", 30, Duration.ofMinutes(1));
             default -> null;
         };
