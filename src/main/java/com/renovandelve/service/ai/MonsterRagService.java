@@ -244,16 +244,11 @@ public class MonsterRagService {
                 retrievalAugmentationAdvisorByMultiQueryExpander(minScore, isBoss);
         log.info("사용한 어드바이저 : {}", maxScore > referenceScore ? "압축기" : "확장기");
 
+        // 사용자 메시지는 키워드만 보낸다. RAG 어드바이저는 이 메시지를 그대로 검색 질의로 쓰므로,
+        // 지시문("JSON 형식으로만 응답하세요" 등)을 함께 넣으면 그 문장까지 임베딩되어 검색이 흐려진다.
+        // 지시문은 검색이 끝난 뒤 contextualQueryAugmenter의 템플릿이 붙인다.
         return chatClient.prompt()
-                .user("""
-                    키워드: %s
-                    
-                    위 키워드와 어울리는 %s를 선택하고
-                    반드시 아래 JSON 형식으로만 응답하세요.
-                    다른 설명은 절대 포함하지 마세요.
-                    
-                    예시: monsters 배열에 몬스터명1, 몬스터명2 형태로 담아주세요.
-                    """.formatted(keyword, isBoss ? "보스 몬스터 1개" : "몬스터 1~3개"))
+                .user(keyword)
                 .advisors(retrievalAugmentationAdvisor)
                 .call()
                 .content();
@@ -354,16 +349,26 @@ public class MonsterRagService {
     }
 
     /**
-     * 임계 점수 (2026-11-13 재측정).
+     * 임계 점수 (2026-11-14, 실제 생성 서사로 측정).
+     *
      * 기존 값(0.4 / 0.5)은 파일 업로드 문서 기준이었다. 지금의 임베딩 소스는 RDB 몬스터 설명이라 점수대가 다르다.
-     * 스테이지별 장면 키워드 12종으로 몬스터 문서만 검색해 보니 최고 유사도가 0.29~0.43에 분포했고,
-     * 0.4 기준으로는 12건 중 3건만 통과해 나머지는 전부 랜덤 몬스터로 떨어졌다. (하수구 -> 하수구 점액질 0.36,
-     * 인체실험실 -> 연금술 실패작 0.37 처럼 맞는 짝인데도 버려졌다)
-     * - MIN_SCORE 0.30: 이보다 낮으면 어울리는 몬스터가 없다고 보고 랜덤 출현
-     * - REFERENCE_SCORE 0.36: 분포의 중간. 넘으면 압축기, 못 넘으면 확장기
+     * 스테이지 1~5에서 LLM이 실제로 쓴 장면의 키워드로 몬스터 문서를 검색해 보니(전투 노드 46건)
+     * 최고 유사도는 0.27~0.43, 중앙값 0.35였다.
+     *
+     * MIN_SCORE 0.29 — 이보다 낮으면 어울리는 몬스터가 없다고 보고 랜덤 출현.
+     *   0.29 미만 6건은 대부분 어색한 짝이었다(알현실 -> 어둠의 정령 0.284).
+     *   0.29~0.30에는 맞는 짝이 있었다(지하 묘지 -> 묘지기 가고일 0.298, 악마의 왕좌 -> 악마화된 왕 0.294).
+     *   잘못 통과시켜도 결과는 랜덤과 비슷하지만, 잘못 버리면 맞는 짝을 잃으므로 낮은 쪽으로 잡았다.
+     *
+     * REFERENCE_SCORE 0.40 — 넘으면 압축기, 못 넘으면 확장기.
+     *   LLM이 고른 몬스터가 유사도 상위 후보 안에 있던 비율이 확장기 100%(13/13), 압축기 56%(14/25)였다.
+     *   압축기는 대화 기록 없이 키워드 목록을 다시 쓰면서 뜻을 바꾸는 일이 있었다(마법사의 탑 -> 좀비).
+     *   그래서 후보가 아주 뚜렷한 경우(0.40 이상)에만 압축기를 쓰고 나머지는 확장기로 보낸다.
+     *
+     * 두 값을 적용한 뒤 다시 측정한 일치율은 88%(45/51), 랜덤 출현은 21건 중 1건이었다.
      */
-    static final double MIN_SCORE = 0.30;
-    static final double REFERENCE_SCORE = 0.36;
+    static final double MIN_SCORE = 0.29;
+    static final double REFERENCE_SCORE = 0.40;
 
     /** 스토리 응답 끝에 붙는 키워드 줄의 머리말 */
     static final String KEYWORD_MARKER = "키워드:";
@@ -520,7 +525,19 @@ public class MonsterRagService {
             }
             maxScore = Math.max(maxScore, score);
         }
+        // 임계 점수를 다시 잡을 때 쓰는 근거 자료: 어떤 몬스터가 몇 점으로 걸렸는지
+        if (log.isDebugEnabled()) {
+            log.debug("검색 후보 : {}", documents.stream()
+                    .map(doc -> "%s(%.3f)".formatted(firstLine(doc.getText()), doc.getScore() == null ? 0.0 : doc.getScore()))
+                    .collect(Collectors.joining(", ")));
+        }
         return maxScore;
+    }
+
+    private static String firstLine(String text) {
+        if (text == null) return "";
+        String line = text.strip().lines().findFirst().orElse("");
+        return line.replace("[몬스터]", "").strip();
     }
 
     // 노드/스테이지 계산을 한 곳에서 처리

@@ -29,9 +29,10 @@ spring:
 
   jpa:
     hibernate:
-      # 로컬은 update: 엔티티를 고치면 바로 반영된다. 단, 운영(prod)은 validate라서
-      # 엔티티를 바꿨다면 같은 변경을 db/migration에 V{n}__설명.sql 로 반드시 추가해야 한다.
-      ddl-auto: update
+      # 스키마는 Flyway만 바꾼다. Hibernate는 엔티티와 테이블이 맞는지 검사만 한다(전 프로파일 공통).
+      # 엔티티를 바꾸면 같은 변경을 db/migration에 V{n}__설명.sql 로 추가해야 기동된다.
+      # (update로 두면 마이그레이션을 빠뜨려도 로컬에서는 돌아서, 운영에서야 문제가 드러난다)
+      ddl-auto: validate
     properties:
 #      javax.persistence.schema-generation.scripts.action: create # 엔티티 변경시 init.sql 추출 하기 위한 설정
 #      javax.persistence.schema-generation.scripts.create-target: init.sql # 엔티티 변경시 init.sql 추출 하기 위한 설정
