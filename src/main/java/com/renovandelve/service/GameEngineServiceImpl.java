@@ -25,6 +25,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -63,6 +68,17 @@ public class GameEngineServiceImpl implements GameEngineService {
     private static final int REST_TRAIN_DEFENSE = 1;           // 모닥불 단련: 방어력 영구 상승
     private static final int SHOP_REROLL_BASE_COST = 40;
     private static final int SHOP_REROLL_STEP = 30;
+
+    /**
+     * AI 노드 생성에 쓰는 시간 상한. 한 노드에 LLM 호출이 여러 번 이어지고 재시도까지 붙을 수 있어
+     * 호출별 타임아웃만으로는 전체 시간이 묶이지 않는다. 이 시간을 넘기면 기다리지 않고 폴백한다.
+     * 프론트 요청 타임아웃(90초)과 게임 락 TTL(120초)보다 짧아야 한다.
+     */
+    static final long AI_NODE_BUDGET_SECONDS = 75;
+    /** 테스트에서 줄일 수 있도록 필드로 둔다 */
+    long aiNodeBudgetSeconds = AI_NODE_BUDGET_SECONDS;
+    /** LLM 호출은 대기 시간이 대부분인 블로킹 IO -> 가상 스레드 */
+    private final ExecutorService aiExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     /* ==================== 조회 ==================== */
 
@@ -675,10 +691,15 @@ public class GameEngineServiceImpl implements GameEngineService {
      * AI(RAG) 노드 생성. 실패 시 서버 자체 폴백으로 게임 진행을 보장한다.
      */
     private AsyncStageResponseDTO generateNodeContent(int stage, int node, String conversationId) {
+        Future<AsyncStageResponseDTO> pending = aiExecutor.submit(
+                () -> monsterRagService.chat(stage, node, conversationId));
         try {
-            return monsterRagService.chat(stage, node, conversationId);
+            return pending.get(aiNodeBudgetSeconds, TimeUnit.SECONDS);
         } catch (Exception e) {
-            log.warn("AI 노드 생성 실패, 폴백 사용. stage={} node={} 원인={}", stage, node, e.getMessage());
+            pending.cancel(true); // 시간 초과면 진행 중인 LLM 호출을 끊는다
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            log.warn("AI 노드 생성 실패, 폴백 사용. stage={} node={} 원인={}", stage, node,
+                    e instanceof TimeoutException ? aiNodeBudgetSeconds + "초 초과" : e.getMessage());
             boolean isBoss = node % NODES_PER_STAGE == 0;
             if (isBoss || random.nextDouble() > 0.3) {
                 List<MonsterDTO> monsters = isBoss
