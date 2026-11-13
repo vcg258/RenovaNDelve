@@ -46,6 +46,10 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok'
     implementation 'org.springframework.ai:spring-ai-rag'
 
+    // 스키마 마이그레이션 (db/migration/V*.sql)
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+
 
 
     // JSON 변환 라이브러리

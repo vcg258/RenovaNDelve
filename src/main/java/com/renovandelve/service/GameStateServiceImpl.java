@@ -240,7 +240,7 @@ public class GameStateServiceImpl implements GameStateService {
         }
 
         if (selected.isEmpty()) {
-            throw new IllegalStateException("스킬 데이터가 없습니다. data.sql 시드 데이터를 확인하세요.");
+            throw new IllegalStateException("스킬 데이터가 없습니다. 시드 데이터(db/migration/R__seed_data.sql)를 확인하세요.");
         }
         return new ArrayList<>(selected.values());
     }

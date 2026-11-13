@@ -14,15 +14,24 @@ spring:
           no-store: true
           must-revalidate: true
 
-# JPA 초기 INSERT 설정
-  sql:
-    init:
-      mode: always
-      data-locations: classpath:db/data.sql
+# 스키마 마이그레이션 (classpath:db/migration)
+# - 시드 데이터는 반복 마이그레이션 R__seed_data.sql 이다. 내용이 바뀐 기동에서만 다시 실행된다.
+#   (예전의 spring.sql.init + data.sql 방식은 Flyway와 함께 쓸 수 없어 옮겼다)
+# - 빈 DB: V1(기준 스키마)부터 차례로 적용한다.
+# - Flyway 도입 전에 ddl-auto로 만들어진 기존 DB: 이력 테이블이 없으므로 현재 상태를 V1로 간주(baseline)하고
+#   V2부터 적용한다.
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+    # 시드 데이터(R__seed_data.sql)에 '${'가 들어가도 Flyway 자리표시자로 해석하지 않는다
+    placeholder-replacement: false
+
   jpa:
-    defer-datasource-initialization: true
     hibernate:
-      ddl-auto: update # 테이블 자동 생성
+      # 로컬은 update: 엔티티를 고치면 바로 반영된다. 단, 운영(prod)은 validate라서
+      # 엔티티를 바꿨다면 같은 변경을 db/migration에 V{n}__설명.sql 로 반드시 추가해야 한다.
+      ddl-auto: update
     properties:
 #      javax.persistence.schema-generation.scripts.action: create # 엔티티 변경시 init.sql 추출 하기 위한 설정
 #      javax.persistence.schema-generation.scripts.create-target: init.sql # 엔티티 변경시 init.sql 추출 하기 위한 설정
