@@ -17,6 +17,7 @@ import com.renovandelve.repository.MemberRepository;
 import com.renovandelve.repository.MemberSpecifications;
 import com.renovandelve.repository.RankingRepository;
 import com.renovandelve.service.redis.GameSessionService;
+import com.renovandelve.service.redis.TokenRevocationService;
 import com.renovandelve.service.redis.SecurityTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -38,6 +39,7 @@ public class AdminServiceImpl implements AdminService {
     private final RankingRepository rankingRepository;
     private final GameSessionService gameSessionService;
     private final SecurityTokenService securityTokenService;
+    private final TokenRevocationService tokenRevocationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -82,6 +84,7 @@ public class AdminServiceImpl implements AdminService {
             target.suspend(reason);
             // 정지 즉시 세션을 끊는다 (RefreshToken 폐기 + 진행 중 게임 종료)
             securityTokenService.logout(target.getLoginId());
+            tokenRevocationService.revoke(target.getLoginId()); // 발급된 AccessToken도 즉시 무효
             gameStateRepository.findByMember_MemberIdAndIsActiveTrue(target.getMemberId())
                     .ifPresent(game -> {
                         game.deactivate();
@@ -124,6 +127,7 @@ public class AdminServiceImpl implements AdminService {
 
         // 권한이 바뀌면 기존 토큰의 role 클레임이 낡으므로 재로그인을 유도
         securityTokenService.logout(target.getLoginId());
+        tokenRevocationService.revoke(target.getLoginId()); // 발급된 AccessToken도 즉시 무효
         log.info("[ADMIN] 권한 변경 target={} -> {} by={}", target.getLoginId(), newRole, actor.getLoginId());
 
         return MemberSummaryDTO.of(target, false);

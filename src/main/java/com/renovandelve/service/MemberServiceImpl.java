@@ -17,6 +17,7 @@ import com.renovandelve.repository.GameStateRepository;
 import com.renovandelve.repository.MemberRepository;
 import com.renovandelve.repository.RankingRepository;
 import com.renovandelve.service.redis.GameSessionService;
+import com.renovandelve.service.redis.TokenRevocationService;
 import com.renovandelve.service.redis.SecurityTokenService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,7 @@ public class MemberServiceImpl implements MemberService {
     private final GameStateRepository gameStateRepository;
     private final GameSessionService gameSessionService;
     private final SecurityTokenService securityTokenService;
+    private final TokenRevocationService tokenRevocationService;
     private final PasswordEncoder passwordEncoder;
     private final PersonalDataService personalDataService;
 
@@ -148,6 +150,7 @@ public class MemberServiceImpl implements MemberService {
         managed.withdraw();
         memberRepository.save(managed);
         securityTokenService.logout(loginId);
+        tokenRevocationService.revoke(loginId); // 발급된 AccessToken도 즉시 무효
 
         log.info("회원 탈퇴 처리 memberId={}", managed.getMemberId());
     }

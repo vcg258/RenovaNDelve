@@ -5,6 +5,8 @@ import com.renovandelve.domain.memberentity.Role;
 import com.renovandelve.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
@@ -37,7 +39,8 @@ public class AdminAccountInitializer {
     private String adminPassword;
 
     @Bean
-    public ApplicationRunner initAdminAccount(MemberRepository memberRepository, PasswordEncoder passwordEncoder) {
+    public ApplicationRunner initAdminAccount(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
+                                              Environment environment) {
         return args -> {
             if (memberRepository.countByRole(Role.ADMIN) > 0) {
                 return; // 이미 관리자 존재 -> 아무것도 하지 않음
@@ -59,6 +62,11 @@ public class AdminAccountInitializer {
             }
 
             boolean generated = adminPassword == null || adminPassword.isBlank();
+            // 운영에서는 비밀번호를 임의 생성해 로그에 찍지 않는다 (로그는 수집·보관되므로 비밀번호가 저장소에 남는다)
+            if (generated && environment.acceptsProfiles(Profiles.of("prod"))) {
+                throw new IllegalStateException(
+                        "운영 프로파일에서는 최초 관리자 비밀번호를 환경변수 ADMIN_PASSWORD로 지정해야 합니다.");
+            }
             String rawPassword = generated ? generatePassword() : adminPassword;
 
             memberRepository.save(MemberEntity.builder()
