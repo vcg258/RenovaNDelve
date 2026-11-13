@@ -87,6 +87,29 @@ spring:
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
 
+# 메일 (아이디 찾기 / 비밀번호 재설정)
+# 계정 정보는 저장소에 두지 않는다 (.env 또는 환경변수). 비워 두면 서버는 그대로 기동되고 메일 발송만 생략된다.
+# 네이버: 메일 설정에서 POP3/SMTP 사용을 켜야 한다. 2단계 인증을 쓰면 애플리케이션 비밀번호를 MAIL_PASSWORD에 넣는다.
+  mail:
+    host: ${MAIL_HOST:smtp.naver.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          # 465는 처음부터 TLS(SSL), 587은 STARTTLS. 587을 쓰려면 MAIL_PORT=587, MAIL_SSL=false
+          ssl:
+            enable: ${MAIL_SSL:true}
+          starttls:
+            enable: true
+          # SMTP 서버가 응답하지 않아도 스레드가 묶이지 않게 한다
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
 # Redis 설정
   data:
     redis:
@@ -126,6 +149,14 @@ renovaNDelve:
     # 서버 기동 시 RDB(몬스터/장비/스킬/유물/소모품) -> VectorStore 증분 동기화
     # 변경된 행만 재임베딩하므로 2회차부터는 임베딩 API 호출이 거의 발생하지 않는다.
     sync-on-startup: true
+
+  # 메일에 넣는 링크의 기준 주소 (프론트 주소). 요청의 Host 헤더로 만들지 않는다 (위조된 Host로 링크를 바꿔치기하는 것 방지)
+  app:
+    base-url: ${APP_BASE_URL:http://localhost:5173}
+
+  mail:
+    # 보내는 주소. 비워 두면 MAIL_USERNAME으로 만든다 (네이버는 로그인한 계정의 주소로만 보낼 수 있다)
+    from: ${MAIL_FROM:}
 
   # RefreshToken 쿠키의 Secure 속성 (HTTPS 전용). 로컬 개발은 false, 운영은 true (application-prod.yaml)
   cookie:
