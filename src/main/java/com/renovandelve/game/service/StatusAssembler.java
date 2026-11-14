@@ -18,6 +18,7 @@ import com.renovandelve.catalog.dto.RelicDTO;
 import com.renovandelve.catalog.dto.SkillDTO;
 import com.renovandelve.catalog.dto.WeaponDTO;
 import com.renovandelve.game.dto.response.AlignmentDTO;
+import com.renovandelve.game.dto.response.ContractDTO;
 import com.renovandelve.game.dto.response.StatusDTO;
 import com.renovandelve.game.engine.Pact;
 import com.renovandelve.game.engine.RelicEffects;
@@ -120,6 +121,8 @@ public class StatusAssembler {
                 .maxSkillSlots(SkillSlotService.MAX_SLOTS)
                 .pacts(Pact.titles(Pact.parse(gameState.getPacts())))
                 .alignment(AlignmentDTO.from(gameState.alignment()))
+                .contract(ContractDTO.of(gameState.demonContract(), gameState.getHeavenAffinity(), gameState.getGold(),
+                        gameState.getCurrentStage()))
                 .build();
     }
 

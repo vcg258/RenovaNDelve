@@ -13,6 +13,7 @@ public record NodeDTO(
         List<BattleMonsterDTO> monsters,
         EncounterDTO encounter,
         String path,      // 이 전투에 적용된 갈림길 (SAFE / DANGER / AMBUSH). 조우 노드는 null
-        String pathNote   // 갈림길이 무엇을 바꿨는지(또는 왜 적용되지 않았는지) 알려주는 한 줄. 없으면 null
+        String pathNote,  // 갈림길이 무엇을 바꿨는지(또는 왜 적용되지 않았는지) 알려주는 한 줄. 없으면 null
+        String contractNote // 이번 노드에서 악마의 계약 조항이 발동했다면 그 내용. 없으면 null
 ) {
 }

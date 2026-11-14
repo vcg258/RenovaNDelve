@@ -6,6 +6,17 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 - **1.0.0 전까지는 베타입니다.** 밸런스 수치와 API가 바뀔 수 있습니다.
 - 각 버전은 같은 이름의 git 태그(`v0.4.0` 등)로 표시되어 있습니다. 괄호 안의 번호는 그 버전에 들어간 PR입니다.
 
+## [0.7.0] - 2026-11-15 — 악마의 계약서
+
+### 추가
+- **악마의 계약서**: 조우 노드의 25%에서(걸린 계약이 없을 때) 마계가 계약서를 내민다 (백엔드 #14, 프론트 #11)
+  - 서명(마계 성향 +1) / 거절(인간 성향 +1). 서명하면 혜택을 바로 받는다: 황금(골드 100 + 60 x 스테이지) / 힘(공격력 +4) / 생기(최대 HP +20) / 유물
+  - 숨겨진 조항 4종. 서명 전에는 조항 대신 "작은 글씨" 힌트만 보여 주고, 조항은 서버만 안다
+    - 피의 십일조: 다음 보스전 시작 때 지금 HP의 30% / 빚: 세 노드 뒤 골드의 60% / 전리품은 그의 몫: 다음 승리의 전리품 선택 없음 / 그림자: 다음 두 전투의 적 공격력 +25%
+  - 조항이 발동하면 노드 위에 붉은 안내가 뜨고 계약이 끝난다. 상태 바에 걸린 계약(혜택 이름 + 작은 글씨)
+  - 파기: 천상 성향 3 이상이면 탐험 중에 골드 80 x 스테이지를 바쳐 계약을 불사른다 (`POST /api/game/contract/break`)
+  - Flyway `V5__demon_contract.sql` (`game_state.contract`). 제안 확률은 설정 `renovaNDelve.game.contract-offer-chance`
+
 ## [0.6.0] - 2026-11-15 — 레노바 연대기
 
 ### 추가
@@ -106,6 +117,7 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 - 엔티티 20여 개와 Repository, Spring Security(JWT), Spring AI(RAG 파이프라인, Tools)
 - 게임 엔진은 미완성(동작하지 않음), 프론트엔드는 저장소가 폐기되어 남아 있지 않다
 
+[0.7.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.3.0...v0.4.0
