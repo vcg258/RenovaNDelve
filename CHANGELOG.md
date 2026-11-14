@@ -6,6 +6,12 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 - **1.0.0 전까지는 베타입니다.** 밸런스 수치와 API가 바뀔 수 있습니다.
 - 각 버전은 같은 이름의 git 태그(`v0.4.0` 등)로 표시되어 있습니다. 괄호 안의 번호는 그 버전에 들어간 PR입니다.
 
+## [Unreleased]
+
+### 변경
+- **패키지를 도메인별로 재구성**: `game / catalog / member / auth / collection / ranking / ai / global`. 각 모듈 안은 기존 계층(controller / service / repository / domain / dto)을 유지했고, 로직은 바꾸지 않았다 (백엔드 #11)
+  - 배포 전 Redis에 남은 게임 세션·다음 노드 캐시는 클래스 이름이 바뀌어 읽히지 않는다. 진행 중인 원정을 끝내거나 해당 키를 지우고 배포한다
+
 ## [0.4.0] - 2026-11-15 — 구조 정리와 기록
 
 ### 추가

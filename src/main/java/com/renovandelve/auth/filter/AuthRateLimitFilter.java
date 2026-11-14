@@ -1,0 +1,76 @@
+package com.renovandelve.auth.filter;
+
+import com.renovandelve.global.redis.RateLimitService;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.time.Duration;
+
+/**
+ * 인증 전 API(/api/auth/**)의 IP 단위 요청 제한.
+ * 로그인은 MVC 컨트롤러가 아니라 Security 필터에서 처리되므로 인터셉터가 아닌 필터로 건다.
+ *
+ * 접속 IP는 request.getRemoteAddr()를 쓴다. 리버스 프록시 뒤에 배포할 때는
+ * server.forward-headers-strategy 설정으로 X-Forwarded-For가 반영되게 해야 하며,
+ * 헤더를 직접 읽지 않는 이유는 클라이언트가 임의로 위조할 수 있기 때문이다.
+ */
+@RequiredArgsConstructor
+public class AuthRateLimitFilter extends OncePerRequestFilter {
+    private final RateLimitService rateLimitService;
+
+    private record Rule(String bucket, int limit, Duration window) {
+    }
+
+    /**
+     * 인증 API를 접속 IP 단위로 센다. 한도를 넘으면 429와 Retry-After로 응답하고 다음 필터로 보내지 않는다.
+     */
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+        Rule rule = resolveRule(request.getRequestURI());
+        if (rule != null) {
+            long retryAfter = rateLimitService.retryAfterSeconds(
+                    rule.bucket(), request.getRemoteAddr(), rule.limit(), rule.window());
+            if (retryAfter > 0) {
+                response.setStatus(429);
+                response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfter));
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                response.setCharacterEncoding("UTF-8");
+                response.getWriter().println("{\"error\": \"요청이 너무 많습니다. 잠시 후 다시 시도해주세요.\"}");
+                return;
+            }
+        }
+        filterChain.doFilter(request, response);
+    }
+
+    /**
+     * 요청 경로에 걸리는 제한 규칙을 고른다.
+     *
+     * @param path 요청 URI
+     * @return 규칙, 제한 대상이 아니면 null
+     */
+    private Rule resolveRule(String path) {
+        return switch (path) {
+            case "/api/auth/login" -> new Rule("login", 10, Duration.ofMinutes(1));
+            case "/api/auth/signup" -> new Rule("signup", 5, Duration.ofMinutes(10));
+            // 중복 확인은 입력 중 디바운스 호출이 잦으므로 넉넉히 두되, 아이디 대량 수집은 막는다
+            case "/api/auth/check-login-id", "/api/auth/check-nickname" -> new Rule("check", 40, Duration.ofMinutes(1));
+            // 메일이 나가는 요청: 남의 주소로 메일을 쏟아붓거나 계정 정보를 대입해 보는 것을 막는다
+            // (주소 단위 제한은 AccountRecoveryService가 따로 건다)
+            case "/api/auth/find-id", "/api/auth/password-reset/request" ->
+                    new Rule("recovery", 5, Duration.ofMinutes(10));
+            // 재설정 토큰은 256비트라 대입으로 맞힐 수 없지만, 시도 자체를 묶어 둔다
+            case "/api/auth/password-reset/check", "/api/auth/password-reset/confirm" ->
+                    new Rule("reset", 20, Duration.ofMinutes(10));
+            case "/api/auth/refresh" -> new Rule("refresh", 30, Duration.ofMinutes(1));
+            default -> null;
+        };
+    }
+}
