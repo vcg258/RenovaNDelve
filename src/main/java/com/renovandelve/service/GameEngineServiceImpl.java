@@ -378,6 +378,9 @@ public class GameEngineServiceImpl implements GameEngineService {
         List<String> log = new ArrayList<>();
 
         applyConsumableEffect(gameState, session, character, consumable, log);
+        // 엔티티 목록에서도 빼야 한다. 저장소에서만 지우면 같은 트랜잭션 안에서 만드는 응답(StatusDTO)에
+        // 방금 쓴 소모품이 그대로 남아, 화면에서 한 번 더 누를 수 있게 된다 (그때 서버는 "보유하지 않은 소모품")
+        gameState.getGameConsumableInventory().remove(inventory);
         gameConsumableInventoryRepository.delete(inventory);
 
         if (!inBattle) {
@@ -980,6 +983,7 @@ public class GameEngineServiceImpl implements GameEngineService {
                 .filter(i -> i.getConsumable().getEffectType() == com.renovandelve.domain.consumableentity.Type.RESURRECTION)
                 .findFirst();
         if (phoenix.isPresent()) {
+            gameState.getGameConsumableInventory().remove(phoenix.get());
             gameConsumableInventoryRepository.delete(phoenix.get());
             character.revive();
             log.add("불사조의 깃털이 타오르며 되살아났다! (HP 50% 회복)");
@@ -1237,15 +1241,16 @@ public class GameEngineServiceImpl implements GameEngineService {
         if (owned) throw new IllegalStateException("이미 보유 중인 유물입니다.");
         RelicEntity relic = relicRepository.findById(relicId)
                 .orElseThrow(() -> new NoSuchElementException("유물을 찾을 수 없습니다."));
-        gameRelicInventoryRepository.save(GameRelicInventoryEntity.builder()
-                .gameState(gameState).relic(relic).build());
+        // 저장과 함께 엔티티 목록에도 넣어야 같은 응답의 상태에 바로 보인다 (소모품 사용과 반대 방향의 같은 문제)
+        gameState.getGameRelicInventory().add(gameRelicInventoryRepository.save(GameRelicInventoryEntity.builder()
+                .gameState(gameState).relic(relic).build()));
     }
 
     private void addConsumable(GameStateEntity gameState, Long consumableId) {
         ConsumableEntity consumable = consumableRepository.findById(consumableId)
                 .orElseThrow(() -> new NoSuchElementException("소모품을 찾을 수 없습니다."));
-        gameConsumableInventoryRepository.save(GameConsumableInventoryEntity.builder()
-                .gameState(gameState).consumable(consumable).build());
+        gameState.getGameConsumableInventory().add(gameConsumableInventoryRepository.save(GameConsumableInventoryEntity.builder()
+                .gameState(gameState).consumable(consumable).build()));
     }
 
     private void terminate(GameStateEntity gameState, GameSession session, boolean cleared) {

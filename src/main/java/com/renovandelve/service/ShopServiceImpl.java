@@ -198,8 +198,9 @@ public class ShopServiceImpl implements ShopService {
         RelicEntity relic = relicRepository.findById(relicId)
                 .orElseThrow(() -> new NoSuchElementException("유물을 찾을 수 없습니다."));
 
-        gameRelicInventoryRepository.save(GameRelicInventoryEntity.builder()
-                .gameState(gameState).relic(relic).build());
+        // 저장과 함께 엔티티 목록에도 넣어야 구매 응답의 상태에 바로 보인다
+        gameState.getGameRelicInventory().add(gameRelicInventoryRepository.save(GameRelicInventoryEntity.builder()
+                .gameState(gameState).relic(relic).build()));
 
         if (!collectionRelicRepository.existsByMemberAndRelic(member, relic)) {
             collectionRelicRepository.save(CollectionRelicEntity.builder().member(member).relic(relic).build());
@@ -210,8 +211,8 @@ public class ShopServiceImpl implements ShopService {
         ConsumableEntity consumable = consumableRepository.findById(consumableId)
                 .orElseThrow(() -> new NoSuchElementException("소모품을 찾을 수 없습니다."));
 
-        gameConsumableInventoryRepository.save(GameConsumableInventoryEntity.builder()
-                .gameState(gameState).consumable(consumable).build());
+        gameState.getGameConsumableInventory().add(gameConsumableInventoryRepository.save(GameConsumableInventoryEntity.builder()
+                .gameState(gameState).consumable(consumable).build()));
 
         if (!collectionConsumableRepository.existsByMemberAndConsumable(member, consumable)) {
             collectionConsumableRepository.save(CollectionConsumableEntity.builder().member(member).consumable(consumable).build());
