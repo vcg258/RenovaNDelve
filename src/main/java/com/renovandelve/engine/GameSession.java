@@ -43,4 +43,5 @@ public class GameSession {
     private int shopRerolls;         // 이번 상점에서 재입고한 횟수 (재입고 비용 상승)
     private RunReviewDTO review;     // 종료 후 AI 런 회고 캐시
     private boolean reviewAttempted; // 회고 생성을 이미 시도했는지 (실패 시 매 조회마다 LLM을 다시 부르지 않기 위함)
+    private RunStats stats = new RunStats(); // 원정 통계 (결과 화면용). 예전 세션에는 없어 빈 값으로 시작한다
 }

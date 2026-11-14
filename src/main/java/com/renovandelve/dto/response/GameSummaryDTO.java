@@ -11,6 +11,7 @@ public record GameSummaryDTO(
         int stage,
         long node,
         int level,
-        String narrative
+        String narrative,
+        RunStatsDTO stats // 원정 통계
 ) {
 }

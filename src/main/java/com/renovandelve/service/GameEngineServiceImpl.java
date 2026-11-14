@@ -355,6 +355,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
 
         log.add("적을 따돌렸다. 전리품은 없다.");
+        stats(session).recordFlee(session.getMonsters());
         remember(gameState, "[플레이어의 선택] 스테이지 %d에서 %s을(를) 상대하다 싸움을 포기하고 달아났다."
                 .formatted(gameState.getCurrentStage(), session.getMonsters().stream()
                         .map(SessionMonster::getName).findFirst().orElse("적")));
@@ -416,6 +417,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         applyConsumableEffect(gameState, session, character, consumable, log);
         // 루트의 목록에서 빼면 orphanRemoval로 DB에서도 지워지고, 같은 응답의 상태에도 바로 반영된다
         gameState.consume(inventory);
+        stats(session).recordConsumable();
 
         if (!inBattle) {
             gameSessionService.save(session);
@@ -461,6 +463,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         // 선택이 성향으로 쌓이고, AI 대화 기록에 남아 다음 장면과 결말이 이 선택을 이어받는다
         Faction faction = Faction.parse(choice.getFaction());
         gameState.gainAffinity(faction);
+        stats(session).recordEncounter();
         remember(gameState, "[플레이어의 선택] 상황: %s / %s선택: %s / 결과: %s / 현재 성향: %s".formatted(
                 shorten(session.getStory()), faction == null ? "" : "(" + faction.label() + "의 방식) ",
                 choice.getLabel(), outcome, gameState.alignment().describe()));
@@ -1133,6 +1136,8 @@ public class GameEngineServiceImpl implements GameEngineService {
                 effects.getFlatDamageReduction(),
                 incomingMultiplier * gameState.alignment().damageTakenMultiplier(), log);
         character.takeDamage(damage);
+        stats(session).recordTurn();
+        stats(session).recordDamageTaken(damage);
 
         // 다음 턴 행동 예고 (플레이어는 이것을 보고 공격/방어/대상을 정한다)
         battleService.rollIntents(session.getMonsters());
@@ -1144,6 +1149,7 @@ public class GameEngineServiceImpl implements GameEngineService {
                         statusAssembler.toStatusDTO(gameState), null, false, session.getPhase());
             }
             // 패배 처리
+            stats(session).recordBattleEnd(session.getMonsters(), false);
             terminate(gameState, session, false);
             log.add("당신은 쓰러졌다... 모험이 여기서 끝났다.");
             gameSessionService.save(session);
@@ -1196,6 +1202,9 @@ public class GameEngineServiceImpl implements GameEngineService {
         PathChoice path = PathChoice.parse(session.getPath());
         double multiplier = rewardMultiplier(gameState.getDifficulty()) * path.rewardMultiplier();
 
+        stats(session).recordTurn();
+        stats(session).recordBattleEnd(session.getMonsters(), true);
+
         int totalScore = 0, totalGold = 0, totalExp = 0;
         for (SessionMonster monster : session.getMonsters()) {
             int score = monster.getScoreReward() > 0 ? monster.getScoreReward()
@@ -1211,6 +1220,7 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         gameState.gainScore(totalScore);
         gameState.gainGold(totalGold);
+        stats(session).recordGold(totalGold);
 
         int levelUps = character.gainExp(totalExp);
         log.add("승리! 점수 +%d, 골드 +%d, 경험치 +%d".formatted(totalScore, totalGold, totalExp));
@@ -1545,7 +1555,18 @@ public class GameEngineServiceImpl implements GameEngineService {
         return new GameSummaryDTO(cleared, gameState.getScore(), gameState.getGold(),
                 gameState.getCurrentStage(),
                 gameState.getCurrentNodeId() == null ? 0 : gameState.getCurrentNodeId(),
-                level, narrative);
+                level, narrative, RunStatsDTO.from(session.getStats()));
+    }
+
+    /**
+     * 세션의 원정 통계. 통계가 생기기 전에 만든 세션이면 새로 붙인다.
+     *
+     * @param session 게임 세션
+     * @return 원정 통계
+     */
+    private RunStats stats(GameSession session) {
+        if (session.getStats() == null) session.setStats(new RunStats());
+        return session.getStats();
     }
 
     /* ==================== DTO 변환 ==================== */
