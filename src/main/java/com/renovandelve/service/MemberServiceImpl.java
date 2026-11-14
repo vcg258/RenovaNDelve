@@ -8,6 +8,7 @@ import com.renovandelve.domain.relicentity.RelicEntity;
 import com.renovandelve.domain.skillentity.SkillEntity;
 import com.renovandelve.domain.weaponentity.WeaponEntity;
 import com.renovandelve.dto.*;
+import com.renovandelve.dto.request.ContactChangeRequest;
 import com.renovandelve.dto.request.NicknameChangeRequest;
 import com.renovandelve.dto.request.PasswordChangeRequest;
 import com.renovandelve.dto.request.SignupRequest;
@@ -19,6 +20,7 @@ import com.renovandelve.repository.RankingRepository;
 import com.renovandelve.service.redis.GameSessionService;
 import com.renovandelve.service.redis.TokenRevocationService;
 import com.renovandelve.service.redis.SecurityTokenService;
+import com.renovandelve.util.EmailNormalizer;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -51,11 +53,17 @@ public class MemberServiceImpl implements MemberService {
             throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
         });
         validateNickname(request.nickname());
+        String email = EmailNormalizer.normalize(request.email());
+        if (memberRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+        }
 
         MemberEntity member = memberRepository.save(MemberEntity.builder()
                 .loginId(request.loginId())
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .nickname(request.nickname())
+                .name(request.name().trim())
+                .email(email)
                 .termsAgreedAt(LocalDateTime.now())
                 .privacyAgreedAt(LocalDateTime.now())
                 .policyVersion(PersonalDataService.POLICY_VERSION)
@@ -127,6 +135,28 @@ public class MemberServiceImpl implements MemberService {
         managed.changeNickname(request.nickname());
         memberRepository.save(managed);
         log.info("닉네임 변경 memberId={} -> {}", managed.getMemberId(), request.nickname());
+    }
+
+    @Override
+    @Transactional
+    public void changeContact(MemberEntity member, ContactChangeRequest request) {
+        MemberEntity managed = managed(member);
+
+        // 이메일은 계정 복구 수단이다. 비밀번호가 있는 계정은 본인임을 다시 확인한다
+        if (managed.getPasswordHash() != null
+                && (request.currentPassword() == null
+                    || !passwordEncoder.matches(request.currentPassword(), managed.getPasswordHash()))) {
+            throw new IllegalArgumentException("현재 비밀번호가 일치하지 않습니다.");
+        }
+
+        String email = EmailNormalizer.normalize(request.email());
+        if (!email.equals(managed.getEmail()) && memberRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+        }
+
+        managed.changeContact(request.name().trim(), email);
+        memberRepository.save(managed);
+        log.info("이름·이메일 변경 memberId={}", managed.getMemberId());
     }
 
     @Override

@@ -26,7 +26,7 @@ import java.util.NoSuchElementException;
  * 개인정보 생명주기 처리 (열람 / 삭제 / 보관 기간 경과 파기).
  *
  * 이 서비스가 다루는 개인정보성 데이터:
- * - 회원 테이블의 식별 정보 (아이디, 닉네임, 비밀번호 해시)
+ * - 회원 테이블의 식별 정보 (아이디, 닉네임, 이름, 이메일, 비밀번호 해시)
  * - AI 대화 기록 (SPRING_AI_CHAT_MEMORY): 가이드 챗봇에 입력한 자유 텍스트가 그대로 남는다
  */
 @Log4j2
@@ -34,7 +34,7 @@ import java.util.NoSuchElementException;
 @RequiredArgsConstructor
 public class PersonalDataService {
     /** 현재 시행 중인 약관·개인정보 처리방침 버전 (프론트 legal 문서의 시행일과 맞춘다) */
-    public static final String POLICY_VERSION = "2026-11-13";
+    public static final String POLICY_VERSION = "2026-11-14";
 
     private static final int HISTORY_LIMIT = 30;
 
@@ -92,6 +92,8 @@ public class PersonalDataService {
         Map<String, Object> account = new LinkedHashMap<>();
         account.put("loginId", managed.getLoginId());
         account.put("nickname", managed.getNickname());
+        account.put("name", managed.getName());
+        account.put("email", managed.getEmail());
         account.put("role", managed.getRole().name());
         account.put("status", managed.getStatus().name());
         account.put("createdAt", managed.getCreatedAt());

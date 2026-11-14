@@ -17,6 +17,12 @@ public interface MemberRepository extends JpaRepository<MemberEntity, Long>,
     // 소셜로그인 회원인지 구분
     Optional<MemberEntity> findBySocialId(String socialId);
 
+    // 이메일로 회원 찾기 (아이디 찾기 / 비밀번호 재설정). 이메일은 소문자로 정규화해 저장한다
+    Optional<MemberEntity> findByEmail(String email);
+
+    // 이메일 중복 확인
+    boolean existsByEmail(String email);
+
     // 닉네임 중복 확인
     boolean existsByNickname(String nickname);
 

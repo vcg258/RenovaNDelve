@@ -41,3 +41,6 @@ logging:
 renovaNDelve:
   cookie:
     secure: true
+  # 운영에서는 재설정 링크가 가리킬 주소에 기본값(localhost)을 두지 않는다
+  app:
+    base-url: ${APP_BASE_URL}

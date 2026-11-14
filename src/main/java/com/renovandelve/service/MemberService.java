@@ -1,6 +1,7 @@
 package com.renovandelve.service;
 
 import com.renovandelve.domain.MemberEntity;
+import com.renovandelve.dto.request.ContactChangeRequest;
 import com.renovandelve.dto.request.NicknameChangeRequest;
 import com.renovandelve.dto.request.PasswordChangeRequest;
 import com.renovandelve.dto.request.SignupRequest;
@@ -26,6 +27,9 @@ public interface MemberService {
 
     /** 닉네임 변경 */
     void changeNickname(MemberEntity member, NicknameChangeRequest request);
+
+    /** 이름·이메일 등록 / 변경 (비밀번호가 있는 계정은 현재 비밀번호 확인) */
+    void changeContact(MemberEntity member, ContactChangeRequest request);
 
     /** 회원 탈퇴 (소프트 삭제 - 랭킹/도감 기록은 보존) */
     void withdraw(MemberEntity member);

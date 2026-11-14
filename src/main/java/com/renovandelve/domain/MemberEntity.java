@@ -34,6 +34,12 @@ public class MemberEntity {
     @Column(length = 20)
     private String nickname; // 게임 내 표시 이름 (랭킹 노출용)
 
+    @Column(length = 50)
+    private String name; // 이름 (아이디 찾기 본인 확인용). 이 컬럼이 생기기 전에 가입한 계정은 NULL
+
+    @Column(length = 254)
+    private String email; // 이메일 (소문자로 정규화해 저장, 값이 있으면 중복 불가). 아이디 안내·비밀번호 재설정 링크가 가는 곳
+
     @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(length = 20, nullable = false, columnDefinition = "varchar(20) not null default 'USER'")
@@ -96,6 +102,12 @@ public class MemberEntity {
         this.nickname = nickname;
     }
 
+    /** 이름·이메일 등록 / 변경. 이메일은 호출하는 쪽에서 정규화해 넘긴다 */
+    public void changeContact(String name, String email) {
+        this.name = name;
+        this.email = email;
+    }
+
     public void changeRole(Role role) {
         this.role = role;
     }
@@ -114,7 +126,7 @@ public class MemberEntity {
 
     /**
      * 탈퇴 (소프트 삭제).
-     * 랭킹·도감 기록은 남기되 로그인 아이디를 익명화하여 재가입을 허용한다.
+     * 랭킹·도감 기록은 남기되 로그인 아이디를 익명화하고 이름·이메일을 지워 재가입을 허용한다.
      */
     public void withdraw() {
         this.status = MemberStatus.WITHDRAWN;
@@ -124,6 +136,9 @@ public class MemberEntity {
         this.socialId = null;
         this.socialToken = null;
         this.nickname = "탈퇴한 모험가";
+        // 이름과 이메일은 남길 이유가 없다. 비워야 같은 이메일로 다시 가입할 수 있다
+        this.name = null;
+        this.email = null;
         this.lastLoginAt = null;
         this.withdrawnAt = LocalDateTime.now();
     }
