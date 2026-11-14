@@ -43,6 +43,7 @@ import com.renovandelve.game.dto.response.StatusDTO;
 import com.renovandelve.game.dto.response.TurnResultDTO;
 import com.renovandelve.game.engine.Alignment;
 import com.renovandelve.game.engine.DemonContract;
+import com.renovandelve.game.engine.KingdomState;
 import com.renovandelve.game.engine.EncounterChoice;
 import com.renovandelve.game.engine.Faction;
 import com.renovandelve.game.engine.GameSession;
@@ -228,6 +229,12 @@ public class GameEngineServiceImpl implements GameEngineService {
             }
         }
 
+        // 원정의 첫 걸음에서 왕국의 정세를 대화 기록에 남겨, 이후 장면이 그 분위기를 이어받게 한다
+        KingdomState kingdom = gameState.kingdomState();
+        if (stage == 1 && node == 1 && kingdom != null) {
+            remember(gameState, kingdom.chronicleLine());
+        }
+
         AsyncStageResponseDTO ai = generateNodeContent(stage, node, conversationId);
 
         // 보스 노드(10노드)는 무조건 전투.
@@ -244,6 +251,7 @@ public class GameEngineServiceImpl implements GameEngineService {
             List<SessionMonster> monsters = buildSessionMonsters(ai.monsters(), gameState);
             applyPath(monsters, path);           // 갈림길 선택에 따른 적 강도 / 기습
             applyPacts(monsters, pacts(gameState)); // 서약으로 스스로 건 제약
+            applyKingdom(monsters, gameState.kingdomState()); // 왕국의 정세
             String nodeType = resolveNodeType(node, monsters);
             session.setContractNote(joinNotes(session.getContractNote(), applyContractToBattle(gameState, monsters, nodeType)));
             battleService.rollIntents(monsters); // 첫 턴 행동 예고
@@ -1001,6 +1009,21 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
     }
 
+    /** 왕국의 정세: 적 HP / 공격력 배율 (정세가 없는 예전 원정은 그대로) */
+    private void applyKingdom(List<SessionMonster> monsters, KingdomState kingdom) {
+        if (kingdom == null) return;
+        for (SessionMonster monster : monsters) {
+            if (kingdom.enemyHpMultiplier() != 1.0) {
+                int hp = Math.max(1, (int) Math.round(monster.getMaxHp() * kingdom.enemyHpMultiplier()));
+                monster.setMaxHp(hp);
+                monster.setCurrentHp(hp);
+            }
+            if (kingdom.enemyAttackMultiplier() != 1.0) {
+                monster.setAtk(Math.max(1, (int) Math.round(monster.getAtk() * kingdom.enemyAttackMultiplier())));
+            }
+        }
+    }
+
     /** 회복량 계산. 서약 '옅은 피'가 걸려 있으면 모든 회복이 절반이 된다 */
     private int healing(GameStateEntity gameState, int amount) {
         return pacts(gameState).contains(Pact.THIN_BLOOD) ? Math.max(1, amount / 2) : amount;
@@ -1314,6 +1337,11 @@ public class GameEngineServiceImpl implements GameEngineService {
         totalScore = (int) (totalScore * multiplier * Pact.scoreMultiplier(pacts(gameState)));
         Alignment alignment = gameState.alignment();
         totalGold = (int) (totalGold * multiplier * effects.getGoldMultiplier() * alignment.goldMultiplier());
+        KingdomState kingdom = gameState.kingdomState();
+        if (kingdom != null) {
+            totalGold = (int) (totalGold * kingdom.goldMultiplier());
+            totalExp = (int) (totalExp * kingdom.expMultiplier());
+        }
 
         gameState.gainScore(totalScore);
         gameState.gainGold(totalGold);
@@ -1888,6 +1916,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         List<SessionMonster> monsters = new ArrayList<>(List.of(monster));
         applyPath(monsters, path);
         applyPacts(monsters, pacts(gameState));
+        applyKingdom(monsters, gameState.kingdomState());
         session.setContractNote(joinNotes(session.getContractNote(), applyContractToBattle(gameState, monsters, "WRAITH")));
         battleService.rollIntents(monsters);
 

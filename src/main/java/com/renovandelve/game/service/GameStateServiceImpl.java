@@ -49,6 +49,7 @@ import java.util.*;
 @RequiredArgsConstructor
 public class GameStateServiceImpl implements GameStateService {
     private final GameStateRepository gameStateRepository;
+    private final KingdomService kingdomService;
     private final WeaponRepository weaponRepository;
     private final ArmorRepository armorRepository;
     private final HelmetRepository helmetRepository;
@@ -154,6 +155,7 @@ public class GameStateServiceImpl implements GameStateService {
                 .gold(100)
                 .startingPoints(cost)
                 .pacts(pacts.isEmpty() ? null : Pact.serialize(pacts))
+                .kingdom(kingdomService.currentState().name()) // 이 원정 동안 바뀌지 않는다
                 .build());
 
         // 장비 장착

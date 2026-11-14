@@ -2,7 +2,7 @@
 
 > AI 스토리텔링 기반 로그라이크 웹게임 — 매 판마다 서사가 새로 쓰이는 '절차적 스토리텔링' RPG
 
-**현재 버전: v0.7.0 (베타)** · 버전별 변경 내역은 [CHANGELOG.md](CHANGELOG.md)
+**현재 버전: v0.8.0 (베타)** · 버전별 변경 내역은 [CHANGELOG.md](CHANGELOG.md)
 
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot_3.5-6DB33F?style=flat&logo=spring-boot&logoColor=white)
 ![Java](https://img.shields.io/badge/Java_21-ED8B00?style=flat&logo=openjdk&logoColor=white)
@@ -64,6 +64,7 @@ Renova & Delve는 LLM의 서사 생성 능력과 벡터 DB 기반 RAG를 결합�
 - **전생의 망령**: 쓰러진 원정은 망령으로 남아, 다음 원정의 같은 자리에서 적으로 나타난다. AI는 그때 내린 선택을 기억하는 대사만 쓰고, 능력치·보상은 서버가 정한다. 처치하면 그 원정의 유물 하나를 되찾고, 세 번 달아나면 흩어진다
 - **레노바 연대기**: 원정이 끝날 때마다 한 장(章)이 쌓이는 나만의 이야기책. 기록관(AI)이 앞선 장을 이어받아 이번 원정의 선택으로 다음 장을 쓴다. 런 회고와 같은 호출의 구조화 출력 필드라 LLM 호출이 늘지 않는다
 - **악마의 계약서**: 조우 자리에 가끔 마계의 계약서가 펼쳐진다. 서명하면 혜택을 바로 받고, 대가는 서버만 아는 숨겨진 조항으로 나중에 발동한다. 서명 전에는 "작은 글씨" 힌트만 보인다. 천상 성향이 3 이상이면 골드를 바쳐 파기할 수 있다
+- **왕국의 저울**: 지난 7일 동안 모든 플레이어가 택한 방식(한 사람이 한 표)으로 왕국의 정세가 정해진다. 새 원정은 그 정세로 시작해 끝날 때까지 유지되고, 정세는 적 강도·보상에 약하게 작용하며 첫 장면의 서사에도 스민다
 
 ## 빠른 시작 (Quick Start)
 
@@ -201,6 +202,7 @@ graph TD
 | GET | `/api/game/wraith` | 기다리는 전생의 망령 (없으면 204) |
 | GET | `/api/game/chronicle` | 레노바 연대기 (1장부터) |
 | POST | `/api/game/contract/break` | 악마의 계약 파기 (천상 성향 3 이상) |
+| GET | `/api/game/kingdom` | 왕국의 저울 (지난 7일 정세) |
 | POST | `/api/game/next` | 다음 노드 전진 (AI 생성) |
 | POST | `/api/game/battle/skill` | 스킬 사용 (1턴) |
 | POST | `/api/game/battle/consumable` | 소모품 사용 (턴 소모) |

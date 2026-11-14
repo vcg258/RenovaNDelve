@@ -4,6 +4,8 @@ import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.game.dto.response.WraithDTO;
 import com.renovandelve.game.dto.response.ChronicleChapterDTO;
 import com.renovandelve.game.service.ChronicleService;
+import com.renovandelve.game.service.KingdomService;
+import com.renovandelve.game.dto.response.KingdomDTO;
 import com.renovandelve.game.service.WraithService;
 import com.renovandelve.game.dto.request.ConsumableUseRequest;
 import com.renovandelve.game.dto.request.EncounterChoiceRequest;
@@ -52,6 +54,7 @@ public class GameController {
     private final GameLockService gameLockService;
     private final WraithService wraithService;
     private final ChronicleService chronicleService;
+    private final KingdomService kingdomService;
 
     /**
      * 게임 상태를 바꾸는 요청은 회원당 한 번에 하나만 처리한다.
@@ -84,6 +87,17 @@ public class GameController {
         return wraithService.current(member.getMemberId())
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /**
+     * 왕국의 저울: 지난 7일 동안 모든 플레이어의 선택으로 정해진 정세. 새 원정은 이 정세로 시작한다.
+     *
+     * @return 정세와 세력 비율
+     */
+    @Operation(summary = "왕국의 저울 (모든 플레이어의 선택으로 정해지는 정세)")
+    @GetMapping("/kingdom")
+    public ResponseEntity<KingdomDTO> kingdom() {
+        return ResponseEntity.ok(kingdomService.current());
     }
 
     /**
