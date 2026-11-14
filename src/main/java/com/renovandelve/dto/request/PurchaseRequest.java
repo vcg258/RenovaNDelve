@@ -9,6 +9,8 @@ public record PurchaseRequest(
         String itemType,
 
         @jakarta.validation.constraints.NotNull(message = "구매할 상품을 선택해주세요.")
-        Long itemId
+        Long itemId,
+
+        Long replaceSlotId   // SKILL일 때만: 버릴 스킬 슬롯. 슬롯이 가득 찼으면 필수, 비어 있으면 생략
 ) {
 }

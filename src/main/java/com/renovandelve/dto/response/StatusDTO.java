@@ -19,6 +19,8 @@ public class StatusDTO {
         List<GameRelicInventoryDTO> relicInventoryDTO; //보유 유물
         List<GameSkillSlotDTO> skillSlotDTO; //보유 스킬
         List<String> relicSynergies; //발동 중인 유물 조합 시너지 설명
+        List<String> skillSynergies; //발동 중인 스킬 조합 시너지 설명
+        int maxSkillSlots; //스킬 슬롯 상한 (가득 차면 새 스킬은 기존 스킬과 교체)
         List<String> pacts; //이번 원정에 건 서약 이름
         AlignmentDTO alignment; //성향 (천상 / 마계 / 인간)과 발동 중인 가호
 }

@@ -55,6 +55,7 @@ public class GameEngineServiceImpl implements GameEngineService {
     private final RunReviewService runReviewService;
     private final ChatMemory chatMemory;
     private final StageCacheService stageCacheService;
+    private final SkillSlotService skillSlotService;
 
     private final Random random = new Random();
 
@@ -98,11 +99,8 @@ public class GameEngineServiceImpl implements GameEngineService {
         GameSummaryDTO summary = null;
 
         switch (session.getPhase()) {
-            case GameSession.PHASE_BATTLE ->
-                    node = new NodeDTO(session.getNodeType(), session.getStory(), toBattleMonsterDTOs(session.getMonsters()), null);
-            case GameSession.PHASE_ENCOUNTER ->
-                    node = new NodeDTO("ENCOUNTER", session.getStory(),
-                            null, new EncounterDTO(session.getStory(), choiceLabels(session), choiceFactions(session)));
+            case GameSession.PHASE_BATTLE -> node = battleNode(session);
+            case GameSession.PHASE_ENCOUNTER -> node = encounterNode(session, session.getStory());
             case GameSession.PHASE_REWARD -> reward = toRewardView(session.getReward());
             case GameSession.PHASE_SHOP -> shop = toShopItems(session.getShop());
             case GameSession.PHASE_GAMEOVER, GameSession.PHASE_CLEAR -> summary = buildSummary(gameState, session);
@@ -124,12 +122,10 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         // 이미 노드가 진행 중이면(서버-클라이언트 단계 불일치 등) 현재 노드를 그대로 반환 -> 멱등 재진입
         if (GameSession.PHASE_BATTLE.equals(session.getPhase())) {
-            return new NodeDTO(session.getNodeType(), session.getStory(),
-                    toBattleMonsterDTOs(session.getMonsters()), null);
+            return battleNode(session);
         }
         if (GameSession.PHASE_ENCOUNTER.equals(session.getPhase())) {
-            return new NodeDTO("ENCOUNTER", session.getStory(), null,
-                    new EncounterDTO(session.getStory(), choiceLabels(session), choiceFactions(session)));
+            return encounterNode(session, session.getStory());
         }
         requirePhase(session, GameSession.PHASE_EXPLORE, "지금은 이동할 수 없습니다.");
         PathChoice path = PathChoice.parse(pathValue);
@@ -162,13 +158,14 @@ public class GameEngineServiceImpl implements GameEngineService {
 
             session.setPhase(GameSession.PHASE_BATTLE);
             session.setPath(path.name());
+            session.setPathNote(path.battleNote());
             session.setNodeType(nodeType);
             session.setStory(ai.story());
             session.setMonsters(monsters);
             session.setChoices(new ArrayList<>());
             gameSessionService.save(session);
 
-            return new NodeDTO(nodeType, ai.story(), toBattleMonsterDTOs(monsters), null);
+            return battleNode(session);
         }
 
         // 인카운터
@@ -178,14 +175,16 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         session.setPhase(GameSession.PHASE_ENCOUNTER);
         session.setPath(PathChoice.SAFE.name()); // 조우 이벤트에는 길 선택이 영향을 주지 않는다
+        // 고른 길이 무시된 것을 숨기지 않는다 (효과가 적용되지 않은 것처럼 보인다는 플레이 피드백)
+        session.setPathNote(path == PathChoice.SAFE ? null
+                : "%s을 골랐지만 싸움이 벌어지지 않았다. 조우에서는 길의 효과가 적용되지 않는다.".formatted(path.title()));
         session.setNodeType("ENCOUNTER");
         session.setStory(ai.story() != null ? ai.story() : encounter.text());
         session.setMonsters(new ArrayList<>());
         session.setChoices(choices);
         gameSessionService.save(session);
 
-        return new NodeDTO("ENCOUNTER", session.getStory(), null,
-                new EncounterDTO(encounter.text(), choiceLabels(session), choiceFactions(session)));
+        return encounterNode(session, encounter.text());
     }
 
     /* ==================== 전투 ==================== */
@@ -211,6 +210,7 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         SkillEntity skill = slot.getSkill();
         RelicEffects effects = relicEffects(gameState);
+        SkillSynergies synergies = skillSynergies(gameState);
         List<String> log = new ArrayList<>();
         log.add("[%s] 사용!".formatted(skill.getName()));
 
@@ -221,15 +221,17 @@ public class GameEngineServiceImpl implements GameEngineService {
         List<SessionMonster> targets = resolveTargets(session, skill, request.targetKeys());
 
         // 1) 플레이어 공격
-        battleService.applyPlayerAttack(skill, attack, critChance, effects.getSkillDamageMultiplier(),
-                effects.getBleedMultiplier(), effects.getCritBleedStacks(), targets, log);
+        battleService.applyPlayerAttack(skill, attack, critChance,
+                effects.getSkillDamageMultiplier() * synergies.skillDamageMultiplier(skill),
+                effects.getBleedMultiplier() + synergies.getBleedMultiplierBonus(),
+                effects.getCritBleedStacks(), synergies, targets, log);
 
         if (battleService.isAllMonsterDead(session.getMonsters())) {
             return processVictory(gameState, session, character, effects, log);
         }
 
         // 2) 상태이상 부여 + 쿨타임 갱신 + 도트 피해
-        battleService.applyStatusEffect(skill, targets, log);
+        battleService.applyStatusEffect(skill, synergies.extraStacks(skill.getStatusEffect()), targets, log);
         battleService.updateCoolTimes(slots, slot.getSlotId(), effects.getCooldownReduction());
         battleService.applyDotDamage(session.getMonsters(), log);
 
@@ -358,7 +360,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         switch (type) {
             case "SKILL" -> {
                 require(options != null && options.getSkillIds().contains(request.itemId()), "보상 후보에 없는 스킬입니다.");
-                addSkillToSlot(gameState, request.itemId());
+                skillSlotService.learn(gameState, request.itemId(), request.replaceSlotId());
             }
             case "RELIC" -> {
                 require(options != null && options.getRelicIds().contains(request.itemId()), "보상 후보에 없는 유물입니다.");
@@ -410,7 +412,7 @@ public class GameEngineServiceImpl implements GameEngineService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("상점에 없는 아이템이거나 이미 판매된 상품입니다."));
 
-        shopService.applyPurchase(gameState, member, stockItem);
+        shopService.applyPurchase(gameState, member, stockItem, request.replaceSlotId());
         stockItem.setSold(true);
         gameSessionService.save(session);
 
@@ -624,6 +626,14 @@ public class GameEngineServiceImpl implements GameEngineService {
                     .map(inventory -> inventory.getRelic().getName())
                     .toList();
         return RelicEffects.of(names);
+    }
+
+    private SkillSynergies skillSynergies(GameStateEntity gameState) {
+        if (gameState.getGameSkillSlot() == null) return SkillSynergies.NONE;
+        return SkillSynergies.of(gameState.getGameSkillSlot().stream()
+                .map(GameSkillSlotEntity::getSkill)
+                .filter(Objects::nonNull)
+                .toList());
     }
 
     private Set<Pact> pacts(GameStateEntity gameState) {
@@ -911,6 +921,9 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         int levelUps = character.gainExp(totalExp);
         log.add("승리! 점수 +%d, 골드 +%d, 경험치 +%d".formatted(totalScore, totalGold, totalExp));
+        if (path.rewardNote() != null) {
+            log.add(path.rewardNote()); // 고른 길이 보상에 반영됐음을 드러낸다
+        }
         if (levelUps > 0) {
             log.add("레벨 업! Lv.%d (최대HP/공격/방어 상승)".formatted(character.getLevel()));
         }
@@ -955,6 +968,7 @@ public class GameEngineServiceImpl implements GameEngineService {
             default -> 1;
         } + path.bonusRelicOptions();
         session.setReward(buildRewardOptions(gameState, totalExp, totalGold, relicOptions));
+        session.setPathNote(null);
         session.setPhase(GameSession.PHASE_REWARD);
         gameSessionService.save(session);
         gameStateRepository.save(gameState);
@@ -970,15 +984,20 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         List<SkillEntity> skills = new ArrayList<>(skillRepository.findBySkillNotOwner(gameState.getGameStateId()));
         Collections.shuffle(skills, random);
-        options.setSkillIds(skills.stream().limit(3).map(SkillEntity::getSkillId).collect(Collectors.toList()));
+        // 가호 3단계에 이르면 그 세력이 보상 후보를 하나 더 얹어 준다 (천상: 소모품 / 마계: 유물 / 인간: 스킬)
+        Alignment alignment = gameState.alignment();
+        options.setSkillIds(skills.stream().limit(3 + alignment.bonusSkillOptions())
+                .map(SkillEntity::getSkillId).collect(Collectors.toList()));
 
         List<RelicEntity> relics = new ArrayList<>(relicRepository.findByRelicNotOwner(gameState.getGameStateId()));
         Collections.shuffle(relics, random);
-        options.setRelicIds(relics.stream().limit(relicOptions).map(RelicEntity::getRelicId).collect(Collectors.toList()));
+        options.setRelicIds(relics.stream().limit(relicOptions + alignment.bonusRelicOptions())
+                .map(RelicEntity::getRelicId).collect(Collectors.toList()));
 
         List<ConsumableEntity> consumables = new ArrayList<>(consumableRepository.findAll());
         Collections.shuffle(consumables, random);
-        options.setConsumableIds(consumables.stream().limit(2).map(ConsumableEntity::getConsumableId).collect(Collectors.toList()));
+        options.setConsumableIds(consumables.stream().limit(2 + alignment.bonusConsumableOptions())
+                .map(ConsumableEntity::getConsumableId).collect(Collectors.toList()));
 
         return options;
     }
@@ -1120,34 +1139,6 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
     }
 
-    private void addSkillToSlot(GameStateEntity gameState, Long skillId) {
-        List<GameSkillSlotEntity> slots = gameState.getGameSkillSlot();
-        if (slots.stream().anyMatch(slot -> slot.getSkill().getSkillId().equals(skillId))) {
-            throw new IllegalStateException("이미 보유 중인 스킬입니다.");
-        }
-        if (slots.size() >= 8) {
-            throw new IllegalStateException("스킬 슬롯이 가득 찼습니다. (최대 8개)");
-        }
-        SkillEntity skill = skillRepository.findById(skillId)
-                .orElseThrow(() -> new NoSuchElementException("스킬을 찾을 수 없습니다."));
-        Set<Integer> used = slots.stream().map(GameSkillSlotEntity::getSlotIndex).collect(Collectors.toSet());
-        int nextIndex = 0;
-        while (used.contains(nextIndex)) nextIndex++;
-
-        GameSkillSlotEntity newSlot = GameSkillSlotEntity.builder()
-                .gameState(gameState).skill(skill).slotIndex(nextIndex).coolTime(0).build();
-        slots.add(newSlot);
-        gameStateRepository.save(gameState);
-        // 별도 save: cascade가 없으므로 직접 저장
-        gameSkillSlotSave(newSlot);
-    }
-
-    private final GameSkillSlotRepository gameSkillSlotRepository;
-
-    private void gameSkillSlotSave(GameSkillSlotEntity slot) {
-        gameSkillSlotRepository.save(slot);
-    }
-
     private void addRelic(GameStateEntity gameState, Long relicId) {
         boolean owned = gameState.getGameRelicInventory().stream()
                 .anyMatch(inventory -> inventory.getRelic().getRelicId().equals(relicId));
@@ -1205,6 +1196,18 @@ public class GameEngineServiceImpl implements GameEngineService {
                         m.getMaxHp(), m.getCurrentHp(), m.getAtk(), m.getDef(), m.getBuffs(), m.getDescription(),
                         m.getIntent() == null ? BattleServiceImpl.INTENT_ATTACK : m.getIntent(), m.isEnraged()))
                 .toList();
+    }
+
+    private NodeDTO battleNode(GameSession session) {
+        return new NodeDTO(session.getNodeType(), session.getStory(), toBattleMonsterDTOs(session.getMonsters()),
+                null, session.getPath(), session.getPathNote());
+    }
+
+    /** 조우에는 길 효과가 없으므로 path는 비운다. 고른 길이 무시됐다면 그 안내만 싣는다 */
+    private NodeDTO encounterNode(GameSession session, String encounterText) {
+        return new NodeDTO("ENCOUNTER", session.getStory(), null,
+                new EncounterDTO(encounterText, choiceLabels(session), choiceFactions(session)),
+                null, session.getPathNote());
     }
 
     private List<String> choiceFactions(GameSession session) {

@@ -3,6 +3,7 @@ package com.renovandelve.service;
 import com.renovandelve.domain.GameSkillSlotEntity;
 import com.renovandelve.domain.skillentity.SkillEntity;
 import com.renovandelve.engine.SessionMonster;
+import com.renovandelve.engine.SkillSynergies;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,15 @@ public class BattleServiceImpl implements BattleService {
     public void applyPlayerAttack(SkillEntity skill, int attack, double critChance, double damageMultiplier,
                                   double bleedMultiplier, int critBleedStacks,
                                   List<SessionMonster> targets, List<String> log) {
+        applyPlayerAttack(skill, attack, critChance, damageMultiplier, bleedMultiplier, critBleedStacks,
+                SkillSynergies.NONE, targets, log);
+    }
+
+    @Override
+    public void applyPlayerAttack(SkillEntity skill, int attack, double critChance, double damageMultiplier,
+                                  double bleedMultiplier, int critBleedStacks, SkillSynergies synergies,
+                                  List<SessionMonster> targets, List<String> log) {
+        SkillSynergies combo = synergies == null ? SkillSynergies.NONE : synergies;
         BigDecimal coefficient = skill.getCoefficient() == null ? BigDecimal.ONE : skill.getCoefficient();
         int baseDamage = coefficient
                 .multiply(BigDecimal.valueOf(attack))
@@ -64,6 +74,9 @@ public class BattleServiceImpl implements BattleService {
 
                 boolean crit = random.nextDouble() < critChance;
                 int raw = crit ? (int) (baseDamage * CRIT_MULTIPLIER) : baseDamage;
+                // [스킬 조합] 강공을 준비 중이거나 상태이상이 걸린 적에게는 더 깊이 들어간다
+                double comboMultiplier = combo.targetDamageMultiplier(target);
+                if (comboMultiplier != 1.0) raw = (int) (raw * comboMultiplier);
                 int damage = Math.max(1, raw - target.getDef());
 
                 // 방어 태세인 적은 타격 피해를 절반만 받는다 (출혈·화상·독은 그대로 들어간다)
@@ -73,8 +86,9 @@ public class BattleServiceImpl implements BattleService {
                 }
 
                 target.damage(damage);
-                log.add("%s에게 %d의 피해%s%s".formatted(target.getName(), damage,
-                        crit ? " (치명타!)" : "", guarding ? " (방어 태세에 막힘)" : ""));
+                log.add("%s에게 %d의 피해%s%s%s".formatted(target.getName(), damage,
+                        crit ? " (치명타!)" : "", guarding ? " (방어 태세에 막힘)" : "",
+                        comboMultiplier != 1.0 ? " (스킬 조합 +%d%%)".formatted(Math.round((comboMultiplier - 1) * 100)) : ""));
 
                 // [유물 시너지] 피의 사냥: 치명타가 상처를 찢어 출혈을 남긴다
                 if (crit && critBleedStacks > 0 && target.isAlive()) {
@@ -99,10 +113,15 @@ public class BattleServiceImpl implements BattleService {
 
     @Override
     public void applyStatusEffect(SkillEntity skill, List<SessionMonster> targets, List<String> log) {
+        applyStatusEffect(skill, 0, targets, log);
+    }
+
+    @Override
+    public void applyStatusEffect(SkillEntity skill, int extraStacks, List<SessionMonster> targets, List<String> log) {
         if (skill.getStatusEffect() == 0) return;
 
         String buffName = resolveBuffName(skill.getStatusEffect());
-        int stack = Math.max(1, skill.getEffectStack());
+        int stack = Math.max(1, skill.getEffectStack()) + Math.max(0, extraStacks);
 
         for (SessionMonster target : targets) {
             if (!target.isAlive()) continue;

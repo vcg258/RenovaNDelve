@@ -40,6 +40,7 @@ public class ShopServiceImpl implements ShopService {
     private final CollectionSkillRepository collectionSkillRepository;
     private final CollectionRelicRepository collectionRelicRepository;
     private final CollectionConsumableRepository collectionConsumableRepository;
+    private final SkillSlotService skillSlotService;
 
     private final Random random = new Random();
 
@@ -94,6 +95,19 @@ public class ShopServiceImpl implements ShopService {
     @Override
     @Transactional
     public void applyPurchase(GameStateEntity gameState, MemberEntity member, ShopStockItem stockItem) {
+        applyPurchase(gameState, member, stockItem, null);
+    }
+
+    @Override
+    @Transactional
+    public void applyPurchase(GameStateEntity gameState, MemberEntity member, ShopStockItem stockItem,
+                              Long replaceSlotId) {
+        // 스킬 슬롯이 가득 찼는데 버릴 스킬을 고르지 않았다면 골드를 건드리기 전에 거부한다
+        if ("SKILL".equals(stockItem.getItemType()) && replaceSlotId == null
+                && gameState.getGameSkillSlot() != null
+                && gameState.getGameSkillSlot().size() >= SkillSlotService.MAX_SLOTS) {
+            throw new IllegalStateException(SkillSlotService.FULL_MESSAGE);
+        }
         // 골드 차감 (부족 시 예외)
         gameState.deductGold(stockItem.getPrice());
         gameStateRepository.save(gameState);
@@ -102,7 +116,7 @@ public class ShopServiceImpl implements ShopService {
             case "WEAPON" -> purchaseWeapon(gameState, member, stockItem.getItemId());
             case "ARMOR" -> purchaseArmor(gameState, member, stockItem.getItemId());
             case "HELMET" -> purchaseHelmet(gameState, member, stockItem.getItemId());
-            case "SKILL" -> purchaseSkill(gameState, member, stockItem.getItemId());
+            case "SKILL" -> purchaseSkill(gameState, member, stockItem.getItemId(), replaceSlotId);
             case "RELIC" -> purchaseRelic(gameState, member, stockItem.getItemId());
             case "CONSUMABLE" -> purchaseConsumable(gameState, member, stockItem.getItemId());
             default -> throw new IllegalArgumentException("알 수 없는 아이템 타입: " + stockItem.getItemType());
@@ -165,27 +179,8 @@ public class ShopServiceImpl implements ShopService {
         }
     }
 
-    private void purchaseSkill(GameStateEntity gameState, MemberEntity member, Long skillId) {
-        List<GameSkillSlotEntity> currentSlots = gameSkillSlotRepository
-                .findByGameState_GameStateIdOrderBySlotIndexAsc(gameState.getGameStateId());
-
-        if (currentSlots.stream().anyMatch(slot -> slot.getSkill().getSkillId().equals(skillId))) {
-            throw new IllegalStateException("이미 보유 중인 스킬입니다.");
-        }
-        if (currentSlots.size() >= 8) {
-            throw new IllegalStateException("스킬 슬롯이 가득 찼습니다. (최대 8개)");
-        }
-
-        Set<Integer> usedIndexes = new HashSet<>();
-        currentSlots.forEach(slot -> usedIndexes.add(slot.getSlotIndex()));
-        int nextIndex = 0;
-        while (usedIndexes.contains(nextIndex)) nextIndex++;
-
-        SkillEntity skill = skillRepository.findById(skillId)
-                .orElseThrow(() -> new NoSuchElementException("스킬을 찾을 수 없습니다."));
-
-        gameSkillSlotRepository.save(GameSkillSlotEntity.builder()
-                .gameState(gameState).skill(skill).slotIndex(nextIndex).coolTime(0).build());
+    private void purchaseSkill(GameStateEntity gameState, MemberEntity member, Long skillId, Long replaceSlotId) {
+        SkillEntity skill = skillSlotService.learn(gameState, skillId, replaceSlotId);
 
         if (!collectionSkillRepository.existsByMemberAndSkill(member, skill)) {
             collectionSkillRepository.save(CollectionSkillEntity.builder().member(member).skill(skill).build());
