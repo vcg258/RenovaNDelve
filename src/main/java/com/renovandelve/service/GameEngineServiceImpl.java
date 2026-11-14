@@ -64,6 +64,7 @@ public class GameEngineServiceImpl implements GameEngineService {
     private static final double BASE_CRIT_CHANCE = 0.08;
     private static final double DAGGER_CRIT_BONUS = 0.15;
     private static final double PLAYER_GUARD_MULTIPLIER = 0.4; // 방어 태세: 받는 피해 60% 감소
+    private static final int PASS_COOLDOWN_TICKS = 2;          // 숨 고르기: 쿨타임이 줄어드는 턴 수
     private static final double BOSS_REST_HEAL_RATIO = 0.35;   // 모닥불 휴식 회복량 (최대 HP 비율)
     private static final int REST_TRAIN_ATTACK = 3;            // 모닥불 단련: 공격력 영구 상승
     private static final int REST_TRAIN_DEFENSE = 1;           // 모닥불 단련: 방어력 영구 상승
@@ -263,6 +264,97 @@ public class GameEngineServiceImpl implements GameEngineService {
             return processVictory(gameState, session, character, effects, log);
         }
         return processMonsterCounterattack(gameState, session, character, effects, PLAYER_GUARD_MULTIPLIER, log);
+    }
+
+    /**
+     * 숨 고르기: 쓸 수 있는 스킬이 하나도 없는 턴에만 고를 수 있다.
+     * 방어 태세(피해 -60%, 쿨타임 1턴)와 달리 피해는 그대로 받는 대신 쿨타임이 2턴 줄어든다.
+     * "버티며 기다린다"와 "맞더라도 빨리 되찾는다" 중에서 고르게 하려는 것이다.
+     */
+    @Override
+    @Transactional
+    public TurnResultDTO passTurn(MemberEntity member) {
+        GameStateEntity gameState = activeGame(member);
+        GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
+        requirePhase(session, GameSession.PHASE_BATTLE, "전투 중이 아닙니다.");
+
+        List<GameSkillSlotEntity> slots = gameState.getGameSkillSlot();
+        if (slots.stream().anyMatch(slot -> slot.getCoolTime() <= 0)) {
+            throw new IllegalStateException("쓸 수 있는 스킬이 남아 있습니다. 숨 고르기는 모든 스킬이 쿨타임일 때만 할 수 있습니다.");
+        }
+
+        GameCharacterEntity character = character(gameState);
+        RelicEffects effects = relicEffects(gameState);
+        List<String> log = new ArrayList<>();
+        log.add("숨을 고르며 다음 기회를 노린다. (모든 스킬 쿨타임 -%d)".formatted(PASS_COOLDOWN_TICKS));
+
+        for (int i = 0; i < PASS_COOLDOWN_TICKS; i++) {
+            battleService.updateCoolTimes(slots, null, effects.getCooldownReduction());
+        }
+        battleService.applyDotDamage(session.getMonsters(), log);
+
+        if (battleService.isAllMonsterDead(session.getMonsters())) {
+            return processVictory(gameState, session, character, effects, log);
+        }
+        return processMonsterCounterattack(gameState, session, character, effects, 1.0, log);
+    }
+
+    /**
+     * 도망치기: 보상 없이 전투를 끝내고 다음 길로 나아간다.
+     * 등을 보이는 순간 적이 한 번 공격한다(방어 없음). 그 공격에 쓰러지면 패배다.
+     * 보스전에서는 달아날 수 없다. 보스를 건너뛰고 다음 스테이지로 가는 길을 막기 위해서다.
+     */
+    @Override
+    @Transactional
+    public TurnResultDTO flee(MemberEntity member) {
+        GameStateEntity gameState = activeGame(member);
+        GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
+        requirePhase(session, GameSession.PHASE_BATTLE, "전투 중이 아닙니다.");
+        if ("BOSS".equals(session.getNodeType())) {
+            throw new IllegalStateException("이 구역의 지배자에게서는 달아날 수 없습니다.");
+        }
+
+        GameCharacterEntity character = character(gameState);
+        RelicEffects effects = relicEffects(gameState);
+        List<String> log = new ArrayList<>();
+        log.add("등을 돌려 달아난다!");
+
+        TurnResultDTO parting = processMonsterCounterattack(gameState, session, character, effects, 1.0, log);
+        if ("LOSE".equals(parting.result())) {
+            return parting; // 달아나다 쓰러졌다
+        }
+
+        log.add("적을 따돌렸다. 전리품은 없다.");
+        remember(gameState, "[플레이어의 선택] 스테이지 %d에서 %s을(를) 상대하다 싸움을 포기하고 달아났다."
+                .formatted(gameState.getCurrentStage(), session.getMonsters().stream()
+                        .map(SessionMonster::getName).findFirst().orElse("적")));
+
+        gameState.getGameSkillSlot().forEach(slot -> slot.setCoolTime(0));
+        session.setTempAtkBonus(0);
+        session.setTempDefBonus(0);
+        session.setMonsters(new ArrayList<>());
+        session.setPhase(GameSession.PHASE_EXPLORE);
+        gameSessionService.save(session);
+        gameStateRepository.save(gameState);
+
+        return new TurnResultDTO("FLED", log, List.of(), statusAssembler.toStatusDTO(gameState),
+                null, false, session.getPhase());
+    }
+
+    /**
+     * 스킬 버리기. 전투 중에는 쿨타임 회피 수단이 되고 조우 중에는 선택을 미루는 수단이 되므로 막는다.
+     */
+    @Override
+    @Transactional
+    public StatusDTO discardSkill(MemberEntity member, SkillDiscardRequest request) {
+        GameStateEntity gameState = activeGame(member);
+        GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
+        String phase = session.getPhase();
+        if (GameSession.PHASE_BATTLE.equals(phase) || GameSession.PHASE_ENCOUNTER.equals(phase)) {
+            throw new IllegalStateException("지금은 스킬을 버릴 수 없습니다. (현재 단계: " + phase + ")");
+        }
+        skillSlotService.discard(gameState, request.slotId());
+        return statusAssembler.toStatusDTO(gameState);
     }
 
     @Override
