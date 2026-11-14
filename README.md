@@ -2,6 +2,8 @@
 
 > AI 스토리텔링 기반 로그라이크 웹게임 — 매 판마다 서사가 새로 쓰이는 '절차적 스토리텔링' RPG
 
+**현재 버전: v0.4.0 (베타)** · 버전별 변경 내역은 [CHANGELOG.md](CHANGELOG.md)
+
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot_3.5-6DB33F?style=flat&logo=spring-boot&logoColor=white)
 ![Java](https://img.shields.io/badge/Java_21-ED8B00?style=flat&logo=openjdk&logoColor=white)
 ![Spring AI](https://img.shields.io/badge/Spring_AI_1.1-6DB33F?style=flat&logo=spring&logoColor=white)
@@ -13,8 +15,9 @@
 ## 프로젝트 소개
 
 Renova & Delve는 LLM의 서사 생성 능력과 벡터 DB 기반 RAG를 결합한 **지능형 로그라이크**입니다.
-악마와 계약한 왕 때문에 멸망한 왕궁을 5개 스테이지(각 10노드)에 걸쳐 잠입하고,
-마지막 노드의 보스를 쓰러뜨려 마계 포탈을 봉인하면 클리어입니다.
+천상(질서)과 마계(욕망) 사이에 낀 인간 왕국 레노바. 영생을 위해 악마와 계약한 왕 때문에 왕궁 지하에 마계의 문이 열렸고,
+천상은 왕국을 통째로 정화하려 합니다. 플레이어는 5개 스테이지(각 10노드)를 내려가며 천상·마계·인간 중 누구의 방식으로
+위기를 넘길지 고르고, 그 선택이 다음 장면의 서사와 결말을 바꿉니다.
 
 핵심 설계 원칙은 **"비정형 서사 생성"과 "정형 수치 로직"의 분리**입니다.
 
@@ -22,6 +25,26 @@ Renova & Delve는 LLM의 서사 생성 능력과 벡터 DB 기반 RAG를 결합�
 - 몬스터의 실제 능력치는 서버의 **필드 강도 시스템**(스테이지 × 난이도 확정 수치)이 부여합니다.
 - 전투/보상/상점 등 모든 진행 상태는 **서버(Redis 세션)가 단일 소유**하며,
   클라이언트는 오직 "행동"만 보낼 수 있습니다. (조작 불가능한 서버 권위 구조)
+
+## 프로젝트 이력
+
+이 프로젝트는 **한 번 실패했다가 LLM으로 다시 살린 프로젝트**입니다.
+
+| 시기 | 단계 | 내용 |
+|---|---|---|
+| 2026-07 | **v0.1 — 4인 팀 프로젝트** | 포트폴리오 목적의 팀 프로젝트로 시작. 엔티티·Repository 설계, Spring Security(JWT), Spring AI(RAG·Tools) 파이프라인까지 진행 |
+| 2026-07 ~ 11 | **중단** | 팀원 간 실력 차이와 데드라인 초과로 미완성 상태에서 폐기. 게임 엔진은 동작하지 않았고, 프론트엔드는 저장소째 사라졌다 |
+| 2026-11 ~ | **v0.2 ~ — LLM 재구축** | "프롬프트 지시만으로 어디까지 되는가"를 확인하려고, 코드를 직접 쓰지 않고 LLM(Claude)에게 지시·검토하는 방식으로 다시 구현 중 |
+
+### 사람이 한 일과 LLM이 한 일
+
+요즘 현업의 흐름처럼 **구현은 LLM이, 방향 결정과 검토는 사람이** 맡았습니다.
+
+- **팀 시절 원본으로 남아 있는 것** — RAG 파이프라인(`MonsterRagService`의 압축기/확장기 분기·임계 점수 비교·프롬프트 설계), AI Tools(`GameTools`, 코드 그대로), JWT 유틸, 엔티티 20여 개의 테이블·FK 설계, Repository 쿼리
+- **LLM이 다시 쓰거나 새로 만든 것** — 게임 엔진 전체(서버 권위 구조), 프론트엔드 100%, 회원·권한 체계, RDB → VectorStore ETL, 보안 결함 수정, 개인정보 처리, 도트 스프라이트 60종
+- **사람이 한 것** — 무엇을 만들지 정하기, 직접 플레이하고 문제 찾기(스킬 교체 불가, 포션 버그, 관리자 자기 권한 회수 등), 모든 변경을 PR 리뷰로 받고 병합 결정
+
+모든 변경은 기능 단위 PR로 올라가 있고, PR마다 "무엇을 했는지 / 무엇을 확인했는지 / 무엇을 확인하지 못했는지"와 리뷰가 남아 있습니다.
 
 ## 게임 루프
 
@@ -92,15 +115,17 @@ MAIL_PASSWORD=네이버_비밀번호_또는_애플리케이션_비밀번호
 - 서버: `http://localhost:8080` / Swagger: `http://localhost:8080/swagger-ui/index.html`
 - 기동 시 Flyway가 스키마(`db/migration/V*.sql`)를 적용하고, 반복 마이그레이션 `R__seed_data.sql`이 몬스터/스킬/장비/유물/필드 강도 시드를 등록 (멱등, 내용이 바뀐 기동에서만 재실행)
 
-### 4. (선택) 세계관 문서 ETL
+### 4. 벡터 스토어 동기화 (자동)
 
-RAG 품질을 높이려면 세계관/몬스터 문서를 벡터 스토어에 적재하세요.
+기동하면 RDB의 게임 데이터 7종(몬스터·무기·갑옷·투구·스킬·유물·소모품)이 VectorStore와 자동으로 동기화됩니다.
+바뀐 행만 다시 임베딩하므로 2회차 기동부터는 임베딩 API 호출이 거의 없습니다. 로그에서 `[GameDataETL] RDB 동기화 완료`를 확인하세요.
 
 ```
-POST /api/admin/etl  (multipart file 업로드 → 청크 분할 → 임베딩 → PGVector 저장)
+POST   /api/admin/etl/sync?force=false   # 수동 동기화 (force=true면 전부 다시 임베딩)
+DELETE /api/admin/etl/purge              # RDB로 만든 문서 전체 삭제
 ```
 
-문서가 없어도 게임은 동작합니다. (유사도 미달 시 랜덤 몬스터 폴백)
+AI 호출이 실패하거나 어울리는 몬스터를 찾지 못해도 게임은 동작합니다. (랜덤 몬스터 + 기본 서사로 폴백)
 
 ### 5. 프론트엔드 실행
 
@@ -181,7 +206,10 @@ graph TD
 | GET | `/api/ranking?difficulty=` | 난이도별 TOP 10 |
 | GET | `/api/collection` | 내 도감 |
 | POST | `/api/rag` | 가이드 챗봇 (Tools 기반 DB 조회) |
-| POST | `/api/admin/etl` | 세계관 문서 ETL 업로드 |
+| POST | `/api/game/battle/guard`, `/battle/pass`, `/battle/flee` | 방어 태세 / 숨 고르기 / 도망치기 |
+| POST | `/api/game/skill/discard` | 스킬 버리기 |
+| GET | `/api/collection/totals` | 도감 분류별 전체 개수 |
+| POST | `/api/admin/etl/sync` | RDB → VectorStore 동기화 (관리자) |
 
 ## 기술 의사결정
 
@@ -197,14 +225,15 @@ graph TD
 
 ```
 RenovaNDelve/                  # Spring Boot 백엔드
- ├─ engine/                    # GameSession(Redis 상태), RelicEffects(유물 패시브)
+ ├─ domain/                    # JPA 엔티티. GameStateEntity가 한 판의 스킬·유물·소모품을 소유하는 애그리거트 루트
+ ├─ engine/                    # GameSession(Redis 상태), RelicEffects·SkillSynergies(조합), Alignment(가호), RunStats(통계)
  ├─ service/
  │   ├─ GameEngineService*     # 게임 루프 오케스트레이터 (노드/전투/조우/보상/상점/종료)
  │   ├─ BattleService*         # 순수 전투 수치 계산 (치명타/상태이상/도트/반격)
  │   ├─ GameStateService*      # 게임 생성/세팅 옵션/포기
  │   ├─ BattleResultService*   # 도감 등록/랭킹/세션 종료
  │   ├─ ShopService*           # 상점 재고 생성/구매 적용
- │   ├─ ai/                    # MonsterRagService(RAG), GuideService(Tools), EtlService, 프리페치
+ │   ├─ ai/                    # MonsterRagService(RAG), GuideService(Tools), GameDataEtlService(RDB→벡터), 프리페치
  │   └─ redis/                 # GameSession/StageCache/SecurityToken 저장소
  ├─ controller/                # Game / Member / Ranking / Collection / AI
  └─ resources/db/migration/     # Flyway: V1 기준 스키마, R__seed_data 멱등 시드
