@@ -1,0 +1,334 @@
+package com.renovandelve.game.service;
+
+import com.renovandelve.global.config.RecordMapper;
+import com.renovandelve.game.domain.GameCharacterEntity;
+import com.renovandelve.game.domain.GameEquipmentEntity;
+import com.renovandelve.member.domain.MemberEntity;
+import com.renovandelve.catalog.domain.armorentity.ArmorEntity;
+import com.renovandelve.game.domain.gamestateentity.Difficulty;
+import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
+import com.renovandelve.catalog.domain.helmetentity.HelmetEntity;
+import com.renovandelve.catalog.domain.relicentity.RelicEntity;
+import com.renovandelve.catalog.domain.skillentity.SkillEntity;
+import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
+import com.renovandelve.catalog.dto.ArmorDTO;
+import com.renovandelve.catalog.dto.HelmetDTO;
+import com.renovandelve.catalog.dto.RelicDTO;
+import com.renovandelve.game.dto.SkillInfoDTO;
+import com.renovandelve.catalog.dto.WeaponDTO;
+import com.renovandelve.game.dto.request.NewGameRequest;
+import com.renovandelve.game.dto.response.PactDTO;
+import com.renovandelve.game.dto.response.SetupOptionsDTO;
+import com.renovandelve.game.engine.Pact;
+import com.renovandelve.catalog.repository.ArmorRepository;
+import com.renovandelve.collection.repository.CollectionArmorRepository;
+import com.renovandelve.collection.repository.CollectionConsumableRepository;
+import com.renovandelve.collection.repository.CollectionHelmetRepository;
+import com.renovandelve.collection.repository.CollectionRelicRepository;
+import com.renovandelve.collection.repository.CollectionSkillRepository;
+import com.renovandelve.collection.repository.CollectionWeaponRepository;
+import com.renovandelve.game.repository.GameCharacterRepository;
+import com.renovandelve.game.repository.GameEquipmentRepository;
+import com.renovandelve.game.repository.GameRelicInventoryRepository;
+import com.renovandelve.game.repository.GameSkillSlotRepository;
+import com.renovandelve.game.repository.GameStateRepository;
+import com.renovandelve.catalog.repository.HelmetRepository;
+import com.renovandelve.catalog.repository.RelicRepository;
+import com.renovandelve.catalog.repository.SkillRepository;
+import com.renovandelve.catalog.repository.WeaponRepository;
+import com.renovandelve.game.service.redis.GameSessionService;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class GameStateServiceImpl implements GameStateService {
+    private final GameStateRepository gameStateRepository;
+    private final WeaponRepository weaponRepository;
+    private final ArmorRepository armorRepository;
+    private final HelmetRepository helmetRepository;
+    private final SkillRepository skillRepository;
+    private final RelicRepository relicRepository;
+    private final GameCharacterRepository gameCharacterRepository;
+    private final GameEquipmentRepository gameEquipmentRepository;
+    private final GameSkillSlotRepository gameSkillSlotRepository;
+    private final GameRelicInventoryRepository gameRelicInventoryRepository;
+    private final GameSessionService gameSessionService;
+    private final CollectionWeaponRepository collectionWeaponRepository;
+    private final CollectionArmorRepository collectionArmorRepository;
+    private final CollectionHelmetRepository collectionHelmetRepository;
+    private final CollectionSkillRepository collectionSkillRepository;
+    private final CollectionRelicRepository collectionRelicRepository;
+    private final CollectionConsumableRepository collectionConsumableRepository;
+
+    public static final int STARTING_BUDGET = 800;   // 스타팅 포인트 기본 예산
+    // 메타 진행: 도감에 등록한 항목 1종마다 다음 판의 예산이 늘어난다 (죽어도 남는 성장)
+    public static final int BUDGET_PER_COLLECTION = 5;
+    public static final int MAX_BONUS_BUDGET = 200;
+    private static final int BASE_MAX_HP = 100;
+    private static final int BASE_ATTACK = 10;
+    private static final int BASE_DEFENSE = 5;
+    private static final int MAX_START_SKILLS = 4;
+    private static final String DEFAULT_SKILL_NAME = "기본 공격";
+
+    /**
+     * 원정 준비 화면의 선택지와 예산. 예산은 기본 800에 도감 수집 보너스(1종당 5, 최대 200)를 더한다.
+     *
+     * @param member 회원
+     * @return 원정 준비 옵션
+     */
+    @Override
+    public SetupOptionsDTO getSetupOptions(MemberEntity member) {
+        int bonus = bonusBudget(member);
+        return new SetupOptionsDTO(
+                STARTING_BUDGET + bonus,
+                bonus,
+                RecordMapper.mapList(weaponRepository.findAll(), WeaponDTO.class),
+                RecordMapper.mapList(armorRepository.findAll(), ArmorDTO.class),
+                RecordMapper.mapList(helmetRepository.findAll(), HelmetDTO.class),
+                skillRepository.findAll().stream().map(SkillInfoDTO::from).toList(),
+                RecordMapper.mapList(relicRepository.findAll(), RelicDTO.class),
+                Arrays.stream(Pact.values()).map(PactDTO::from).toList()
+        );
+    }
+
+    /**
+     * 새 원정을 만든다. 진행 중인 원정은 포기 처리하고, 고른 장비·스킬·유물의 비용이 예산 안인지 검증한 뒤
+     * 게임·장비·캐릭터를 만들고 스킬과 유물은 애그리거트 루트에 넣는다(cascade로 함께 저장).
+     *
+     * @param request 난이도, 장비, 스킬, 유물, 서약
+     * @param member  회원
+     * @return 새 게임
+     * @throws IllegalArgumentException 예산 초과, 알 수 없는 장비·서약
+     */
+    @Override
+    @Transactional
+    public GameStateEntity createNewGame(NewGameRequest request, MemberEntity member) {
+        log.info("새 게임 생성 memberId={}", member.getMemberId());
+
+        // 기존 진행 중 게임은 종료 처리
+        gameStateRepository.findByMember_MemberIdAndIsActiveTrue(member.getMemberId())
+                .ifPresent(old -> {
+                    old.deactivate();
+                    gameStateRepository.save(old);
+                    gameSessionService.delete(old.getGameStateId());
+                    log.info("기존 게임 세션 종료 gameStateId={}", old.getGameStateId());
+                });
+
+        Difficulty difficulty = parseDifficulty(request.difficulty());
+
+        // 장비 결정 (미선택 시 가장 저렴한 기본 장비)
+        WeaponEntity weapon = resolveWeapon(request.weaponId());
+        ArmorEntity armor = resolveArmor(request.armorId());
+        HelmetEntity helmet = resolveHelmet(request.helmetId());
+
+        // 스킬 결정 (기본 공격은 항상 포함)
+        List<SkillEntity> skills = resolveSkills(request.skillIds());
+
+        // 유물 결정
+        List<RelicEntity> relics = resolveRelics(request.relicIds());
+
+        // 서약 (알 수 없는 코드는 400)
+        Set<Pact> pacts = Pact.fromCodes(request.pacts());
+
+        // 예산 검증
+        int cost = weapon.getScoreCost() + armor.getScoreCost() + helmet.getScoreCost()
+                + skills.stream().mapToInt(SkillEntity::getCost).sum()
+                + relics.stream().mapToInt(RelicEntity::getScoreCost).sum();
+        int budget = STARTING_BUDGET + bonusBudget(member);
+        if (cost > budget) {
+            throw new IllegalArgumentException("스타팅 포인트 예산 초과: 사용 " + cost + " / 예산 " + budget);
+        }
+
+        // 세션 생성
+        GameStateEntity gameState = gameStateRepository.save(GameStateEntity.builder()
+                .member(member)
+                .difficulty(difficulty)
+                .currentStage(1)
+                .currentNodeId(0L)
+                .gold(100)
+                .startingPoints(cost)
+                .pacts(pacts.isEmpty() ? null : Pact.serialize(pacts))
+                .build());
+
+        // 장비 장착
+        gameEquipmentRepository.save(GameEquipmentEntity.builder()
+                .gameState(gameState).weapon(weapon).armor(armor).helmet(helmet).build());
+
+        // 캐릭터 생성
+        int maxHp = BASE_MAX_HP + helmet.getHpBonus();
+        int attack = BASE_ATTACK + weapon.getAtkBonus();
+        int defense = BASE_DEFENSE + armor.getDefBonus();
+        gameCharacterRepository.save(GameCharacterEntity.builder()
+                .gameState(gameState).maxHp(maxHp).currentHp(maxHp)
+                .attack(attack).defense(defense).build());
+
+        // 스킬 슬롯 / 유물 인벤토리: 루트에 넣으면 커밋 때 cascade로 함께 저장된다
+        skills.forEach(gameState::learnSkill);
+        relics.forEach(gameState::addRelic);
+
+        // 노드 세션 초기화 (EXPLORE)
+        gameSessionService.delete(gameState.getGameStateId());
+        gameSessionService.getOrCreate(gameState.getGameStateId());
+
+        log.info("새 게임 준비 완료 gameStateId={} cost={}", gameState.getGameStateId(), cost);
+        return gameState;
+    }
+
+    /**
+     * 진행 중인 원정.
+     *
+     * @param member 회원
+     * @return 진행 중인 게임
+     */
+    @Override
+    public Optional<GameStateEntity> findActiveGame(MemberEntity member) {
+        return gameStateRepository.findByMember_MemberIdAndIsActiveTrue(member.getMemberId());
+    }
+
+    /**
+     * 진행 중인 원정을 포기하고 Redis 세션을 지운다. 없으면 아무것도 하지 않는다.
+     *
+     * @param member 회원
+     */
+    @Override
+    @Transactional
+    public void abandonGame(MemberEntity member) {
+        gameStateRepository.findByMember_MemberIdAndIsActiveTrue(member.getMemberId())
+                .ifPresent(gameState -> {
+                    gameState.deactivate();
+                    gameStateRepository.save(gameState);
+                    gameSessionService.delete(gameState.getGameStateId());
+                    log.info("게임 포기 gameStateId={}", gameState.getGameStateId());
+                });
+    }
+
+    /* HELPER METHODS */
+
+    /** 도감 수집 수에 비례한 스타팅 포인트 보너스 */
+    private int bonusBudget(MemberEntity member) {
+        long collected = collectionWeaponRepository.countByMember(member)
+                + collectionArmorRepository.countByMember(member)
+                + collectionHelmetRepository.countByMember(member)
+                + collectionSkillRepository.countByMember(member)
+                + collectionRelicRepository.countByMember(member)
+                + collectionConsumableRepository.countByMember(member);
+        return (int) Math.min(MAX_BONUS_BUDGET, collected * BUDGET_PER_COLLECTION);
+    }
+
+    /**
+     * 난이도 문자열을 바꾼다. 비어 있으면 보통.
+     *
+     * @param value 난이도 문자열
+     * @return 난이도
+     * @throws IllegalArgumentException 알 수 없는 값이면
+     */
+    private Difficulty parseDifficulty(String value) {
+        if (value == null || value.isBlank()) return Difficulty.NORMAL;
+        try {
+            return Difficulty.valueOf(value.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("알 수 없는 난이도: " + value);
+        }
+    }
+
+    /**
+     * 고른 무기. 고르지 않았으면 가장 싼 무기.
+     *
+     * @param id 무기 ID (없으면 null)
+     * @return 무기
+     */
+    private WeaponEntity resolveWeapon(Long id) {
+        if (id != null) {
+            return weaponRepository.findById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 무기입니다. weaponId=" + id));
+        }
+        return weaponRepository.findAll().stream()
+                .min(Comparator.comparingInt(WeaponEntity::getScoreCost))
+                .orElseThrow(() -> new IllegalStateException("무기 데이터가 없습니다."));
+    }
+
+    /**
+     * 고른 갑옷. 고르지 않았으면 가장 싼 갑옷.
+     *
+     * @param id 갑옷 ID (없으면 null)
+     * @return 갑옷
+     */
+    private ArmorEntity resolveArmor(Long id) {
+        if (id != null) {
+            return armorRepository.findById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 갑옷입니다. armorId=" + id));
+        }
+        return armorRepository.findAll().stream()
+                .min(Comparator.comparingInt(ArmorEntity::getScoreCost))
+                .orElseThrow(() -> new IllegalStateException("갑옷 데이터가 없습니다."));
+    }
+
+    /**
+     * 고른 투구. 고르지 않았으면 가장 싼 투구.
+     *
+     * @param id 투구 ID (없으면 null)
+     * @return 투구
+     */
+    private HelmetEntity resolveHelmet(Long id) {
+        if (id != null) {
+            return helmetRepository.findById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 투구입니다. helmetId=" + id));
+        }
+        return helmetRepository.findAll().stream()
+                .min(Comparator.comparingInt(HelmetEntity::getScoreCost))
+                .orElseThrow(() -> new IllegalStateException("투구 데이터가 없습니다."));
+    }
+
+    /**
+     * 시작 스킬. 기본 공격을 항상 0번에 두고, 고른 스킬을 최대 3개까지 더한다(중복 제거).
+     *
+     * @param skillIds 고른 스킬 ID
+     * @return 시작 스킬
+     */
+    private List<SkillEntity> resolveSkills(List<Long> skillIds) {
+        LinkedHashMap<Long, SkillEntity> selected = new LinkedHashMap<>();
+
+        // 기본 공격은 항상 0번 슬롯 (이름이 없으면 최저 비용 스킬로 폴백)
+        skillRepository.findByName(DEFAULT_SKILL_NAME)
+                .or(() -> skillRepository.findAll().stream()
+                        .min(Comparator.comparingInt(SkillEntity::getCost)))
+                .ifPresent(basic -> selected.put(basic.getSkillId(), basic));
+
+        if (skillIds != null) {
+            for (Long id : skillIds) {
+                if (selected.size() >= MAX_START_SKILLS) break;
+                SkillEntity skill = skillRepository.findById(id)
+                        .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 스킬입니다. skillId=" + id));
+                selected.putIfAbsent(skill.getSkillId(), skill);
+            }
+        }
+
+        if (selected.isEmpty()) {
+            throw new IllegalStateException("스킬 데이터가 없습니다. 시드 데이터(db/migration/R__seed_data.sql)를 확인하세요.");
+        }
+        return new ArrayList<>(selected.values());
+    }
+
+    /**
+     * 시작 유물 (중복 제거).
+     *
+     * @param relicIds 고른 유물 ID
+     * @return 시작 유물
+     */
+    private List<RelicEntity> resolveRelics(List<Long> relicIds) {
+        if (relicIds == null || relicIds.isEmpty()) return List.of();
+        LinkedHashMap<Long, RelicEntity> selected = new LinkedHashMap<>();
+        for (Long id : relicIds) {
+            RelicEntity relic = relicRepository.findById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유물입니다. relicId=" + id));
+            selected.putIfAbsent(relic.getRelicId(), relic);
+        }
+        return new ArrayList<>(selected.values());
+    }
+}

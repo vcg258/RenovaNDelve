@@ -225,18 +225,20 @@ graph TD
 
 ```
 RenovaNDelve/                  # Spring Boot 백엔드
- ├─ domain/                    # JPA 엔티티. GameStateEntity가 한 판의 스킬·유물·소모품을 소유하는 애그리거트 루트
- ├─ engine/                    # GameSession(Redis 상태), RelicEffects·SkillSynergies(조합), Alignment(가호), RunStats(통계)
- ├─ service/
- │   ├─ GameEngineService*     # 게임 루프 오케스트레이터 (노드/전투/조우/보상/상점/종료)
- │   ├─ BattleService*         # 순수 전투 수치 계산 (치명타/상태이상/도트/반격)
- │   ├─ GameStateService*      # 게임 생성/세팅 옵션/포기
- │   ├─ BattleResultService*   # 도감 등록/랭킹/세션 종료
- │   ├─ ShopService*           # 상점 재고 생성/구매 적용
- │   ├─ ai/                    # MonsterRagService(RAG), GuideService(Tools), GameDataEtlService(RDB→벡터), 프리페치
- │   └─ redis/                 # GameSession/StageCache/SecurityToken 저장소
- ├─ controller/                # Game / Member / Ranking / Collection / AI
- └─ resources/db/migration/     # Flyway: V1 기준 스키마, R__seed_data 멱등 시드
+ │  도메인별 모듈. 각 모듈 안은 controller / service / repository / domain / dto 계층
+ ├─ game/                      # 게임 한 판
+ │   ├─ engine/                # GameSession(Redis 상태), RelicEffects·SkillSynergies(조합), Alignment(가호), RunStats(통계)
+ │   ├─ service/               # GameEngineService(게임 루프), BattleService(전투 계산), GameStateService(생성·포기),
+ │   │                         #   BattleResultService(도감·랭킹·종료), ShopService, SkillSlotService
+ │   └─ domain/                # GameStateEntity: 한 판의 스킬·유물·소모품을 소유하는 애그리거트 루트
+ ├─ catalog/                   # 무기·갑옷·투구·스킬·유물·소모품·몬스터 원본 데이터
+ ├─ member/                    # 회원, 관리자, 계정 복구, 개인정보
+ ├─ auth/                      # JWT, 보안 필터·핸들러, 토큰 폐기
+ ├─ collection/                # 도감
+ ├─ ranking/                   # 랭킹
+ ├─ ai/                        # MonsterRagService(RAG), GuideService, GameDataEtlService(RDB→벡터), 프리페치, tools/
+ ├─ global/                    # 공용 설정, 예외 처리, 메일, 요청 제한
+ └─ resources/db/migration/    # Flyway: V1 기준 스키마, R__seed_data 멱등 시드
 
 renova-delve-front/            # React 19 + Vite + TypeScript 프론트엔드
  ├─ src/api/                   # axios 클라이언트 (토큰 자동 재발급), 타입, API 함수
