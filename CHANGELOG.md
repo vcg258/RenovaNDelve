@@ -6,6 +6,19 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 - **1.0.0 전까지는 베타입니다.** 밸런스 수치와 API가 바뀔 수 있습니다.
 - 각 버전은 같은 이름의 git 태그(`v0.4.0` 등)로 표시되어 있습니다. 괄호 안의 번호는 그 버전에 들어간 PR입니다.
 
+## [0.6.0] - 2026-11-15 — 레노바 연대기
+
+### 추가
+- **레노바 연대기**: 끝난 원정마다 한 장(章)씩 쌓이는 이야기책 (백엔드 #13, 프론트 #10)
+  - 장의 제목·본문은 런 회고의 구조화 출력(`RunReviewDTO.chapterTitle`, `chapter`)으로 함께 받는다. LLM 호출 수는 그대로다
+  - 입력: 최근 3장(오래된 것부터, 본문 160자로 줄임)과 이번 원정의 선택 6줄. 앞선 장이 있으면 첫 문장에서 그 장소·적·선택을 이어받게 한다
+  - AI가 장을 쓰지 못하면 서버가 사실(도달 지점, 기운 세력)만으로 짧은 장을 쓴다. 원정 하나에 장 하나
+  - 화면: 메뉴의 "레노바 연대기"(`/chronicle`), 결과 화면에 이번에 쓰인 장
+  - Flyway `V4__chronicle.sql`. 탈퇴 시 삭제, 내 정보 내려받기에 포함
+
+### 수정
+- 회고 프롬프트: 스테이지 5가 아닌 보스를 "악마화된 왕"이라 부르던 문제. 적 이름은 사실 목록의 이름을 그대로 쓰게 했다
+
 ## [0.5.0] - 2026-11-15 — 전생의 망령
 
 ### 추가
@@ -93,6 +106,7 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 - 엔티티 20여 개와 Repository, Spring Security(JWT), Spring AI(RAG 파이프라인, Tools)
 - 게임 엔진은 미완성(동작하지 않음), 프론트엔드는 저장소가 폐기되어 남아 있지 않다
 
+[0.6.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.2.1...v0.3.0

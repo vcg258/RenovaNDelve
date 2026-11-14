@@ -38,6 +38,15 @@ public class RunReviewService {
                         세계관: 천상(질서)과 마계(욕망) 사이에 낀 인간 왕국 레노바. 왕이 악마와 계약해 지하에 마계의 문이 열렸고, 한 인간이 그 문을 향해 내려갑니다.
                         칭호와 묘비명에는 이 인간이 어느 세력에 기울었는지(성향)를 반영합니다.
 
+                        또한 당신은 '레노바 연대기'의 필경사입니다. 이 플레이어의 원정은 하나씩 연대기의 장(章)이 되고,
+                        모든 장은 같은 왕국에서 이어지는 하나의 이야기입니다. 이번 원정의 장을 씁니다.
+                        - [앞선 장]이 있으면 첫 문장에서 반드시 앞선 장의 장소·적·선택 중 하나를 이어받습니다.
+                          이번 원정자는 앞선 원정자와 다른 사람입니다. 예: '앞선 이가 위병에게서 등을 돌렸던 그 정문을, 그는 다시 지났다.'
+                        - [이번 원정의 선택]에 있는 장면과 선택을 장의 뼈대로 삼습니다. 없는 사건을 지어내지 않습니다.
+                        - 적의 이름은 [이번 판의 사실]의 '마지막 전투의 적'에 적힌 이름을 그대로 씁니다.
+                          '악마화된 왕'은 스테이지 5의 마지막 노드에서만 만납니다. 그 전의 보스를 왕이라 부르지 않습니다.
+                        - 수치는 쓰지 않습니다. 3인칭 과거형으로 씁니다.
+
                         ## 규칙
                         - 반드시 아래 [이번 판의 사실]에 있는 수치와 이름만 근거로 삼습니다. 없는 아이템·스킬·몬스터를 지어내지 않습니다.
                         - 조언은 [게임 규칙] 안에서 실제로 할 수 있는 행동만 제안합니다.
@@ -62,11 +71,13 @@ public class RunReviewService {
     /**
      * @return 회고. 생성에 실패하면 null
      */
-    public RunReviewDTO review(GameStateEntity gameState, GameSession session, boolean cleared) {
+    public RunReviewDTO review(GameStateEntity gameState, GameSession session, boolean cleared,
+                               List<String> previousChapters, List<String> choices) {
         try {
             RunReviewDTO review = chatClient.prompt()
                     .user("[이번 판의 사실]\n" + describe(gameState, session, cleared)
-                            + "\n\n위 기록을 평가해 주세요.")
+                            + "\n" + story(previousChapters, choices)
+                            + "\n\n위 기록을 평가하고, 연대기의 이번 장을 써 주세요.")
                     .call()
                     .entity(RunReviewDTO.class);
             return sanitize(review);
@@ -74,6 +85,23 @@ public class RunReviewService {
             log.warn("AI 런 회고 생성 실패 gameStateId={} 원인={}", gameState.getGameStateId(), e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 연대기를 이어 쓰기 위한 앞 이야기와 이번 원정의 선택.
+     *
+     * @param previousChapters 앞선 장 (오래된 것부터)
+     * @param choices          이번 원정에서 내린 선택
+     * @return 프롬프트 조각
+     */
+    public static String story(List<String> previousChapters, List<String> choices) {
+        StringBuilder sb = new StringBuilder("[앞선 장]\n");
+        if (previousChapters == null || previousChapters.isEmpty()) sb.append("- 없음 (이번이 연대기의 첫 장)\n");
+        else previousChapters.forEach(c -> sb.append("- ").append(c).append('\n'));
+        sb.append("[이번 원정의 선택]\n");
+        if (choices == null || choices.isEmpty()) sb.append("- 기록 없음\n");
+        else choices.forEach(c -> sb.append("- ").append(c).append('\n'));
+        return sb.toString();
     }
 
     /** 모델에게 근거로 넘길 사실 목록. 서버가 가진 확정 값만 담는다. */
@@ -150,7 +178,9 @@ public class RunReviewService {
         }
         List<String> tips = review.tips() == null ? List.of()
                 : review.tips().stream().filter(tip -> !isBlank(tip)).map(tip -> cut(tip, 80)).limit(3).toList();
-        return new RunReviewDTO(cut(review.title(), 20), cut(review.epitaph(), 80), cut(review.analysis(), 240), tips);
+        return new RunReviewDTO(cut(review.title(), 20), cut(review.epitaph(), 80), cut(review.analysis(), 240), tips,
+                isBlank(review.chapterTitle()) ? null : cut(review.chapterTitle(), 30),
+                isBlank(review.chapter()) ? null : cut(review.chapter(), 500));
     }
 
     /**

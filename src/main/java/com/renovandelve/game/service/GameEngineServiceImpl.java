@@ -108,6 +108,7 @@ public class GameEngineServiceImpl implements GameEngineService {
     private final WraithService wraithService;
     private final WraithVoiceService wraithVoiceService;
     private final AsyncPrefetchService asyncPrefetchService;
+    private final ChronicleService chronicleService;
 
     private final Random random = new Random();
 
@@ -136,6 +137,8 @@ public class GameEngineServiceImpl implements GameEngineService {
     /** 망령 기록에 옮겨 둘 선택 줄 수 */
     private static final int WRAITH_MEMORY_LINES = 3;
     private static final String CHOICE_PREFIX = "[플레이어의 선택]";
+    /** 연대기 장에 넘길 선택 줄 수 */
+    private static final int CHRONICLE_CHOICE_LINES = 6;
     /** LLM 호출은 대기 시간이 대부분인 블로킹 IO -> 가상 스레드 */
     private final ExecutorService aiExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -702,10 +705,17 @@ public class GameEngineServiceImpl implements GameEngineService {
             return session.getReview();
         }
 
-        RunReviewDTO review = runReviewService.review(gameState, session, cleared);
+        // 연대기의 다음 장도 같은 호출에서 받는다: 앞선 장과 이번 원정의 선택을 함께 넘긴다
+        RunReviewDTO review = runReviewService.review(gameState, session, cleared, previousChapters(gameState),
+                recentChoices(gameState, CHRONICLE_CHOICE_LINES));
         session.setReview(review);
         session.setReviewAttempted(true);
         gameSessionService.save(session);
+        try {
+            chronicleService.record(gameState, cleared, review);
+        } catch (Exception e) {
+            log.warn("연대기 기록 실패 gameStateId={} 원인={}", gameState.getGameStateId(), e.getMessage());
+        }
         return review;
     }
 
@@ -1622,7 +1632,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         try {
             String killer = session.getMonsters() == null ? null : session.getMonsters().stream()
                     .filter(SessionMonster::isAlive).map(SessionMonster::getName).findFirst().orElse(null);
-            wraithService.recordDeath(gameState, killer, recentChoices(gameState));
+            wraithService.recordDeath(gameState, killer, recentChoices(gameState, WRAITH_MEMORY_LINES));
         } catch (Exception e) {
             log.warn("망령 기록 실패 gameStateId={} 원인={}", gameState.getGameStateId(), e.getMessage());
         }
@@ -1632,18 +1642,34 @@ public class GameEngineServiceImpl implements GameEngineService {
      * 이 원정에서 내린 선택 중 최근 몇 줄 (AI 대화 기록의 "[플레이어의 선택]" 줄).
      *
      * @param gameState 게임
+     * @param limit     최대 줄 수
      * @return 선택 문장, 오래된 것부터
      */
-    private List<String> recentChoices(GameStateEntity gameState) {
+    private List<String> recentChoices(GameStateEntity gameState, int limit) {
         try {
             List<String> lines = chatMemory.get(conversationId(gameState)).stream()
                     .map(Message::getText)
                     .filter(text -> text != null && text.startsWith(CHOICE_PREFIX))
                     .map(text -> shorten(text.substring(CHOICE_PREFIX.length())))
                     .toList();
-            return lines.subList(Math.max(0, lines.size() - WRAITH_MEMORY_LINES), lines.size());
+            return lines.subList(Math.max(0, lines.size() - limit), lines.size());
         } catch (Exception e) {
             log.warn("선택 기록 읽기 실패 gameStateId={} 원인={}", gameState.getGameStateId(), e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * 연대기의 앞선 장. 읽지 못해도 회고는 만든다.
+     *
+     * @param gameState 게임
+     * @return 앞선 장 (없거나 실패하면 비어 있음)
+     */
+    private List<String> previousChapters(GameStateEntity gameState) {
+        try {
+            return chronicleService.previousChapters(gameState.getMember().getMemberId());
+        } catch (Exception e) {
+            log.warn("연대기 앞 이야기 읽기 실패 gameStateId={} 원인={}", gameState.getGameStateId(), e.getMessage());
             return List.of();
         }
     }

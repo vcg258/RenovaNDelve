@@ -2,7 +2,7 @@
 
 > AI 스토리텔링 기반 로그라이크 웹게임 — 매 판마다 서사가 새로 쓰이는 '절차적 스토리텔링' RPG
 
-**현재 버전: v0.5.0 (베타)** · 버전별 변경 내역은 [CHANGELOG.md](CHANGELOG.md)
+**현재 버전: v0.6.0 (베타)** · 버전별 변경 내역은 [CHANGELOG.md](CHANGELOG.md)
 
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot_3.5-6DB33F?style=flat&logo=spring-boot&logoColor=white)
 ![Java](https://img.shields.io/badge/Java_21-ED8B00?style=flat&logo=openjdk&logoColor=white)
@@ -62,6 +62,7 @@ Renova & Delve는 LLM의 서사 생성 능력과 벡터 DB 기반 RAG를 결합�
 - 유물: 서버 로직으로 동작하는 패시브 (골드 획득↑, 스킬 피해↑, 쿨타임↓, 피해 감소 등)
 - 난이도: EASY(랭킹 미등록) / NORMAL / HARD / HELL — 적 강도와 보상 배율에 반영
 - **전생의 망령**: 쓰러진 원정은 망령으로 남아, 다음 원정의 같은 자리에서 적으로 나타난다. AI는 그때 내린 선택을 기억하는 대사만 쓰고, 능력치·보상은 서버가 정한다. 처치하면 그 원정의 유물 하나를 되찾고, 세 번 달아나면 흩어진다
+- **레노바 연대기**: 원정이 끝날 때마다 한 장(章)이 쌓이는 나만의 이야기책. 기록관(AI)이 앞선 장을 이어받아 이번 원정의 선택으로 다음 장을 쓴다. 런 회고와 같은 호출의 구조화 출력 필드라 LLM 호출이 늘지 않는다
 
 ## 빠른 시작 (Quick Start)
 
@@ -197,6 +198,7 @@ graph TD
 | POST | `/api/game/new` | 새 게임 (예산 서버 검증) |
 | GET | `/api/game/current` | 현재 게임 뷰 (새로고침 복원) |
 | GET | `/api/game/wraith` | 기다리는 전생의 망령 (없으면 204) |
+| GET | `/api/game/chronicle` | 레노바 연대기 (1장부터) |
 | POST | `/api/game/next` | 다음 노드 전진 (AI 생성) |
 | POST | `/api/game/battle/skill` | 스킬 사용 (1턴) |
 | POST | `/api/game/battle/consumable` | 소모품 사용 (턴 소모) |

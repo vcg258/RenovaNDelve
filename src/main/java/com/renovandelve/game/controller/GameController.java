@@ -2,6 +2,8 @@ package com.renovandelve.game.controller;
 
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.game.dto.response.WraithDTO;
+import com.renovandelve.game.dto.response.ChronicleChapterDTO;
+import com.renovandelve.game.service.ChronicleService;
 import com.renovandelve.game.service.WraithService;
 import com.renovandelve.game.dto.request.ConsumableUseRequest;
 import com.renovandelve.game.dto.request.EncounterChoiceRequest;
@@ -49,6 +51,7 @@ public class GameController {
     private final CurrentMemberService currentMemberService;
     private final GameLockService gameLockService;
     private final WraithService wraithService;
+    private final ChronicleService chronicleService;
 
     /**
      * 게임 상태를 바꾸는 요청은 회원당 한 번에 하나만 처리한다.
@@ -81,6 +84,18 @@ public class GameController {
         return wraithService.current(member.getMemberId())
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /**
+     * 레노바 연대기: 끝난 원정마다 한 장씩, 1장부터.
+     *
+     * @return 장 목록 (아직 없으면 빈 목록)
+     */
+    @Operation(summary = "레노바 연대기 조회")
+    @GetMapping("/chronicle")
+    public ResponseEntity<List<ChronicleChapterDTO>> chronicle() {
+        MemberEntity member = currentMemberService.getCurrentMember();
+        return ResponseEntity.ok(chronicleService.chapters(member.getMemberId()));
     }
 
     /**
