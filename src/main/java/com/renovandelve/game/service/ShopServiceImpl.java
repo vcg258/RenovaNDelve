@@ -36,7 +36,7 @@ import com.renovandelve.catalog.repository.HelmetRepository;
 import com.renovandelve.catalog.repository.RelicRepository;
 import com.renovandelve.catalog.repository.SkillRepository;
 import com.renovandelve.catalog.repository.WeaponRepository;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

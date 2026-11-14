@@ -37,6 +37,25 @@ public class MailService {
         }
     }
 
+    /** 재시도 전 기다리는 시간 (밀리초). 길이 = 재시도 횟수. 테스트에서 줄일 수 있게 필드로 둔다 */
+    long[] RETRY_DELAYS_MS = {1_000, 3_000};
+
+    /**
+     * 기다린다. 끊기면(종료 중) 그만둔다.
+     *
+     * @param millis 시간
+     * @return 끝까지 기다렸으면 true
+     */
+    private static boolean sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
     /**
      * SMTP 계정이 설정돼 있는지 확인한다. 없으면 서버는 뜨고 메일만 보내지 않는다.
      *
@@ -59,17 +78,25 @@ public class MailService {
             log.warn("[메일] SMTP 미설정으로 발송 생략 to={} subject={}", EmailNormalizer.mask(to), subject);
             return;
         }
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(from);
-            message.setTo(to);
-            message.setSubject(subject);
-            message.setText(text);
-            mailSender.send(message);
-            log.info("[메일] 발송 완료 to={} subject={}", EmailNormalizer.mask(to), subject);
-        } catch (Exception e) {
-            // 발송 실패가 요청 처리를 깨뜨리면 안 된다. 원인만 남긴다
-            log.error("[메일] 발송 실패 to={} subject={} 원인={}", EmailNormalizer.mask(to), subject, e.getMessage());
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(from);
+        message.setTo(to);
+        message.setSubject(subject);
+        message.setText(text);
+        for (int attempt = 1; attempt <= RETRY_DELAYS_MS.length + 1; attempt++) {
+            try {
+                mailSender.send(message);
+                log.info("[메일] 발송 완료 to={} subject={} 시도={}", EmailNormalizer.mask(to), subject, attempt);
+                return;
+            } catch (Exception e) {
+                // 발송 실패가 요청 처리를 깨뜨리면 안 된다(비동기). 일시적인 SMTP 오류일 수 있어 두 번 더 시도한다
+                if (attempt > RETRY_DELAYS_MS.length) {
+                    log.error("[메일] 발송 실패 to={} subject={} 시도={} 원인={}", EmailNormalizer.mask(to), subject, attempt, e.getMessage());
+                    return;
+                }
+                log.warn("[메일] 발송 실패, 다시 시도 to={} 시도={} 원인={}", EmailNormalizer.mask(to), attempt, e.getMessage());
+                if (!sleep(RETRY_DELAYS_MS[attempt - 1])) return;
+            }
         }
     }
 

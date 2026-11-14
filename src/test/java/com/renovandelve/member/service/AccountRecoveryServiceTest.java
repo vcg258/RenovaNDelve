@@ -49,6 +49,7 @@ class AccountRecoveryServiceTest {
     private SecurityTokenService securityTokenService;
     private TokenRevocationService tokenRevocationService;
     private RateLimitService rateLimitService;
+    private com.renovandelve.auth.handler.LoginAttemptService loginAttemptService;
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(4);
     private AccountRecoveryService service;
 
@@ -62,8 +63,9 @@ class AccountRecoveryServiceTest {
         securityTokenService = mock(SecurityTokenService.class);
         tokenRevocationService = mock(TokenRevocationService.class);
         rateLimitService = mock(RateLimitService.class);
+        loginAttemptService = mock(com.renovandelve.auth.handler.LoginAttemptService.class);
         service = new AccountRecoveryService(memberRepository, mailService, tokenStore, passwordEncoder,
-                securityTokenService, tokenRevocationService, rateLimitService, BASE_URL + "/");
+                securityTokenService, tokenRevocationService, rateLimitService, loginAttemptService, BASE_URL + "/");
 
         member = MemberEntity.builder()
                 .memberId(7L).loginId("hero01").name("김용사").email(EMAIL)
@@ -211,6 +213,7 @@ class AccountRecoveryServiceTest {
         verify(memberRepository).save(member);
         verify(securityTokenService).logout("hero01");
         verify(tokenRevocationService).revoke("hero01");
+        verify(loginAttemptService).clearAccount("hero01"); // 잠긴 계정도 새 비밀번호로 바로 들어온다
         verify(mailService).send(eq(EMAIL), contains("변경"), anyString()); // 본인에게 변경 사실을 알린다
     }
 

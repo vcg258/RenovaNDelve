@@ -5,6 +5,7 @@ import com.renovandelve.global.mail.MailService;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.member.domain.memberentity.MemberStatus;
 import com.renovandelve.member.repository.MemberRepository;
+import com.renovandelve.auth.handler.LoginAttemptService;
 import com.renovandelve.member.service.redis.PasswordResetTokenStore;
 import com.renovandelve.global.redis.RateLimitService;
 import com.renovandelve.auth.service.redis.SecurityTokenService;
@@ -43,6 +44,7 @@ public class AccountRecoveryService {
     private final SecurityTokenService securityTokenService;
     private final TokenRevocationService tokenRevocationService;
     private final RateLimitService rateLimitService;
+    private final LoginAttemptService loginAttemptService;
     private final String baseUrl;
 
     public AccountRecoveryService(MemberRepository memberRepository, MailService mailService,
@@ -50,6 +52,7 @@ public class AccountRecoveryService {
                                   SecurityTokenService securityTokenService,
                                   TokenRevocationService tokenRevocationService,
                                   RateLimitService rateLimitService,
+                                  LoginAttemptService loginAttemptService,
                                   @Value("${renovaNDelve.app.base-url:http://localhost:5173}") String baseUrl) {
         this.memberRepository = memberRepository;
         this.mailService = mailService;
@@ -58,6 +61,7 @@ public class AccountRecoveryService {
         this.securityTokenService = securityTokenService;
         this.tokenRevocationService = tokenRevocationService;
         this.rateLimitService = rateLimitService;
+        this.loginAttemptService = loginAttemptService;
         this.baseUrl = baseUrl.replaceAll("/+$", "");
     }
 
@@ -146,6 +150,8 @@ public class AccountRecoveryService {
         // 기존 세션 전부 차단: 재발급 수단(RefreshToken)과 이미 발급된 AccessToken
         securityTokenService.logout(member.getLoginId());
         tokenRevocationService.revoke(member.getLoginId());
+        // 비밀번호를 잊어 잠긴 계정이 새 비밀번호로 바로 들어올 수 있게 잠금을 푼다
+        loginAttemptService.clearAccount(member.getLoginId());
         log.info("비밀번호 재설정 완료 memberId={}", member.getMemberId());
 
         if (member.getEmail() != null) {

@@ -34,7 +34,7 @@ import com.renovandelve.game.service.redis.GameSessionService;
 import com.renovandelve.auth.service.redis.TokenRevocationService;
 import com.renovandelve.auth.service.redis.SecurityTokenService;
 import com.renovandelve.member.util.EmailNormalizer;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;

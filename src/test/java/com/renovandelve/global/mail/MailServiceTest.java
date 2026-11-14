@@ -71,8 +71,25 @@ class MailServiceTest {
     void connectionFailureDoesNotPropagate() {
         // 아무도 듣고 있지 않은 포트
         MailService mailService = new MailService(senderTo(1), "sender", "smtp.example.com", "sender@example.com");
+        mailService.RETRY_DELAYS_MS = new long[]{1, 1};
 
         assertThatCode(() -> mailService.send("hero@example.com", "제목", "본문")).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("일시적인 SMTP 오류는 다시 시도해 결국 보낸다")
+    void retriesTransientFailure() {
+        org.springframework.mail.javamail.JavaMailSender sender = org.mockito.Mockito.mock(org.springframework.mail.javamail.JavaMailSender.class);
+        org.mockito.Mockito.doThrow(new org.springframework.mail.MailSendException("일시 오류"))
+                .doNothing()
+                .when(sender).send(org.mockito.ArgumentMatchers.any(org.springframework.mail.SimpleMailMessage.class));
+        MailService mailService = new MailService(sender, "sender", "smtp.example.com", "sender@example.com");
+        mailService.RETRY_DELAYS_MS = new long[]{1, 1};
+
+        mailService.send("hero@example.com", "제목", "본문");
+
+        org.mockito.Mockito.verify(sender, org.mockito.Mockito.times(2))
+                .send(org.mockito.ArgumentMatchers.any(org.springframework.mail.SimpleMailMessage.class));
     }
 
     @Test

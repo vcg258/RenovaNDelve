@@ -44,7 +44,7 @@ import com.renovandelve.collection.repository.CollectionSkillRepository;
 import com.renovandelve.collection.repository.CollectionWeaponRepository;
 import com.renovandelve.game.repository.GameStateRepository;
 import com.renovandelve.ranking.repository.RankingRepository;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

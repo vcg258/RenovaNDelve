@@ -2,7 +2,7 @@ package com.renovandelve.auth.service;
 
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.member.repository.MemberRepository;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;

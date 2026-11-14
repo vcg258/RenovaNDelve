@@ -11,7 +11,7 @@ public enum PathChoice {
     /** 정면 돌파: 기본값 */
     SAFE("정면으로 난 길", 1.0, 1.0, 0, false),
     /** 위험한 길: 적 HP·공격력 +25%, 점수·골드 +50%, 유물 보상 후보 +1 */
-    DANGER("위험한 길", 1.25, 1.5, 1, false),
+    DANGER("위험한 길", 1.10, 1.5, 1, false), // v0.9.0: 적 +25%는 보상보다 훨씬 무거웠다 (시뮬레이션 클리어율 0%)
     /** 은밀한 길: 기습으로 적 전원이 첫 턴 행동 불가, 대신 점수·골드 -30% */
     AMBUSH("은밀한 길", 1.0, 0.7, 0, true);
 
@@ -42,8 +42,8 @@ public enum PathChoice {
     public String battleNote() {
         return switch (this) {
             case SAFE -> null;
-            case DANGER -> "위험한 길 — 적 HP·공격력 +25% 적용됨 · 승리 시 점수·골드 +50%, 유물 후보 +1";
-            case AMBUSH -> "은밀한 길 — 기습 성공: 적 전원이 첫 턴에 움직이지 못한다 · 승리 시 점수·골드 -30%";
+            case DANGER -> "위험한 길 — 적 HP·공격력 +10% 적용됨 · 승리 시 점수·골드·경험치 +50%, 유물 후보 +1";
+            case AMBUSH -> "은밀한 길 — 기습 성공: 적 전원이 첫 턴에 움직이지 못한다 · 승리 시 점수·골드·경험치 -30%";
         };
     }
 
@@ -51,8 +51,8 @@ public enum PathChoice {
     public String rewardNote() {
         return switch (this) {
             case SAFE -> null;
-            case DANGER -> "위험한 길을 뚫었다: 점수·골드 +50%, 유물 후보 +1 (위 수치에 반영됨)";
-            case AMBUSH -> "은밀한 길의 대가: 점수·골드 -30% (위 수치에 반영됨)";
+            case DANGER -> "위험한 길을 뚫었다: 점수·골드·경험치 +50%, 유물 후보 +1 (위 수치에 반영됨)";
+            case AMBUSH -> "은밀한 길의 대가: 점수·골드·경험치 -30% (위 수치에 반영됨)";
         };
     }
 

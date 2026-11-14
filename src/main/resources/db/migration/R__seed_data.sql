@@ -203,16 +203,29 @@ SELECT '심연의 핵', '공격력 10% / 방어력 +2 증가', 'EPIC', 500 WHERE
 -- =========================================================
 -- 몬스터 기본 스탯 (필드 강도 시스템: 스테이지 x 난이도)
 -- difficulty: 0=EASY, 1=NORMAL, 2=HARD, 3=HELL
+--
+-- v0.9.0 밸런스 조정: 봇 시뮬레이션(신중형)으로 목표 클리어율 쉬움 60% / 보통 30% / 어려움 12% / 지옥 3%에 맞췄다.
+-- 예전 보통 표에 난이도 배율(1.245 / 1.31 / 1.36 / 1.415)과 스테이지 곡선(1.12 / 1.10 / 1.10 / 1.08 / 1.00)을 곱한 값이다.
+-- 방어력은 그대로. 측정 방법과 결과는 docs/balance.md.
+-- 이 표가 기준값이다: 새 DB에는 넣고, 기존 DB의 값은 아래 UPDATE로 이 표에 맞춘다(파일이 바뀌면 Flyway가 다시 실행한다).
 -- =========================================================
+CREATE TEMP TABLE seed_monster_base_status (stage smallint, difficulty smallint, base_hp int, base_atk int, base_def int) ON COMMIT DROP;
+INSERT INTO seed_monster_base_status VALUES
+    (1, 0,  84, 11,  2), (2, 0, 123, 16,  3), (3, 0, 178, 23,  5), (4, 0, 242, 31,  7), (5, 0, 299, 37, 10),
+    (1, 1,  88, 12,  2), (2, 1, 130, 17,  4), (3, 1, 187, 24,  6), (4, 1, 255, 33,  9), (5, 1, 314, 39, 12),
+    (1, 2,  91, 12,  3), (2, 2, 135, 18,  5), (3, 2, 194, 25,  8), (4, 2, 264, 34, 12), (5, 2, 326, 41, 16),
+    (1, 3,  95, 13,  4), (2, 3, 140, 19,  7), (3, 3, 202, 26, 11), (4, 3, 275, 35, 16), (5, 3, 340, 42, 22);
+
 INSERT INTO monster_base_status (stage, difficulty, base_hp, base_atk, base_def)
 SELECT s.stage, s.difficulty, s.base_hp, s.base_atk, s.base_def
-FROM (VALUES
-    (1, 0,  48,  6,  2), (2, 0,  72, 10,  3), (3, 0, 104, 14,  5), (4, 0, 144, 18,  7), (5, 0, 192, 24, 10),
-    (1, 1,  60,  8,  2), (2, 1,  90, 12,  4), (3, 1, 130, 17,  6), (4, 1, 180, 23,  9), (5, 1, 240, 30, 12),
-    (1, 2,  78, 10,  3), (2, 2, 117, 16,  5), (3, 2, 169, 22,  8), (4, 2, 234, 30, 12), (5, 2, 312, 39, 16),
-    (1, 3, 108, 14,  4), (2, 3, 162, 22,  7), (3, 3, 234, 31, 11), (4, 3, 324, 41, 16), (5, 3, 432, 54, 22)
-) AS s(stage, difficulty, base_hp, base_atk, base_def)
+FROM seed_monster_base_status s
 WHERE NOT EXISTS (
     SELECT 1 FROM monster_base_status m
     WHERE m.stage = s.stage AND m.difficulty = s.difficulty
 );
+
+UPDATE monster_base_status m
+SET base_hp = s.base_hp, base_atk = s.base_atk, base_def = s.base_def
+FROM seed_monster_base_status s
+WHERE m.stage = s.stage AND m.difficulty = s.difficulty
+  AND (m.base_hp, m.base_atk, m.base_def) IS DISTINCT FROM (s.base_hp, s.base_atk, s.base_def);

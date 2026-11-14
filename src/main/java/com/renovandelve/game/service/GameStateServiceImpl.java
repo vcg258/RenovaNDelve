@@ -37,7 +37,7 @@ import com.renovandelve.catalog.repository.RelicRepository;
 import com.renovandelve.catalog.repository.SkillRepository;
 import com.renovandelve.catalog.repository.WeaponRepository;
 import com.renovandelve.game.service.redis.GameSessionService;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -50,6 +50,7 @@ import java.util.*;
 public class GameStateServiceImpl implements GameStateService {
     private final GameStateRepository gameStateRepository;
     private final KingdomService kingdomService;
+    private final ChronicleService chronicleService;
     private final WeaponRepository weaponRepository;
     private final ArmorRepository armorRepository;
     private final HelmetRepository helmetRepository;
@@ -122,6 +123,9 @@ public class GameStateServiceImpl implements GameStateService {
                 });
 
         Difficulty difficulty = parseDifficulty(request.difficulty());
+
+        // 직전 원정이 결과 화면(회고)을 거치지 않고 끝났다면 연대기의 그 장이 비어 있다 -> 서버가 사실만으로 채운다
+        fillMissingChapter(member);
 
         // 장비 결정 (미선택 시 가장 저렴한 기본 장비)
         WeaponEntity weapon = resolveWeapon(request.weaponId());
@@ -213,6 +217,22 @@ public class GameStateServiceImpl implements GameStateService {
     /* HELPER METHODS */
 
     /** 도감 수집 수에 비례한 스타팅 포인트 보너스 */
+    /**
+     * 직전에 끝난 원정의 연대기 장이 없으면 서버가 사실만으로 쓴다 (AI 호출 없음). 실패해도 새 원정은 시작한다.
+     *
+     * @param member 회원
+     */
+    private void fillMissingChapter(MemberEntity member) {
+        try {
+            gameStateRepository.findByMember_MemberIdOrderByCreatedAtDesc(member.getMemberId()).stream()
+                    .filter(g -> "CLEAR".equals(g.getResult()) || "DEFEAT".equals(g.getResult()))
+                    .findFirst()
+                    .ifPresent(last -> chronicleService.record(last, "CLEAR".equals(last.getResult()), null));
+        } catch (Exception e) {
+            log.warn("연대기 빈 장 채우기 실패 memberId={} 원인={}", member.getMemberId(), e.getMessage());
+        }
+    }
+
     private int bonusBudget(MemberEntity member) {
         long collected = collectionWeaponRepository.countByMember(member)
                 + collectionArmorRepository.countByMember(member)

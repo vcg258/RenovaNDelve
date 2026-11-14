@@ -83,11 +83,13 @@ class AlignmentTest {
     }
 
     @Test
-    @DisplayName("1단계 수치는 단계가 없던 때와 같다 (기존 밸런스 유지)")
-    void firstTierKeepsOriginalNumbers() {
+    @DisplayName("1단계 수치 (v0.9.0 밸런스: 마계는 받는 피해 대가를 줄이고 흡혈을 더했다)")
+    void firstTierNumbers() {
         assertThat(new Alignment(3, 0, 0).victoryHealRatio()).isCloseTo(0.06, within(1e-9));
         assertThat(new Alignment(0, 3, 0).attackMultiplier()).isCloseTo(1.12, within(1e-9));
-        assertThat(new Alignment(0, 3, 0).damageTakenMultiplier()).isCloseTo(1.10, within(1e-9));
+        assertThat(new Alignment(0, 3, 0).damageTakenMultiplier()).isCloseTo(1.05, within(1e-9));
+        assertThat(new Alignment(0, 3, 0).lifestealRatio()).isCloseTo(0.02, within(1e-9));
+        assertThat(new Alignment(3, 0, 0).lifestealRatio()).isZero();
         assertThat(new Alignment(0, 0, 3).goldMultiplier()).isCloseTo(1.20, within(1e-9));
     }
 

@@ -21,8 +21,11 @@ public record Alignment(int heaven, int abyss, int human) {
 
     // 인덱스 = 단계 (0은 가호 없음)
     private static final double[] HEAVEN_VICTORY_HEAL_RATIO = {0.0, 0.06, 0.09, 0.12};
-    private static final double[] ABYSS_ATTACK_MULTIPLIER = {1.0, 1.12, 1.18, 1.24};
-    private static final double[] ABYSS_DAMAGE_TAKEN_MULTIPLIER = {1.0, 1.10, 1.12, 1.14};
+    // v0.9.0: 마계 쪽 선택이 시뮬레이션에서 크게 불리해(클리어율 2%) 대가를 줄이고 공격력을 올렸다
+    private static final double[] ABYSS_ATTACK_MULTIPLIER = {1.0, 1.12, 1.18, 1.25};
+    private static final double[] ABYSS_DAMAGE_TAKEN_MULTIPLIER = {1.0, 1.05, 1.07, 1.09};
+    /** 마계의 흡혈: 준 피해 중 HP로 되돌리는 비율 (v0.9.0: 마계에는 버틸 수단이 없었다) */
+    private static final double[] ABYSS_LIFESTEAL = {0.0, 0.02, 0.04, 0.05};
     private static final double[] HUMAN_GOLD_MULTIPLIER = {1.0, 1.20, 1.30, 1.40};
 
     /** 가호를 주는 세력. 없으면 null */
@@ -85,6 +88,11 @@ public record Alignment(int heaven, int abyss, int human) {
         return ABYSS_ATTACK_MULTIPLIER[tierOf(Faction.ABYSS)];
     }
 
+    /** 마계의 낙인: 준 피해 중 HP로 되돌리는 비율 */
+    public double lifestealRatio() {
+        return ABYSS_LIFESTEAL[tierOf(Faction.ABYSS)];
+    }
+
     /** 마계의 낙인의 대가: 받는 피해 증가 */
     public double damageTakenMultiplier() {
         return ABYSS_DAMAGE_TAKEN_MULTIPLIER[tierOf(Faction.ABYSS)];
@@ -129,8 +137,9 @@ public record Alignment(int heaven, int abyss, int human) {
         return switch (faction) {
             case HEAVEN -> "천상의 가호 %s — 전투에서 승리할 때마다 최대 HP의 %d%% 회복%s".formatted(stage,
                     percent(HEAVEN_VICTORY_HEAL_RATIO[tier]), tier >= MAX_TIER ? ", 보상의 소모품 후보 +1" : "");
-            case ABYSS -> "마계의 낙인 %s — 공격력 +%d%%, 대신 받는 피해 +%d%%%s".formatted(stage,
-                    percent(ABYSS_ATTACK_MULTIPLIER[tier] - 1), percent(ABYSS_DAMAGE_TAKEN_MULTIPLIER[tier] - 1),
+            case ABYSS -> "마계의 낙인 %s — 공격력 +%d%%, 준 피해의 %d%% 흡혈, 대신 받는 피해 +%d%%%s".formatted(stage,
+                    percent(ABYSS_ATTACK_MULTIPLIER[tier] - 1), percent(ABYSS_LIFESTEAL[tier]),
+                    percent(ABYSS_DAMAGE_TAKEN_MULTIPLIER[tier] - 1),
                     tier >= MAX_TIER ? ", 보상의 유물 후보 +1" : "");
             case HUMAN -> "인간의 의지 %s — 골드 획득 +%d%%%s".formatted(stage,
                     percent(HUMAN_GOLD_MULTIPLIER[tier] - 1), tier >= MAX_TIER ? ", 보상의 스킬 후보 +1" : "");

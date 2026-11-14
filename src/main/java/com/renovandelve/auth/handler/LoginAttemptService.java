@@ -67,6 +67,23 @@ public class LoginAttemptService {
      * @param loginId 시도 키 (계정 + IP)
      * @return 잠겨 있으면 true
      */
+    /**
+     * 계정의 로그인 실패 기록을 모든 접속지에서 지운다 (비밀번호 재설정 성공 시).
+     * 잠금 키는 "아이디|IP"라서 아이디로 시작하는 키를 찾아 지운다. 키 수가 적어 SCAN으로 충분하다.
+     *
+     * @param loginId 로그인 아이디
+     */
+    public void clearAccount(String loginId) {
+        if (loginId == null || loginId.isBlank()) return;
+        var options = org.springframework.data.redis.core.ScanOptions.scanOptions()
+                .match(KEY_PREFIX + loginId + "|*").count(100).build();
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        try (var cursor = redisTemplate.scan(options)) {
+            cursor.forEachRemaining(keys::add);
+        }
+        if (!keys.isEmpty()) redisTemplate.delete(keys);
+    }
+
     public boolean isBlocked(String loginId) {
         if (loginId == null || loginId.isBlank()) return false;
         String value = redisTemplate.opsForValue().get(KEY_PREFIX + loginId);
