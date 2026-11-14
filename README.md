@@ -2,7 +2,7 @@
 
 > AI 스토리텔링 기반 로그라이크 웹게임 — 매 판마다 서사가 새로 쓰이는 '절차적 스토리텔링' RPG
 
-**현재 버전: v0.8.0 (베타)** · 버전별 변경 내역은 [CHANGELOG.md](CHANGELOG.md)
+**현재 버전: v0.9.0 (베타)** · 버전별 변경 내역은 [CHANGELOG.md](CHANGELOG.md) · 밸런스 측정은 [docs/balance.md](docs/balance.md)
 
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot_3.5-6DB33F?style=flat&logo=spring-boot&logoColor=white)
 ![Java](https://img.shields.io/badge/Java_21-ED8B00?style=flat&logo=openjdk&logoColor=white)

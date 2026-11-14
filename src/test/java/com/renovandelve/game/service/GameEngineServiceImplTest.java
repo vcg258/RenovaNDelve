@@ -341,12 +341,12 @@ class GameEngineServiceImplTest {
         NodeDTO node = enterBattle("DANGER");
         var danger = session.getMonsters().get(0);
 
-        assertThat(danger.getAtk()).isEqualTo((int) Math.round(safeAtk * 1.25));
-        // HP는 개체마다 +-10% 편차가 있으므로 범위로 본다: 기본 65 x 0.9 x 1.25 ~ 65 x 1.1 x 1.25
-        assertThat(danger.getMaxHp()).isBetween(72, 90).isEqualTo(danger.getCurrentHp());
+        assertThat(danger.getAtk()).isEqualTo((int) Math.round(safeAtk * 1.10));
+        // HP는 개체마다 +-10% 편차가 있으므로 범위로 본다: 기본 65 x 0.9 x 1.10 ~ 65 x 1.1 x 1.10
+        assertThat(danger.getMaxHp()).isBetween(63, 80).isEqualTo(danger.getCurrentHp());
         assertThat(session.getPath()).isEqualTo("DANGER");
         assertThat(node.path()).isEqualTo("DANGER");
-        assertThat(node.pathNote()).contains("위험한 길").contains("+25%");
+        assertThat(node.pathNote()).contains("위험한 길").contains("+10%");
     }
 
     @Test
@@ -430,21 +430,24 @@ class GameEngineServiceImplTest {
     private GameStateEntity lastGame;
 
     @Test
-    @DisplayName("갈림길의 보상 배율이 점수와 골드에 실제로 반영되고, 승리 로그에 드러난다")
+    @DisplayName("갈림길의 보상 배율이 점수·골드·경험치에 실제로 반영되고, 승리 로그에 드러난다")
     void pathRewardMultiplierIsApplied() {
         // 몬스터 점수 30 + 스테이지 1 보정 10 = 40, 골드는 그 1/3 = 13 (보통 난이도 배율 1.0)
         TurnResultDTO safe = winBattleOn("SAFE");
         assertThat(lastGame.getScore()).isEqualTo(40);
         assertThat(lastGame.getGold()).isEqualTo(13);
+        assertThat(lastGame.getGameCharacter().get(0).getExp()).isEqualTo(30); // 일반 몬스터 경험치
         assertThat(safe.log()).noneMatch(line -> line.contains("길"));
 
         TurnResultDTO danger = winBattleOn("DANGER");
         assertThat(lastGame.getScore()).isEqualTo(60);
         assertThat(lastGame.getGold()).isEqualTo(19);
+        assertThat(lastGame.getGameCharacter().get(0).getExp()).isEqualTo(45); // v0.9.0: 경험치에도 +50%
         assertThat(danger.log()).anyMatch(line -> line.contains("위험한 길") && line.contains("+50%"));
 
         TurnResultDTO ambush = winBattleOn("AMBUSH");
         assertThat(lastGame.getScore()).isEqualTo(28);
+        assertThat(lastGame.getGameCharacter().get(0).getExp()).isEqualTo(21);
         assertThat(ambush.log()).anyMatch(line -> line.contains("은밀한 길") && line.contains("-30%"));
     }
 
@@ -1009,5 +1012,34 @@ class GameEngineServiceImplTest {
         engine.nextNode(member, "SAFE");
 
         assertThat(session.getMonsters().get(0).getAtk()).isEqualTo(11);
+    }
+
+    /* ==================== 마계의 흡혈 ==================== */
+
+    @Test
+    @DisplayName("마계의 낙인: 준 피해의 일부를 HP로 되돌린다 (천상이면 흡혈 없음)")
+    void abyssLifesteal() {
+        GameCharacterEntity character = GameCharacterEntity.builder().currentHp(20).maxHp(50).attack(10).defense(3).build();
+        SkillEntity skill = SkillEntity.builder().skillId(1L).name("기본 공격").target(Target.EnemySingle).build();
+        GameStateEntity abyss = GameStateEntity.builder()
+                .gameStateId(GAME_ID).currentStage(1).currentNodeId(3L).abyssAffinity(9) // 3단계: 5%
+                .gameCharacter(new ArrayList<>(List.of(character)))
+                .gameSkillSlot(new ArrayList<>(List.of(GameSkillSlotEntity.builder().slotId(1L).slotIndex(0).skill(skill).build())))
+                .build();
+        when(gameStateRepository.findByMember_MemberIdAndIsActiveTrue(1L)).thenReturn(Optional.of(abyss));
+        SessionMonster foe = new SessionMonster();
+        foe.setName("고블린");
+        foe.setMaxHp(200);
+        foe.setCurrentHp(200);
+        session.setPhase(GameSession.PHASE_BATTLE);
+        session.setMonsters(new ArrayList<>(List.of(foe)));
+        // 공격 대신 피해 100을 그대로 준다
+        org.mockito.Mockito.doAnswer(inv -> { foe.damage(100); return null; })
+                .when(battleService).applyPlayerAttack(any(), anyInt(), anyDouble(), anyDouble(), anyDouble(), anyInt(), any(), any(), any());
+
+        TurnResultDTO result = engine.useSkill(member, new SkillUseRequest(1L, List.of()));
+
+        assertThat(character.getCurrentHp()).isEqualTo(25); // 100 x 5%
+        assertThat(result.log()).anyMatch(line -> line.contains("피를 들이킨다"));
     }
 }

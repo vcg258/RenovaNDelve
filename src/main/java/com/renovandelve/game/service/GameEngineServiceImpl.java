@@ -71,7 +71,7 @@ import com.renovandelve.ai.service.StageCacheService;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -333,6 +333,7 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         int attack = (int) Math.round((character.getAttack() + session.getTempAtkBonus())
                 * effects.getAttackMultiplier() * gameState.alignment().attackMultiplier());
+        int monsterHpBefore = totalMonsterHp(session);
         double critChance = BASE_CRIT_CHANCE + effects.getCritBonus() + daggerCritBonus(gameState);
 
         List<SessionMonster> targets = resolveTargets(session, skill, request.targetKeys());
@@ -342,6 +343,7 @@ public class GameEngineServiceImpl implements GameEngineService {
                 effects.getSkillDamageMultiplier() * synergies.skillDamageMultiplier(skill),
                 effects.getBleedMultiplier() + synergies.getBleedMultiplierBonus(),
                 effects.getCritBleedStacks(), synergies, targets, log);
+        lifesteal(gameState, character, monsterHpBefore - totalMonsterHp(session), log);
 
         if (battleService.isAllMonsterDead(session.getMonsters())) {
             return processVictory(gameState, session, character, effects, log);
@@ -1024,6 +1026,20 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
     }
 
+    /** 살아 있는 적의 HP 합 */
+    private static int totalMonsterHp(GameSession session) {
+        return session.getMonsters() == null ? 0 : session.getMonsters().stream().mapToInt(SessionMonster::getCurrentHp).sum();
+    }
+
+    /** 마계의 낙인: 준 피해의 일부를 HP로 되돌린다 */
+    private void lifesteal(GameStateEntity gameState, GameCharacterEntity character, int dealt, List<String> log) {
+        double ratio = gameState.alignment().lifestealRatio();
+        if (ratio <= 0 || dealt <= 0 || character.getCurrentHp() >= character.getMaxHp()) return;
+        int healed = healing(gameState, Math.max(1, (int) Math.round(dealt * ratio)));
+        character.heal(healed);
+        log.add("마계의 낙인이 피를 들이킨다. HP %d 회복".formatted(healed));
+    }
+
     /** 회복량 계산. 서약 '옅은 피'가 걸려 있으면 모든 회복이 절반이 된다 */
     private int healing(GameStateEntity gameState, int amount) {
         return pacts(gameState).contains(Pact.THIN_BLOOD) ? Math.max(1, amount / 2) : amount;
@@ -1337,6 +1353,8 @@ public class GameEngineServiceImpl implements GameEngineService {
         totalScore = (int) (totalScore * multiplier * Pact.scoreMultiplier(pacts(gameState)));
         Alignment alignment = gameState.alignment();
         totalGold = (int) (totalGold * multiplier * effects.getGoldMultiplier() * alignment.goldMultiplier());
+        // 고른 길은 경험치에도 걸린다 (v0.9.0: 위험한 길의 보상이 골드·점수뿐이라 실제 전투력으로 이어지지 않았다)
+        totalExp = (int) Math.round(totalExp * path.rewardMultiplier());
         KingdomState kingdom = gameState.kingdomState();
         if (kingdom != null) {
             totalGold = (int) (totalGold * kingdom.goldMultiplier());
@@ -1543,17 +1561,17 @@ public class GameEngineServiceImpl implements GameEngineService {
         else if (heavenRoll < 0.80) choices.add(choice(Faction.HEAVEN, heavenText, "NOTHING", 0, null));
         else choices.add(choice(Faction.HEAVEN, heavenText, "GOLD_MINUS", 15 + stage * 8, null));
 
-        // 마계
+        // 마계 (v0.9.0: 유물 30 -> 40%, 골드 증가, 피해 감소. 마계만 고르면 클리어율이 2%까지 떨어졌다)
         double abyssRoll = random.nextDouble();
-        List<RelicEntity> relicPool = abyssRoll < 0.30
+        List<RelicEntity> relicPool = abyssRoll < 0.40
                 ? relicRepository.findByRelicNotOwner(gameState.getGameStateId()) : List.of();
         if (!relicPool.isEmpty()) {
             RelicEntity picked = relicPool.get(random.nextInt(relicPool.size()));
             choices.add(choice(Faction.ABYSS, abyssText, "RELIC", 0, picked.getRelicId()));
-        } else if (abyssRoll < 0.58) {
-            choices.add(choice(Faction.ABYSS, abyssText, "GOLD_PLUS", 50 + stage * 20, null));
+        } else if (abyssRoll < 0.70) {
+            choices.add(choice(Faction.ABYSS, abyssText, "GOLD_PLUS", 60 + stage * 25, null));
         } else {
-            choices.add(choice(Faction.ABYSS, abyssText, "DAMAGE", 14 + stage * 4, null));
+            choices.add(choice(Faction.ABYSS, abyssText, "DAMAGE", 8 + stage * 2, null));
         }
 
         // 인간
