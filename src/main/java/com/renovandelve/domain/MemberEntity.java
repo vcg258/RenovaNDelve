@@ -86,18 +86,38 @@ public class MemberEntity {
         return role == null ? Role.USER : role;
     }
 
+    /**
+     * 계정 상태. 컬럼이 나중에 추가돼 NULL인 기존 계정은 정상(ACTIVE)으로 본다.
+     *
+     * @return 계정 상태
+     */
     public MemberStatus getStatus() {
         return status == null ? MemberStatus.ACTIVE : status;
     }
 
+    /**
+     * 소셜 로그인 토큰을 바꾼다.
+     *
+     * @param socialToken 새 토큰
+     */
     public void updateSocialToken(String socialToken) {
         this.socialToken = socialToken;
     }
 
+    /**
+     * 비밀번호를 바꾼다. 해시는 호출하는 쪽에서 만든다.
+     *
+     * @param encodedPassword 해시된 비밀번호
+     */
     public void changePassword(String encodedPassword) {
         this.passwordHash = encodedPassword;
     }
 
+    /**
+     * 닉네임을 바꾼다. 중복·금칙어 검사는 서비스가 먼저 한다.
+     *
+     * @param nickname 새 닉네임
+     */
     public void changeNickname(String nickname) {
         this.nickname = nickname;
     }
@@ -108,6 +128,11 @@ public class MemberEntity {
         this.email = email;
     }
 
+    /**
+     * 권한을 바꾼다. 자기 자신·마지막 관리자 보호는 서비스가 먼저 확인한다.
+     *
+     * @param role 새 권한
+     */
     public void changeRole(Role role) {
         this.role = role;
     }
@@ -143,10 +168,18 @@ public class MemberEntity {
         this.withdrawnAt = LocalDateTime.now();
     }
 
+    /**
+     * 마지막 로그인 시각을 지금으로 기록한다.
+     */
     public void recordLogin() {
         this.lastLoginAt = LocalDateTime.now();
     }
 
+    /**
+     * 관리자인지 확인한다.
+     *
+     * @return ADMIN이면 true
+     */
     public boolean isAdmin() {
         return this.role == Role.ADMIN;
     }
@@ -157,6 +190,9 @@ public class MemberEntity {
     }
 
     // 생명주기 도메인 메서드 (INSERT 직전에 값을 기록하고 넣어주는 역할)
+    /**
+     * 처음 저장될 때 생성 일시와 기본 권한·상태를 채운다 (JPA 생명주기 콜백).
+     */
     @PrePersist
     private void onCreate() {
         this.createdAt = LocalDateTime.now();
@@ -166,6 +202,9 @@ public class MemberEntity {
     }
 
     // 생명주기 도메인 메서드 (UPDATE 직전에 값을 기록하고 넣어주는 역할)
+    /**
+     * 수정될 때 수정 일시를 갱신한다 (JPA 생명주기 콜백).
+     */
     @PreUpdate
     private void onUpdate() {
         this.updatedAt = LocalDateTime.now();

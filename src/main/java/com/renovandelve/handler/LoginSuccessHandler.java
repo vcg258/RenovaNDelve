@@ -10,7 +10,7 @@ import com.renovandelve.util.TokenClaims;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
@@ -20,7 +20,7 @@ import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-@Log4j2
+@Slf4j
 public class LoginSuccessHandler implements AuthenticationSuccessHandler {
     private final JwtUtil jwtUtil;
     private final SecurityTokenService securityTokenService;
@@ -42,6 +42,9 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
         this.refreshCookieFactory = refreshCookieFactory;
     }
 
+    /**
+     * 로그인 성공 시 실패 횟수를 지우고, AccessToken은 본문으로, RefreshToken은 httpOnly 쿠키로 내려준다.
+     */
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                         Authentication authentication) throws IOException, ServletException {

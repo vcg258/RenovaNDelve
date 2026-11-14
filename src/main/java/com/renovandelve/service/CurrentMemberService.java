@@ -18,6 +18,12 @@ import java.util.NoSuchElementException;
 public class CurrentMemberService {
     private final MemberRepository memberRepository;
 
+    /**
+     * 지금 요청을 보낸 로그인 회원을 DB에서 찾는다.
+     *
+     * @return 회원
+     * @throws IllegalStateException 인증 정보가 없거나 회원을 찾을 수 없으면
+     */
     public MemberEntity getCurrentMember() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication.getName() == null) {

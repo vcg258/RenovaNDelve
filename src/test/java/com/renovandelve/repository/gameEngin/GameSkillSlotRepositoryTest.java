@@ -2,7 +2,7 @@ package com.renovandelve.repository.gameEngin;
 
 import com.renovandelve.domain.GameSkillSlotEntity;
 import com.renovandelve.repository.GameSkillSlotRepository;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 @SpringBootTest
-@Log4j2
+@Slf4j
 class GameSkillSlotRepositoryTest {
     @Autowired
     private GameSkillSlotRepository gameSkillSlotRepository;
@@ -20,7 +20,7 @@ class GameSkillSlotRepositoryTest {
     void testFindByGameStateGameStateIdOrderBySlotIndexAsc() {
         long id = 1L;
         List<GameSkillSlotEntity> gameSkillSlotEntities = gameSkillSlotRepository.findByGameState_GameStateIdOrderBySlotIndexAsc(id);
-        log.info(gameSkillSlotEntities);
+        log.info("{}", gameSkillSlotEntities);
     }
 
     @Test
@@ -28,6 +28,6 @@ class GameSkillSlotRepositoryTest {
         long id = 1L;
         int slot = 0;
         Optional<GameSkillSlotEntity> gameSkillSlotEntity = gameSkillSlotRepository.findByGameState_GameStateIdAndSlotIndex(id, slot);
-        log.info(gameSkillSlotEntity);
+        log.info("{}", gameSkillSlotEntity);
     }
 }

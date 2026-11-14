@@ -3,7 +3,7 @@ package com.renovandelve.service.redis;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renovandelve.engine.GameSession;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * 게임 노드 세션(전투 상태 등)의 Redis 저장소.
  */
-@Log4j2
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GameSessionService {
@@ -20,14 +20,31 @@ public class GameSessionService {
     private final RedisTemplate<String, Object> redisTemplate;
     private static final long TTL_HOURS = 24L;
 
+    /**
+     * 게임 세션의 Redis 키.
+     *
+     * @param gameStateId 게임 ID
+     * @return game:session:{게임 ID}
+     */
     private String key(Long gameStateId) {
         return "game:session:" + gameStateId;
     }
 
+    /**
+     * 게임 세션을 저장한다 (TTL 24시간).
+     *
+     * @param session 게임 세션
+     */
     public void save(GameSession session) {
         redisTemplate.opsForValue().set(key(session.getGameStateId()), session, TTL_HOURS, TimeUnit.HOURS);
     }
 
+    /**
+     * 게임 세션을 읽는다.
+     *
+     * @param gameStateId 게임 ID
+     * @return 게임 세션, 없으면 null
+     */
     public GameSession get(Long gameStateId) {
         Object value = redisTemplate.opsForValue().get(key(gameStateId));
         if (value == null) return null;
@@ -50,6 +67,11 @@ public class GameSessionService {
         return session;
     }
 
+    /**
+     * 게임 세션을 지운다.
+     *
+     * @param gameStateId 게임 ID
+     */
     public void delete(Long gameStateId) {
         redisTemplate.delete(key(gameStateId));
     }

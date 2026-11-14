@@ -1,34 +1,34 @@
 package com.renovandelve.service;
 
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.List;
 
-@Log4j2
+@Slf4j
 @SpringBootTest
 class MonsterServiceImplTest {
     @Autowired private MonsterService monsterService;
 
     @Test
     void getMonsterByNameNormal() {
-        monsterService.getMonsterByNameNormal(List.of("슬라임", "해골 병사")).forEach(log::info);
+        monsterService.getMonsterByNameNormal(List.of("슬라임", "해골 병사")).forEach(monster -> log.info("{}", monster));
     }
 
     @Test
     void getRandomMonsterNormal() {
-        log.info(monsterService.getRandomMonsterNormal());
+        log.info("{}", monsterService.getRandomMonsterNormal());
     }
 
     @Test
     void getMonsterByNameBoss() {
-        log.info(monsterService.getMonsterByNameBoss(List.of("기사단장", "악마화된 왕")));
+        log.info("{}", monsterService.getMonsterByNameBoss(List.of("기사단장", "악마화된 왕")));
     }
 
     @Test
     void getRandomMonsterBoss() {
-        log.info(monsterService.getRandomMonsterBoss());
+        log.info("{}", monsterService.getRandomMonsterBoss());
     }
 }

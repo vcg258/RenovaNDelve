@@ -44,6 +44,15 @@ public class SecurityConfig {
     private final RateLimitService rateLimitService;
     private final TokenRevocationService tokenRevocationService;
 
+    /**
+     * 보안 필터 체인을 구성한다.
+     * 세션을 쓰지 않는 JWT 방식이며, 요청 제한 → 로그인 → 재발급 → 토큰 검사 순으로 필터를 건다.
+     * /api/admin/** 은 ADMIN 권한만, 인증 API·Swagger·OAuth 경로는 공개한다.
+     *
+     * @param httpSecurity     보안 설정 빌더
+     * @param oauth2UserService 구글 로그인 사용자 로더
+     * @return 필터 체인
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity, Oauth2UserService oauth2UserService) throws Exception {
 
@@ -104,6 +113,12 @@ public class SecurityConfig {
         return httpSecurity.build();
     }
 
+    /**
+     * 아이디·비밀번호 로그인 필터(/api/auth/login). 성공·실패 처리기와 로그인 잠금을 연결한다.
+     *
+     * @param authenticationManager 인증 관리자
+     * @return 로그인 필터
+     */
     public ApiLoginFilter apiLoginFilter(AuthenticationManager authenticationManager) {
         ApiLoginFilter filter = new ApiLoginFilter("/api/auth/login", loginAttemptService);
         filter.setAuthenticationManager(authenticationManager);
@@ -114,22 +129,42 @@ public class SecurityConfig {
         return filter;
     }
 
+    /**
+     * 요청마다 AccessToken을 검사하는 필터. 폐기된 토큰도 여기서 걸러진다.
+     *
+     * @return 토큰 검사 필터
+     */
     @Bean
     public TokenCheckFilter tokenCheckFilter() {
         return new TokenCheckFilter(jwtUtil, tokenRevocationService);
     }
 
+    /**
+     * RefreshToken 쿠키로 AccessToken을 다시 발급하는 필터(/api/auth/refresh).
+     *
+     * @return 재발급 필터
+     */
     @Bean
     public RefreshTokenFilter refreshTokenFilter() {
         return new RefreshTokenFilter("/api/auth/refresh", jwtUtil, securityTokenService, memberRepository,
                 refreshCookieFactory);
     }
 
+    /**
+     * 구글 로그인 성공 시 토큰을 발급하는 처리기.
+     *
+     * @return OAuth2 성공 처리기
+     */
     @Bean
     public OAuth2SuccessHandler oAuth2SuccessHandler() {
         return new OAuth2SuccessHandler(jwtUtil, securityTokenService, refreshCookieFactory);
     }
 
+    /**
+     * 비밀번호 해시 방식 (BCrypt).
+     *
+     * @return 비밀번호 인코더
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();

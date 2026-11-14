@@ -3,7 +3,7 @@ package com.renovandelve.exception;
 import com.google.gson.Gson;
 import com.renovandelve.exception.enums.ErrorCase;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 
@@ -11,7 +11,7 @@ import java.io.IOException;
 import java.util.Date;
 import java.util.Map;
 
-@Log4j2
+@Slf4j
 public class RefreshTokenException extends RuntimeException {
     private final ErrorCase errorCase;
 

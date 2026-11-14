@@ -19,6 +19,11 @@ public class CollectionController {
     private final MemberService memberService;
     private final CurrentMemberService currentMemberService;
 
+    /**
+     * 내 도감: 지금까지 손에 넣은 장비·스킬·유물·소모품.
+     *
+     * @return 도감
+     */
     @Operation(summary = "내 도감 전체 조회")
     @GetMapping
     public ResponseEntity<IllustratedEncyclopediaDTO> getCollection() {

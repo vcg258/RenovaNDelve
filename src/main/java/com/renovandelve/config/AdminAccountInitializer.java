@@ -4,7 +4,7 @@ import com.renovandelve.domain.MemberEntity;
 import com.renovandelve.domain.memberentity.Role;
 import com.renovandelve.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,7 +26,7 @@ import java.util.Base64;
  * 비밀번호를 환경변수로 주지 않으면 임의의 강한 비밀번호를 생성해 로그에 1회만 출력한다.
  * -> 소스나 설정 파일에 비밀번호가 남지 않는다.
  */
-@Log4j2
+@Slf4j
 @Configuration
 @RequiredArgsConstructor
 public class AdminAccountInitializer {
@@ -38,6 +38,16 @@ public class AdminAccountInitializer {
     @Value("${renovaNDelve.admin.password:}")
     private String adminPassword;
 
+    /**
+     * 기동 시 관리자가 한 명도 없으면 최초 관리자 계정을 만든다.
+     * 같은 아이디의 일반 회원이 있으면 새로 만들지 않고 관리자로 승격한다.
+     * 비밀번호를 지정하지 않으면 임의로 만들어 기동 로그에 한 번만 출력한다(운영 프로파일에서는 지정 필수).
+     *
+     * @param memberRepository 회원 저장소
+     * @param passwordEncoder  비밀번호 해시
+     * @param environment      현재 활성 프로파일 확인용
+     * @return 기동 직후 한 번 실행되는 러너
+     */
     @Bean
     public ApplicationRunner initAdminAccount(MemberRepository memberRepository, PasswordEncoder passwordEncoder,
                                               Environment environment) {

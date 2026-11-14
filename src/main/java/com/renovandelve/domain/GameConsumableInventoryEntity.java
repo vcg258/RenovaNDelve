@@ -10,7 +10,7 @@ import lombok.*;
 @Entity
 @Builder
 @ToString
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Table(name = "game_consumable_inventory", indexes = {
         @Index(name = "idx_game_consumable_inventory_game_state_game_state_id", columnList = "game_state_id"),
@@ -31,4 +31,15 @@ public class GameConsumableInventoryEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "consumable_id", nullable = false, foreignKey = @ForeignKey(name = "fk_game_consumable_inventory_consumable_consumable_id"))
     private ConsumableEntity consumable; // 소모품 ID (FK)
+
+    /**
+     * 게임이 가질 소모품 한 칸을 만든다. 게임에 붙이는 일은 {@link GameStateEntity#addConsumable(ConsumableEntity)}가 맡는다.
+     *
+     * @param gameState  소모품을 가질 게임
+     * @param consumable 소모품
+     * @return 저장되지 않은 새 인벤토리 칸
+     */
+    public static GameConsumableInventoryEntity of(GameStateEntity gameState, ConsumableEntity consumable) {
+        return GameConsumableInventoryEntity.builder().gameState(gameState).consumable(consumable).build();
+    }
 }

@@ -3,13 +3,13 @@ package com.renovandelve.service.redis;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.renovandelve.dto.response.AsyncStageResponseDTO;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.TimeUnit;
 
-@Log4j2
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StageCacheService {

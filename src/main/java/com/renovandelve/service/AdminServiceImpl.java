@@ -20,7 +20,7 @@ import com.renovandelve.service.redis.GameSessionService;
 import com.renovandelve.service.redis.TokenRevocationService;
 import com.renovandelve.service.redis.SecurityTokenService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -30,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.*;
 
-@Log4j2
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AdminServiceImpl implements AdminService {
@@ -41,6 +41,15 @@ public class AdminServiceImpl implements AdminService {
     private final SecurityTokenService securityTokenService;
     private final TokenRevocationService tokenRevocationService;
 
+    /**
+     * 회원 목록을 최근 가입 순으로 검색한다. 페이지 크기는 1~100으로 제한한다.
+     *
+     * @param keyword 아이디 또는 닉네임 일부
+     * @param status  계정 상태 (없으면 전체)
+     * @param page    페이지 번호
+     * @param size    페이지 크기
+     * @return 회원 요약 페이지
+     */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<MemberSummaryDTO> getMembers(String keyword, String status, int page, int size) {
@@ -61,6 +70,15 @@ public class AdminServiceImpl implements AdminService {
                 MemberSummaryDTO.of(member, playingMemberIds.contains(member.getMemberId())));
     }
 
+    /**
+     * 회원을 정지하거나 정지를 푼다. 정지하면 RefreshToken과 AccessToken을 즉시 폐기하고 진행 중인 게임을 끝낸다.
+     * 자기 자신, 탈퇴 회원, 관리자는 정지할 수 없다.
+     *
+     * @param targetMemberId 대상 회원
+     * @param request        바꿀 상태와 사유
+     * @param actor          처리하는 관리자
+     * @return 바뀐 회원 요약
+     */
     @Override
     @Transactional
     public MemberSummaryDTO changeStatus(Long targetMemberId, MemberStatusChangeRequest request, MemberEntity actor) {
@@ -101,6 +119,14 @@ public class AdminServiceImpl implements AdminService {
         return MemberSummaryDTO.of(target, false);
     }
 
+    /**
+     * 회원 권한을 바꾼다. 자기 자신과 마지막 관리자는 바꿀 수 없고, 바뀐 회원의 토큰은 즉시 폐기해 재로그인하게 한다.
+     *
+     * @param targetMemberId 대상 회원
+     * @param request        바꿀 권한
+     * @param actor          처리하는 관리자
+     * @return 바뀐 회원 요약
+     */
     @Override
     @Transactional
     public MemberSummaryDTO changeRole(Long targetMemberId, RoleChangeRequest request, MemberEntity actor) {
@@ -133,6 +159,12 @@ public class AdminServiceImpl implements AdminService {
         return MemberSummaryDTO.of(target, false);
     }
 
+    /**
+     * 회원의 진행 중인 게임을 강제로 끝내고 Redis 세션을 지운다.
+     *
+     * @param targetMemberId 대상 회원
+     * @throws java.util.NoSuchElementException 진행 중인 게임이 없으면
+     */
     @Override
     @Transactional
     public void terminateGame(Long targetMemberId) {
@@ -144,6 +176,11 @@ public class AdminServiceImpl implements AdminService {
         log.info("[ADMIN] 게임 강제 종료 memberId={} gameStateId={}", targetMemberId, game.getGameStateId());
     }
 
+    /**
+     * 운영 통계: 회원 수(상태별, 최근 7일 가입), 게임 수, 난이도 분포, 상위 랭킹.
+     *
+     * @return 통계
+     */
     @Override
     @Transactional(readOnly = true)
     public AdminStatsDTO getStats() {
@@ -178,17 +215,40 @@ public class AdminServiceImpl implements AdminService {
 
     /* HELPER METHODS */
 
+    /**
+     * 회원을 찾는다.
+     *
+     * @param memberId 회원 ID
+     * @return 회원
+     * @throws java.util.NoSuchElementException 없으면
+     */
     private MemberEntity findMember(Long memberId) {
         return memberRepository.findById(memberId)
                 .orElseThrow(() -> new NoSuchElementException("회원을 찾을 수 없습니다. memberId=" + memberId));
     }
 
+    /**
+     * 대상이 처리하는 관리자 본인이면 거부한다.
+     *
+     * @param target  대상 회원
+     * @param actor   처리하는 관리자
+     * @param message 거부 문구
+     * @throws IllegalStateException 본인이면
+     */
     private void guardSelf(MemberEntity target, MemberEntity actor, String message) {
         if (target.getMemberId().equals(actor.getMemberId())) {
             throw new IllegalStateException(message);
         }
     }
 
+    /**
+     * 상태 문자열을 계정 상태로 바꾼다.
+     *
+     * @param status   상태 문자열
+     * @param nullable true면 비어 있을 때 null을 돌려준다
+     * @return 계정 상태
+     * @throws IllegalArgumentException 비어 있는데 필수이거나 알 수 없는 값이면
+     */
     private MemberStatus parseStatus(String status, boolean nullable) {
         if (status == null || status.isBlank()) {
             if (nullable) return null;

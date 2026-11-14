@@ -23,6 +23,12 @@ public final class PromptInputSanitizer {
     private PromptInputSanitizer() {
     }
 
+    /**
+     * OpenAI로 보내기 전에 주민번호·카드번호·전화번호·이메일을 가린다.
+     *
+     * @param input 사용자 입력
+     * @return 가린 문장
+     */
     public static String maskPersonalData(String input) {
         if (input == null) return "";
         String result = RESIDENT_NUMBER.matcher(input).replaceAll(MASK);

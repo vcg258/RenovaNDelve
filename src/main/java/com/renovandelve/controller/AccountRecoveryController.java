@@ -34,6 +34,13 @@ public class AccountRecoveryController {
 
     private final AccountRecoveryService accountRecoveryService;
 
+    /**
+     * 아이디 찾기. 이름과 이메일이 맞으면 가입한 이메일로 아이디를 보낸다.
+     * 계정 유무가 드러나지 않도록 응답은 항상 같다.
+     *
+     * @param request 이름, 이메일
+     * @return 안내 문구
+     */
     @Operation(summary = "아이디 찾기", description = "이름과 이메일이 맞으면 가입된 이메일로 아이디를 보냅니다. 응답은 항상 같습니다.")
     @PostMapping("/find-id")
     public ResponseEntity<Map<String, String>> findId(@Valid @RequestBody FindIdRequest request) {
@@ -41,6 +48,13 @@ public class AccountRecoveryController {
         return ResponseEntity.ok(Map.of("message", FIND_ID_MESSAGE));
     }
 
+    /**
+     * 비밀번호 재설정 링크를 요청한다. 아이디와 이메일이 맞으면 1회용 링크를 메일로 보낸다.
+     * 응답은 항상 같다.
+     *
+     * @param request 아이디, 이메일
+     * @return 안내 문구
+     */
     @Operation(summary = "비밀번호 재설정 링크 요청", description = "아이디와 이메일이 맞으면 1회용 링크를 보냅니다. 응답은 항상 같습니다.")
     @PostMapping("/password-reset/request")
     public ResponseEntity<Map<String, String>> requestReset(@Valid @RequestBody PasswordResetRequest request) {
@@ -48,12 +62,24 @@ public class AccountRecoveryController {
         return ResponseEntity.ok(Map.of("message", RESET_MESSAGE));
     }
 
+    /**
+     * 재설정 링크가 아직 유효한지 확인한다. 토큰을 소비하지 않는다.
+     *
+     * @param request 링크의 토큰
+     * @return valid 여부
+     */
     @Operation(summary = "재설정 링크 유효 여부", description = "토큰을 소비하지 않습니다. 재설정 화면이 만료 여부를 먼저 알려주는 데 씁니다.")
     @PostMapping("/password-reset/check")
     public ResponseEntity<Map<String, Boolean>> checkReset(@Valid @RequestBody PasswordResetCheckRequest request) {
         return ResponseEntity.ok(Map.of("valid", accountRecoveryService.isResetTokenValid(request.token())));
     }
 
+    /**
+     * 새 비밀번호로 바꾼다. 토큰은 한 번만 쓸 수 있고, 성공하면 모든 기기에서 로그아웃된다.
+     *
+     * @param request 토큰, 새 비밀번호
+     * @return 204
+     */
     @Operation(summary = "비밀번호 재설정", description = "링크의 토큰은 한 번만 쓸 수 있습니다. 성공하면 모든 기기에서 로그아웃됩니다.")
     @PostMapping("/password-reset/confirm")
     public ResponseEntity<Void> confirmReset(@Valid @RequestBody PasswordResetConfirmRequest request) {

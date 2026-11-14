@@ -18,13 +18,13 @@ import com.renovandelve.repository.*;
 import com.renovandelve.service.redis.GameSessionService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 
 @Service
-@Log4j2
+@Slf4j
 @RequiredArgsConstructor
 public class GameStateServiceImpl implements GameStateService {
     private final GameStateRepository gameStateRepository;
@@ -55,6 +55,12 @@ public class GameStateServiceImpl implements GameStateService {
     private static final int MAX_START_SKILLS = 4;
     private static final String DEFAULT_SKILL_NAME = "기본 공격";
 
+    /**
+     * 원정 준비 화면의 선택지와 예산. 예산은 기본 800에 도감 수집 보너스(1종당 5, 최대 200)를 더한다.
+     *
+     * @param member 회원
+     * @return 원정 준비 옵션
+     */
     @Override
     public SetupOptionsDTO getSetupOptions(MemberEntity member) {
         int bonus = bonusBudget(member);
@@ -70,6 +76,15 @@ public class GameStateServiceImpl implements GameStateService {
         );
     }
 
+    /**
+     * 새 원정을 만든다. 진행 중인 원정은 포기 처리하고, 고른 장비·스킬·유물의 비용이 예산 안인지 검증한 뒤
+     * 게임·장비·캐릭터를 만들고 스킬과 유물은 애그리거트 루트에 넣는다(cascade로 함께 저장).
+     *
+     * @param request 난이도, 장비, 스킬, 유물, 서약
+     * @param member  회원
+     * @return 새 게임
+     * @throws IllegalArgumentException 예산 초과, 알 수 없는 장비·서약
+     */
     @Override
     @Transactional
     public GameStateEntity createNewGame(NewGameRequest request, MemberEntity member) {
@@ -132,17 +147,9 @@ public class GameStateServiceImpl implements GameStateService {
                 .gameState(gameState).maxHp(maxHp).currentHp(maxHp)
                 .attack(attack).defense(defense).build());
 
-        // 스킬 슬롯
-        for (int i = 0; i < skills.size(); i++) {
-            gameSkillSlotRepository.save(GameSkillSlotEntity.builder()
-                    .gameState(gameState).skill(skills.get(i)).slotIndex(i).coolTime(0).build());
-        }
-
-        // 유물 인벤토리
-        for (RelicEntity relic : relics) {
-            gameRelicInventoryRepository.save(GameRelicInventoryEntity.builder()
-                    .gameState(gameState).relic(relic).build());
-        }
+        // 스킬 슬롯 / 유물 인벤토리: 루트에 넣으면 커밋 때 cascade로 함께 저장된다
+        skills.forEach(gameState::learnSkill);
+        relics.forEach(gameState::addRelic);
 
         // 노드 세션 초기화 (EXPLORE)
         gameSessionService.delete(gameState.getGameStateId());
@@ -152,11 +159,22 @@ public class GameStateServiceImpl implements GameStateService {
         return gameState;
     }
 
+    /**
+     * 진행 중인 원정.
+     *
+     * @param member 회원
+     * @return 진행 중인 게임
+     */
     @Override
     public Optional<GameStateEntity> findActiveGame(MemberEntity member) {
         return gameStateRepository.findByMember_MemberIdAndIsActiveTrue(member.getMemberId());
     }
 
+    /**
+     * 진행 중인 원정을 포기하고 Redis 세션을 지운다. 없으면 아무것도 하지 않는다.
+     *
+     * @param member 회원
+     */
     @Override
     @Transactional
     public void abandonGame(MemberEntity member) {
@@ -182,6 +200,13 @@ public class GameStateServiceImpl implements GameStateService {
         return (int) Math.min(MAX_BONUS_BUDGET, collected * BUDGET_PER_COLLECTION);
     }
 
+    /**
+     * 난이도 문자열을 바꾼다. 비어 있으면 보통.
+     *
+     * @param value 난이도 문자열
+     * @return 난이도
+     * @throws IllegalArgumentException 알 수 없는 값이면
+     */
     private Difficulty parseDifficulty(String value) {
         if (value == null || value.isBlank()) return Difficulty.NORMAL;
         try {
@@ -191,6 +216,12 @@ public class GameStateServiceImpl implements GameStateService {
         }
     }
 
+    /**
+     * 고른 무기. 고르지 않았으면 가장 싼 무기.
+     *
+     * @param id 무기 ID (없으면 null)
+     * @return 무기
+     */
     private WeaponEntity resolveWeapon(Long id) {
         if (id != null) {
             return weaponRepository.findById(id)
@@ -201,6 +232,12 @@ public class GameStateServiceImpl implements GameStateService {
                 .orElseThrow(() -> new IllegalStateException("무기 데이터가 없습니다."));
     }
 
+    /**
+     * 고른 갑옷. 고르지 않았으면 가장 싼 갑옷.
+     *
+     * @param id 갑옷 ID (없으면 null)
+     * @return 갑옷
+     */
     private ArmorEntity resolveArmor(Long id) {
         if (id != null) {
             return armorRepository.findById(id)
@@ -211,6 +248,12 @@ public class GameStateServiceImpl implements GameStateService {
                 .orElseThrow(() -> new IllegalStateException("갑옷 데이터가 없습니다."));
     }
 
+    /**
+     * 고른 투구. 고르지 않았으면 가장 싼 투구.
+     *
+     * @param id 투구 ID (없으면 null)
+     * @return 투구
+     */
     private HelmetEntity resolveHelmet(Long id) {
         if (id != null) {
             return helmetRepository.findById(id)
@@ -221,6 +264,12 @@ public class GameStateServiceImpl implements GameStateService {
                 .orElseThrow(() -> new IllegalStateException("투구 데이터가 없습니다."));
     }
 
+    /**
+     * 시작 스킬. 기본 공격을 항상 0번에 두고, 고른 스킬을 최대 3개까지 더한다(중복 제거).
+     *
+     * @param skillIds 고른 스킬 ID
+     * @return 시작 스킬
+     */
     private List<SkillEntity> resolveSkills(List<Long> skillIds) {
         LinkedHashMap<Long, SkillEntity> selected = new LinkedHashMap<>();
 
@@ -245,6 +294,12 @@ public class GameStateServiceImpl implements GameStateService {
         return new ArrayList<>(selected.values());
     }
 
+    /**
+     * 시작 유물 (중복 제거).
+     *
+     * @param relicIds 고른 유물 ID
+     * @return 시작 유물
+     */
     private List<RelicEntity> resolveRelics(List<Long> relicIds) {
         if (relicIds == null || relicIds.isEmpty()) return List.of();
         LinkedHashMap<Long, RelicEntity> selected = new LinkedHashMap<>();

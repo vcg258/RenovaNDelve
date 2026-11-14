@@ -22,6 +22,12 @@ import java.util.List;
 @Component
 public class StatusAssembler {
 
+    /**
+     * 게임 상태를 화면용으로 모은다: 진행 정보, 캐릭터, 장비, 스킬 슬롯, 유물, 소모품, 시너지, 성향, 서약.
+     *
+     * @param gameState 게임
+     * @return 화면용 상태
+     */
     public StatusDTO toStatusDTO(GameStateEntity gameState) {
         GameStateDTO stateDTO = GameStateDTO.builder()
                 .gameStateId(gameState.getGameStateId())
@@ -106,6 +112,12 @@ public class StatusAssembler {
                 .build();
     }
 
+    /**
+     * 캐릭터를 화면용으로 옮긴다.
+     *
+     * @param c 캐릭터
+     * @return DTO
+     */
     private GameCharacterDTO toCharacterDTO(GameCharacterEntity c) {
         return GameCharacterDTO.builder()
                 .characterId(c.getCharacterId())
@@ -118,6 +130,12 @@ public class StatusAssembler {
                 .build();
     }
 
+    /**
+     * 장비 슬롯을 화면용으로 옮긴다.
+     *
+     * @param equipment 장비 슬롯 (없으면 null)
+     * @return DTO
+     */
     private GameEquipmentDTO toEquipmentDTO(GameEquipmentEntity equipment) {
         if (equipment == null) return null;
         GameEquipmentDTO dto = new GameEquipmentDTO();
@@ -128,6 +146,12 @@ public class StatusAssembler {
         return dto;
     }
 
+    /**
+     * 스킬 엔티티를 응답용 DTO로 옮긴다.
+     *
+     * @param s 스킬
+     * @return DTO
+     */
     private SkillDTO toSkillDTO(SkillEntity s) {
         return new SkillDTO(s.getName(), s.getTarget(), s.getAttackCount(), s.getCoefficient(),
                 s.getCost(), s.getCooldown(), s.getStatusEffect(), s.getEffectStack(), s.getDescription());

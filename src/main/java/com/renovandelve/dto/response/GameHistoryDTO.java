@@ -18,6 +18,12 @@ public record GameHistoryDTO(
         LocalDateTime startedAt,
         LocalDateTime endedAt
 ) {
+    /**
+     * 게임 한 판을 모험 기록 한 줄로 옮긴다. 진행 중이면 결과를 PLAYING으로 둔다.
+     *
+     * @param game 게임
+     * @return 모험 기록
+     */
     public static GameHistoryDTO from(GameStateEntity game) {
         boolean active = Boolean.TRUE.equals(game.getIsActive());
         return new GameHistoryDTO(

@@ -8,7 +8,7 @@ import com.renovandelve.service.redis.RateLimitService;
 import com.renovandelve.service.redis.SecurityTokenService;
 import com.renovandelve.service.redis.TokenRevocationService;
 import com.renovandelve.util.EmailNormalizer;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,7 +27,7 @@ import java.util.Optional;
  * - 링크의 주소는 설정값(APP_BASE_URL)으로 만든다. 요청의 Host 헤더를 쓰면 공격자가 자기 도메인으로 향하는 링크를 보내게 할 수 있다.
  * - 재설정이 끝나면 RefreshToken을 지우고 발급된 AccessToken을 폐기한다 (탈취된 세션 차단).
  */
-@Log4j2
+@Slf4j
 @Service
 public class AccountRecoveryService {
     /** 같은 주소로 보내는 메일 수 제한 (남의 주소를 넣어 메일을 쏟아붓는 것 방지) */
@@ -114,6 +114,12 @@ public class AccountRecoveryService {
         }
     }
 
+    /**
+     * 재설정 링크가 아직 유효한지 확인한다. 토큰을 소비하지 않는다.
+     *
+     * @param token 링크의 토큰
+     * @return 유효하면 true
+     */
     public boolean isResetTokenValid(String token) {
         return tokenStore.isValid(token);
     }
@@ -157,10 +163,23 @@ public class AccountRecoveryService {
                 .filter(member -> member.getLoginId() != null);
     }
 
+    /**
+     * 이름이 같은지 비교한다 (앞뒤 공백·대소문자 무시).
+     *
+     * @param stored 저장된 이름
+     * @param given  입력한 이름
+     * @return 같으면 true
+     */
     private boolean sameName(String stored, String given) {
         return stored != null && given != null && stored.trim().equalsIgnoreCase(given.trim());
     }
 
+    /**
+     * 같은 주소로 보내는 메일이 한도 안인지 확인한다. Redis 키에는 주소 대신 해시를 쓴다.
+     *
+     * @param address 받는 주소
+     * @return 보내도 되면 true
+     */
     private boolean mailAllowed(String address) {
         // 주소 자체가 아니라 해시를 키로 쓴다 (Redis 키에 개인정보를 남기지 않는다)
         String subject = PasswordResetTokenStore.hashForKey(address);

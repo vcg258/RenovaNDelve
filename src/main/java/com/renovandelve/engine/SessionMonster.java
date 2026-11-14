@@ -27,10 +27,20 @@ public class SessionMonster {
     private String intent;    // 이번 턴에 할 행동 예고 (ATTACK / HEAVY / GUARD). 플레이어에게 공개된다
     private boolean enraged;  // 보스 격노 여부 (HP 50% 이하에서 1회 발동)
 
+    /**
+     * 아직 살아 있는지 확인한다.
+     *
+     * @return 현재 HP가 0보다 크면 true
+     */
     public boolean isAlive() {
         return currentHp > 0;
     }
 
+    /**
+     * 피해를 준다. HP는 0 아래로 내려가지 않고, 음수 피해는 무시한다.
+     *
+     * @param amount 피해량
+     */
     public void damage(int amount) {
         this.currentHp = Math.max(0, this.currentHp - Math.max(0, amount));
     }

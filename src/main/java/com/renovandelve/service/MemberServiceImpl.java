@@ -23,7 +23,7 @@ import com.renovandelve.service.redis.SecurityTokenService;
 import com.renovandelve.util.EmailNormalizer;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -31,7 +31,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 
-@Log4j2
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MemberServiceImpl implements MemberService {
@@ -46,6 +46,12 @@ public class MemberServiceImpl implements MemberService {
 
     private static final List<String> FORBIDDEN_NICKNAMES = List.of("관리자", "운영자", "admin", "administrator", "gm");
 
+    /**
+     * 회원가입. 아이디·닉네임·이메일 중복과 금칙어를 검사하고, 동의 일시와 약관 버전을 함께 저장한다.
+     *
+     * @param request 가입 정보
+     * @throws IllegalArgumentException 중복이거나 쓸 수 없는 값이면
+     */
     @Override
     @Transactional
     public void signup(SignupRequest request) {
@@ -71,12 +77,24 @@ public class MemberServiceImpl implements MemberService {
         log.info("회원가입 완료 memberId={} loginId={}", member.getMemberId(), member.getLoginId());
     }
 
+    /**
+     * 아이디를 쓸 수 있는지 확인한다.
+     *
+     * @param loginId 아이디
+     * @return 비어 있지 않고 아직 없으면 true
+     */
     @Override
     public boolean isLoginIdAvailable(String loginId) {
         if (loginId == null || loginId.isBlank()) return false;
         return memberRepository.findByLoginId(loginId).isEmpty();
     }
 
+    /**
+     * 닉네임을 쓸 수 있는지 확인한다 (금칙어 포함).
+     *
+     * @param nickname 닉네임
+     * @return 쓸 수 있으면 true
+     */
     @Override
     public boolean isNicknameAvailable(String nickname) {
         if (nickname == null || nickname.isBlank()) return false;
@@ -84,6 +102,12 @@ public class MemberServiceImpl implements MemberService {
         return !memberRepository.existsByNickname(nickname);
     }
 
+    /**
+     * 내 정보: 도감 수집 수와 최고 점수를 함께 계산한다.
+     *
+     * @param member 회원
+     * @return 프로필
+     */
     @Override
     @Transactional
     public MemberProfileDTO getProfile(MemberEntity member) {
@@ -100,6 +124,14 @@ public class MemberServiceImpl implements MemberService {
         return MemberProfileDTO.of(managed, collectionCount, bestScore);
     }
 
+    /**
+     * 비밀번호를 바꾼다. 현재 비밀번호를 확인하고, 같은 비밀번호는 거부하며, 다른 기기의 로그인을 끊는다.
+     *
+     * @param member  회원
+     * @param request 현재 비밀번호, 새 비밀번호
+     * @throws IllegalArgumentException 현재 비밀번호가 틀리거나 새 비밀번호가 같으면
+     * @throws IllegalStateException    비밀번호가 없는 소셜 계정이면
+     */
     @Override
     @Transactional
     public void changePassword(MemberEntity member, PasswordChangeRequest request) {
@@ -123,6 +155,13 @@ public class MemberServiceImpl implements MemberService {
         log.info("비밀번호 변경 memberId={}", managed.getMemberId());
     }
 
+    /**
+     * 닉네임을 바꾼다.
+     *
+     * @param member  회원
+     * @param request 새 닉네임
+     * @throws IllegalArgumentException 같거나 중복이거나 금칙어면
+     */
     @Override
     @Transactional
     public void changeNickname(MemberEntity member, NicknameChangeRequest request) {
@@ -137,6 +176,13 @@ public class MemberServiceImpl implements MemberService {
         log.info("닉네임 변경 memberId={} -> {}", managed.getMemberId(), request.nickname());
     }
 
+    /**
+     * 이름과 이메일을 등록하거나 바꾼다. 이메일은 계정 복구 수단이라 비밀번호가 있는 계정은 현재 비밀번호를 확인한다.
+     *
+     * @param member  회원
+     * @param request 이름, 이메일, 현재 비밀번호
+     * @throws IllegalArgumentException 비밀번호가 틀리거나 이메일이 중복이면
+     */
     @Override
     @Transactional
     public void changeContact(MemberEntity member, ContactChangeRequest request) {
@@ -159,6 +205,11 @@ public class MemberServiceImpl implements MemberService {
         log.info("이름·이메일 변경 memberId={}", managed.getMemberId());
     }
 
+    /**
+     * 회원 탈퇴 (소프트 삭제). 진행 중인 게임을 끝내고, AI 대화 기록을 지우고, 개인정보를 익명화한 뒤 토큰을 폐기한다.
+     *
+     * @param member 회원
+     */
     @Override
     @Transactional
     public void withdraw(MemberEntity member) {
@@ -185,6 +236,12 @@ public class MemberServiceImpl implements MemberService {
         log.info("회원 탈퇴 처리 memberId={}", managed.getMemberId());
     }
 
+    /**
+     * 도감: 회원이 지금까지 손에 넣은 장비·스킬·유물·소모품. 참조가 끊긴 행은 건너뛴다.
+     *
+     * @param member 회원
+     * @return 도감
+     */
     @Override
     @Transactional
     public IllustratedEncyclopediaDTO getEncyclopedia(MemberEntity member) {
@@ -228,6 +285,12 @@ public class MemberServiceImpl implements MemberService {
                 .orElseThrow(() -> new NoSuchElementException("회원을 찾을 수 없습니다."));
     }
 
+    /**
+     * 닉네임을 검사한다.
+     *
+     * @param nickname 닉네임
+     * @throws IllegalArgumentException 금칙어이거나 중복이면
+     */
     private void validateNickname(String nickname) {
         if (isForbidden(nickname)) {
             throw new IllegalArgumentException("사용할 수 없는 닉네임입니다.");
@@ -237,32 +300,74 @@ public class MemberServiceImpl implements MemberService {
         }
     }
 
+    /**
+     * 운영자·관리자 같은 사칭용 닉네임인지 확인한다 (공백 무시, 대소문자 무시).
+     *
+     * @param nickname 닉네임
+     * @return 금칙어를 포함하면 true
+     */
     private boolean isForbidden(String nickname) {
         String normalized = nickname.replaceAll("\\s", "").toLowerCase();
         return FORBIDDEN_NICKNAMES.stream().anyMatch(normalized::contains);
     }
 
+    /**
+     * 스킬 엔티티를 응답용 DTO로 옮긴다.
+     *
+     * @param s 스킬
+     * @return DTO
+     */
     private SkillDTO toSkillDTO(SkillEntity s) {
         return new SkillDTO(s.getName(), s.getTarget(), s.getAttackCount(), s.getCoefficient(), s.getCost(),
                 s.getCooldown(), s.getStatusEffect(), s.getEffectStack(), s.getDescription());
     }
 
+    /**
+     * 유물 엔티티를 응답용 DTO로 옮긴다.
+     *
+     * @param r 유물
+     * @return DTO
+     */
     private RelicDTO toRelicDTO(RelicEntity r) {
         return new RelicDTO(r.getRelicId(), r.getName(), r.getEffectDesc(), r.getRarity(), r.getScoreCost());
     }
 
+    /**
+     * 소모품 엔티티를 응답용 DTO로 옮긴다.
+     *
+     * @param c 소모품
+     * @return DTO
+     */
     private ConsumableDTO toConsumableDTO(ConsumableEntity c) {
         return new ConsumableDTO(c.getConsumableId(), c.getName(), c.getEffectType(), c.getEffectValue(), c.getScoreCost(), c.getDescription());
     }
 
+    /**
+     * 무기 엔티티를 응답용 DTO로 옮긴다.
+     *
+     * @param w 무기
+     * @return DTO
+     */
     private WeaponDTO toWeaponDTO(WeaponEntity w) {
         return new WeaponDTO(w.getWeaponId(), w.getName(), w.getType(), w.getAtkBonus(), w.getSpecialEffect(), w.getScoreCost(), w.getDescription());
     }
 
+    /**
+     * 갑옷 엔티티를 응답용 DTO로 옮긴다.
+     *
+     * @param a 갑옷
+     * @return DTO
+     */
     private ArmorDTO toArmorDTO(ArmorEntity a) {
         return new ArmorDTO(a.getArmorId(), a.getName(), a.getType(), a.getDefBonus(), a.getSpecialEffect(), a.getScoreCost(), a.getDescription());
     }
 
+    /**
+     * 투구 엔티티를 응답용 DTO로 옮긴다.
+     *
+     * @param h 투구
+     * @return DTO
+     */
     private HelmetDTO toHelmetDTO(HelmetEntity h) {
         return new HelmetDTO(h.getHelmetId(), h.getName(), h.getType(), h.getHpBonus(), h.getSpecialEffect(), h.getScoreCost(), h.getDescription());
     }

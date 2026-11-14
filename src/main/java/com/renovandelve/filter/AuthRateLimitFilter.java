@@ -28,6 +28,9 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private record Rule(String bucket, int limit, Duration window) {
     }
 
+    /**
+     * 인증 API를 접속 IP 단위로 센다. 한도를 넘으면 429와 Retry-After로 응답하고 다음 필터로 보내지 않는다.
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
@@ -47,6 +50,12 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    /**
+     * 요청 경로에 걸리는 제한 규칙을 고른다.
+     *
+     * @param path 요청 URI
+     * @return 규칙, 제한 대상이 아니면 null
+     */
     private Rule resolveRule(String path) {
         return switch (path) {
             case "/api/auth/login" -> new Rule("login", 10, Duration.ofMinutes(1));

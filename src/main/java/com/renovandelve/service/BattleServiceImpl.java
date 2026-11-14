@@ -5,7 +5,7 @@ import com.renovandelve.domain.skillentity.SkillEntity;
 import com.renovandelve.engine.SessionMonster;
 import com.renovandelve.engine.SkillSynergies;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Random;
 
 @Service
-@Log4j2
+@Slf4j
 @RequiredArgsConstructor
 public class BattleServiceImpl implements BattleService {
 
@@ -47,6 +47,9 @@ public class BattleServiceImpl implements BattleService {
 
     private final Random random = new Random();
 
+    /**
+     * 플레이어 공격 (스킬 조합 시너지 없음). 시너지를 쓰는 오버로드에 위임한다.
+     */
     @Override
     public void applyPlayerAttack(SkillEntity skill, int attack, double critChance, double damageMultiplier,
                                   double bleedMultiplier, int critBleedStacks,
@@ -55,6 +58,20 @@ public class BattleServiceImpl implements BattleService {
                 SkillSynergies.NONE, targets, log);
     }
 
+    /**
+     * 스킬로 대상들을 공격한다. 계수 × 공격력 × 배율에서 방어력을 빼고(최소 1), 치명타·다단 히트·
+     * 방어 태세(피해 절반)·스킬 조합 시너지를 반영한 뒤 상태이상을 건다.
+     *
+     * @param skill            쓴 스킬
+     * @param attack           플레이어 공격력
+     * @param critChance       치명타 확률
+     * @param damageMultiplier 유물·가호 피해 배율
+     * @param bleedMultiplier  출혈 피해 배율
+     * @param critBleedStacks  치명타 시 추가 출혈 스택 (피의 사냥 시너지)
+     * @param synergies        스킬 조합 시너지
+     * @param targets          대상
+     * @param log              전투 기록
+     */
     @Override
     public void applyPlayerAttack(SkillEntity skill, int attack, double critChance, double damageMultiplier,
                                   double bleedMultiplier, int critBleedStacks, SkillSynergies synergies,
@@ -111,11 +128,22 @@ public class BattleServiceImpl implements BattleService {
         }
     }
 
+    /**
+     * 스킬의 상태이상을 건다 (추가 스택 없음).
+     */
     @Override
     public void applyStatusEffect(SkillEntity skill, List<SessionMonster> targets, List<String> log) {
         applyStatusEffect(skill, 0, targets, log);
     }
 
+    /**
+     * 스킬의 상태이상을 살아 있는 대상에게 건다.
+     *
+     * @param skill       쓴 스킬
+     * @param extraStacks 시너지로 늘어나는 스택
+     * @param targets     대상
+     * @param log         전투 기록
+     */
     @Override
     public void applyStatusEffect(SkillEntity skill, int extraStacks, List<SessionMonster> targets, List<String> log) {
         if (skill.getStatusEffect() == 0) return;
@@ -131,6 +159,12 @@ public class BattleServiceImpl implements BattleService {
         }
     }
 
+    /**
+     * 턴이 끝날 때 지속 피해를 준다: 화상(최대 HP 1% × 스택, 방어 무시), 독(고정), 출혈(스택만큼, 1씩 감소).
+     *
+     * @param monsters 몬스터
+     * @param log      전투 기록
+     */
     @Override
     public void applyDotDamage(List<SessionMonster> monsters, List<String> log) {
         for (SessionMonster monster : monsters) {
@@ -162,6 +196,17 @@ public class BattleServiceImpl implements BattleService {
         }
     }
 
+    /**
+     * 몬스터들이 예고한 행동대로 플레이어를 공격한 총 피해를 계산한다.
+     * 기절한 적은 쉬고, 방어 태세인 적은 공격하지 않으며, 강공은 1.6배다. 한 마리 피해는 적 공격력의 15% 밑으로 내려가지 않는다.
+     *
+     * @param monsters           몬스터
+     * @param defense            플레이어 방어력
+     * @param flatReduction      유물로 줄어드는 고정 피해
+     * @param incomingMultiplier 받는 피해 배율 (방어 태세 0.4, 가호 등)
+     * @param log                전투 기록
+     * @return 총 피해
+     */
     @Override
     public int monsterAttackDamage(List<SessionMonster> monsters, int defense, int flatReduction,
                                    double incomingMultiplier, List<String> log) {
@@ -195,6 +240,11 @@ public class BattleServiceImpl implements BattleService {
         return totalDamage;
     }
 
+    /**
+     * 살아 있는 몬스터의 다음 턴 행동을 정한다 (공격 / 강공 / 방어).
+     *
+     * @param monsters 몬스터
+     */
     @Override
     public void rollIntents(List<SessionMonster> monsters) {
         for (SessionMonster monster : monsters) {
@@ -221,6 +271,12 @@ public class BattleServiceImpl implements BattleService {
         return INTENT_ATTACK;
     }
 
+    /**
+     * 보스가 HP 절반 이하가 되면 한 번 격노해 공격력이 30% 오른다.
+     *
+     * @param monsters 몬스터
+     * @param log      전투 기록
+     */
     @Override
     public void applyEnrage(List<SessionMonster> monsters, List<String> log) {
         for (SessionMonster monster : monsters) {
@@ -233,29 +289,43 @@ public class BattleServiceImpl implements BattleService {
         }
     }
 
+    /**
+     * 살아 있는 몬스터가 없는지 확인한다.
+     *
+     * @param monsters 몬스터
+     * @return 모두 쓰러졌으면 true
+     */
     @Override
     public boolean isAllMonsterDead(List<SessionMonster> monsters) {
         return monsters.stream().noneMatch(SessionMonster::isAlive);
     }
 
+    /**
+     * 한 턴이 지난 쿨타임을 반영한다. 방금 쓴 스킬은 쿨타임을 걸고, 나머지는 1턴씩 줄인다.
+     *
+     * @param slots             스킬 슬롯
+     * @param usedSlotId        이번 턴에 쓴 슬롯 (없으면 null)
+     * @param cooldownReduction 유물로 줄어드는 쿨타임
+     */
     @Override
     public void updateCoolTimes(List<GameSkillSlotEntity> slots, Long usedSlotId, int cooldownReduction) {
         for (GameSkillSlotEntity slot : slots) {
             if (slot.getSlotId().equals(usedSlotId)) {
-                int cooldown = slot.getSkill().getCooldown();
-                if (cooldown > 0) {
-                    slot.setCoolTime(Math.max(1, cooldown - cooldownReduction));
-                } else {
-                    slot.setCoolTime(0);
-                }
+                slot.startCooldown(cooldownReduction);
             } else {
-                slot.setCoolTime(Math.max(0, slot.getCoolTime() - 1));
+                slot.tickCooldown();
             }
         }
     }
 
     /* HELPER METHODS */
 
+    /**
+     * 스킬의 상태이상 번호를 버프 키로 바꾼다 (1 출혈, 2 화상, 3 독, 4 기절).
+     *
+     * @param statusEffect 상태이상 번호
+     * @return 버프 키
+     */
     private String resolveBuffName(short statusEffect) {
         return switch (statusEffect) {
             case BLEED -> BUFF_BLEED;
@@ -266,6 +336,12 @@ public class BattleServiceImpl implements BattleService {
         };
     }
 
+    /**
+     * 버프 키를 전투 기록용 한국어로 바꾼다.
+     *
+     * @param buffName 버프 키
+     * @return 한국어 이름
+     */
     private String koreanBuffName(String buff) {
         return switch (buff) {
             case BUFF_BLEED -> "출혈";

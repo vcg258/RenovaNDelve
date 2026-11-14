@@ -100,7 +100,8 @@ class SkillSlotServiceTest {
         assertThat(replaced.getCoolTime()).isZero();
         assertThat(game.getGameSkillSlot()).filteredOn(slot -> slot.getSlotId() != 5L)
                 .allSatisfy(slot -> assertThat(slot.getSkill().getName()).startsWith("스킬"));
-        verify(gameSkillSlotRepository).save(replaced);
+        // 이미 영속 상태인 슬롯은 변경 감지로 반영된다. 저장소를 따로 부르지 않는다
+        verify(gameSkillSlotRepository, never()).save(any());
     }
 
     @Test
@@ -146,7 +147,8 @@ class SkillSlotServiceTest {
         skillSlotService.discard(game, 1L);
 
         assertThat(game.getGameSkillSlot()).hasSize(2).doesNotContain(basic);
-        verify(gameSkillSlotRepository).delete(basic);
+        // 목록에서 빠진 슬롯은 orphanRemoval로 지워진다. 저장소를 따로 부르지 않는다
+        verify(gameSkillSlotRepository, never()).delete(any(GameSkillSlotEntity.class));
     }
 
     @Test

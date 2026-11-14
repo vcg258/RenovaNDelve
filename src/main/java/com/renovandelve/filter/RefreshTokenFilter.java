@@ -17,7 +17,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -38,7 +38,7 @@ import java.util.Map;
  * - RefreshToken은 httpOnly 쿠키로만 오가며, 응답 본문에는 싣지 않는다
  * - typ=refresh 인 토큰만 재발급에 사용할 수 있다
  */
-@Log4j2
+@Slf4j
 public class RefreshTokenFilter extends OncePerRequestFilter {
     private final String refreshPath;
     private final JwtUtil jwtUtil;
@@ -57,6 +57,10 @@ public class RefreshTokenFilter extends OncePerRequestFilter {
         this.refreshCookieFactory = refreshCookieFactory;
     }
 
+    /**
+     * /api/auth/refresh 요청만 처리한다. RefreshToken 쿠키를 검증하고 Redis 값과 대조한 뒤,
+     * 계정 상태·권한을 DB에서 다시 확인해 새 AccessToken을 발급한다. 다른 경로는 그대로 통과시킨다.
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         // 요청경로 refreshPath 아니면 Pass
@@ -138,6 +142,12 @@ public class RefreshTokenFilter extends OncePerRequestFilter {
         sendToken(accessTokenValue, response);
     }
 
+    /**
+     * 요청에서 RefreshToken 쿠키 값을 꺼낸다.
+     *
+     * @param request 요청
+     * @return 토큰, 없으면 null
+     */
     private String readRefreshCookie(HttpServletRequest request) {
         if (request.getCookies() == null) return null;
         for (Cookie cookie : request.getCookies()) {

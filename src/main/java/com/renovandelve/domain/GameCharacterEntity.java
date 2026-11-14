@@ -73,10 +73,20 @@ public class GameCharacterEntity { //제외
         this.attack = Math.max(1, this.attack + delta);
     }
 
+    /**
+     * 방어력을 올리거나 내린다 (장비 교체, 소모품, 모닥불 단련). 0 아래로는 내려가지 않는다.
+     *
+     * @param delta 바꿀 양 (음수면 감소)
+     */
     public void applyDefenseDelta(int delta) {
         this.defense = Math.max(0, this.defense + delta);
     }
 
+    /**
+     * 최대 HP를 올리거나 내린다. 줄어들면 현재 HP도 새 최대치에 맞춰 깎는다. 최소 1.
+     *
+     * @param delta 바꿀 양 (음수면 감소)
+     */
     public void applyMaxHpDelta(int delta) {
         this.maxHp = Math.max(1, this.maxHp + delta);
         this.currentHp = Math.min(this.currentHp, this.maxHp);

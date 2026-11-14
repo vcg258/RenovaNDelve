@@ -7,7 +7,7 @@ import com.renovandelve.dto.response.GameHistoryDTO;
 import com.renovandelve.repository.GameStateRepository;
 import com.renovandelve.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,7 +29,7 @@ import java.util.NoSuchElementException;
  * - 회원 테이블의 식별 정보 (아이디, 닉네임, 이름, 이메일, 비밀번호 해시)
  * - AI 대화 기록 (SPRING_AI_CHAT_MEMORY): 가이드 챗봇에 입력한 자유 텍스트가 그대로 남는다
  */
-@Log4j2
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PersonalDataService {
@@ -46,10 +46,22 @@ public class PersonalDataService {
     @Value("${renovaNDelve.privacy.chat-retention-days:30}")
     private int chatRetentionDays;
 
+    /**
+     * 가이드 챗봇 대화 기록 ID.
+     *
+     * @param loginId 로그인 아이디
+     * @return guide-{아이디}
+     */
     public static String guideConversationId(String loginId) {
         return "guide-" + loginId;
     }
 
+    /**
+     * 게임 서사 대화 기록 ID.
+     *
+     * @param gameStateId 게임 ID
+     * @return game-{게임 ID}
+     */
     public static String gameConversationId(Long gameStateId) {
         return "game-" + gameStateId;
     }
@@ -153,6 +165,12 @@ public class PersonalDataService {
         }
     }
 
+    /**
+     * 랭킹 기록을 내려받기용 맵으로 옮긴다.
+     *
+     * @param ranking 랭킹 기록
+     * @return 난이도, 최고 점수, 클리어 시간, 달성 일시
+     */
     private Map<String, Object> toRankingMap(RankingEntity ranking) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("difficulty", ranking.getDifficulty());

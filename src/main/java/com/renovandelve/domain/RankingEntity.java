@@ -41,6 +41,9 @@ public class RankingEntity {
     private LocalDateTime achievedAt; // 기록 달성 일시
 
     // 생명주기 도메인 메서드 (INSERT 직전에 값을 기록하고 넣어주는 역할)
+    /**
+     * 처음 저장될 때 기록 달성 일시를 남긴다 (JPA 생명주기 콜백).
+     */
     @PrePersist
     private void onCreate() {
         this.achievedAt = LocalDateTime.now();

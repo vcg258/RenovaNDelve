@@ -20,6 +20,13 @@ import java.util.List;
 public class RankingController {
     private final RankingRepository rankingRepository;
 
+    /**
+     * 난이도별 랭킹.
+     *
+     * @param difficulty EASY / NORMAL / HARD / HELL
+     * @return 랭킹 목록
+     * @throws IllegalArgumentException 알 수 없는 난이도면
+     */
     @Operation(summary = "난이도별 TOP 10 랭킹 조회")
     @GetMapping
     @Transactional(readOnly = true)

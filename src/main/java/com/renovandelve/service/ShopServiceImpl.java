@@ -14,13 +14,13 @@ import com.renovandelve.engine.ShopStockItem;
 import com.renovandelve.repository.*;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 
 @Service
-@Log4j2
+@Slf4j
 @RequiredArgsConstructor
 public class ShopServiceImpl implements ShopService {
     private final WeaponRepository weaponRepository;
@@ -55,6 +55,12 @@ public class ShopServiceImpl implements ShopService {
             Rarity.EPIC, 700
     );
 
+    /**
+     * 상점 진열품을 뽑는다: 소모품 2, 스킬 1, 유물 1, 장비 1. 깊이 내려갈수록, 탐욕의 세금 서약이면 값이 오른다.
+     *
+     * @param gameState 게임
+     * @return 진열품
+     */
     @Override
     public List<ShopStockItem> generateStock(GameStateEntity gameState) {
         int stage = gameState.getCurrentStage();
@@ -92,12 +98,25 @@ public class ShopServiceImpl implements ShopService {
         return stock;
     }
 
+    /**
+     * 구매를 적용한다 (스킬 교체 없음).
+     */
     @Override
     @Transactional
     public void applyPurchase(GameStateEntity gameState, MemberEntity member, ShopStockItem stockItem) {
         applyPurchase(gameState, member, stockItem, null);
     }
 
+    /**
+     * 구매를 적용한다. 스킬이 가득 찼는데 버릴 슬롯이 없으면 골드를 건드리기 전에 거부한다.
+     *
+     * @param gameState     게임
+     * @param member        회원 (도감 등록용)
+     * @param stockItem     산 진열품
+     * @param replaceSlotId 버릴 스킬 슬롯 (없으면 null)
+     * @throws IllegalStateException 슬롯이 가득 찼는데 버릴 슬롯이 없으면
+     * @throws IllegalArgumentException 골드가 부족하면
+     */
     @Override
     @Transactional
     public void applyPurchase(GameStateEntity gameState, MemberEntity member, ShopStockItem stockItem,
@@ -127,6 +146,13 @@ public class ShopServiceImpl implements ShopService {
 
     /* HELPER METHODS */
 
+    /**
+     * 무기를 사서 바로 장착한다. 이전 무기의 보너스를 빼고 새 보너스를 더해 공격력을 다시 계산하고 도감에 등록한다.
+     *
+     * @param gameState 게임
+     * @param member    회원 (도감 등록용)
+     * @param weaponId  무기 ID
+     */
     private void purchaseWeapon(GameStateEntity gameState, MemberEntity member, Long weaponId) {
         GameEquipmentEntity equipment = findEquipment(gameState);
         WeaponEntity weapon = weaponRepository.findById(weaponId)
@@ -145,6 +171,13 @@ public class ShopServiceImpl implements ShopService {
         }
     }
 
+    /**
+     * 갑옷를 사서 바로 장착한다. 이전 갑옷의 보너스를 빼고 새 보너스를 더해 방어력을 다시 계산하고 도감에 등록한다.
+     *
+     * @param gameState 게임
+     * @param member    회원 (도감 등록용)
+     * @param armorId   갑옷 ID
+     */
     private void purchaseArmor(GameStateEntity gameState, MemberEntity member, Long armorId) {
         GameEquipmentEntity equipment = findEquipment(gameState);
         ArmorEntity armor = armorRepository.findById(armorId)
@@ -162,6 +195,13 @@ public class ShopServiceImpl implements ShopService {
         }
     }
 
+    /**
+     * 투구를 사서 바로 장착한다. 이전 투구의 보너스를 빼고 새 보너스를 더해 최대 HP을 다시 계산하고 도감에 등록한다.
+     *
+     * @param gameState 게임
+     * @param member    회원 (도감 등록용)
+     * @param helmetId  투구 ID
+     */
     private void purchaseHelmet(GameStateEntity gameState, MemberEntity member, Long helmetId) {
         GameEquipmentEntity equipment = findEquipment(gameState);
         HelmetEntity helmet = helmetRepository.findById(helmetId)
@@ -179,6 +219,14 @@ public class ShopServiceImpl implements ShopService {
         }
     }
 
+    /**
+     * 스킬을 배우고 도감에 등록한다.
+     *
+     * @param gameState     게임
+     * @param member        회원
+     * @param skillId       스킬 ID
+     * @param replaceSlotId 버릴 스킬 슬롯 (없으면 null)
+     */
     private void purchaseSkill(GameStateEntity gameState, MemberEntity member, Long skillId, Long replaceSlotId) {
         SkillEntity skill = skillSlotService.learn(gameState, skillId, replaceSlotId);
 
@@ -187,49 +235,81 @@ public class ShopServiceImpl implements ShopService {
         }
     }
 
+    /**
+     * 유물을 얻고 도감에 등록한다.
+     *
+     * @param gameState 게임
+     * @param member    회원
+     * @param relicId   유물 ID
+     * @throws IllegalStateException 이미 가진 유물이면
+     */
     private void purchaseRelic(GameStateEntity gameState, MemberEntity member, Long relicId) {
-        boolean alreadyOwned = gameRelicInventoryRepository
-                .findByGameState_GameStateId(gameState.getGameStateId()).stream()
-                .anyMatch(r -> r.getRelic().getRelicId().equals(relicId));
-        if (alreadyOwned) {
+        if (gameState.ownsRelic(relicId)) {
             throw new IllegalStateException("이미 보유 중인 유물입니다.");
         }
 
         RelicEntity relic = relicRepository.findById(relicId)
                 .orElseThrow(() -> new NoSuchElementException("유물을 찾을 수 없습니다."));
 
-        // 저장과 함께 엔티티 목록에도 넣어야 구매 응답의 상태에 바로 보인다
-        gameState.getGameRelicInventory().add(gameRelicInventoryRepository.save(GameRelicInventoryEntity.builder()
-                .gameState(gameState).relic(relic).build()));
+        // cascade로도 저장되지만, 구매 응답에 담을 칸 ID를 지금 받기 위해 바로 저장한다
+        gameRelicInventoryRepository.save(gameState.addRelic(relic));
 
         if (!collectionRelicRepository.existsByMemberAndRelic(member, relic)) {
             collectionRelicRepository.save(CollectionRelicEntity.builder().member(member).relic(relic).build());
         }
     }
 
+    /**
+     * 소모품을 얻고 도감에 등록한다.
+     *
+     * @param gameState    게임
+     * @param member       회원
+     * @param consumableId 소모품 ID
+     */
     private void purchaseConsumable(GameStateEntity gameState, MemberEntity member, Long consumableId) {
         ConsumableEntity consumable = consumableRepository.findById(consumableId)
                 .orElseThrow(() -> new NoSuchElementException("소모품을 찾을 수 없습니다."));
 
-        gameState.getGameConsumableInventory().add(gameConsumableInventoryRepository.save(GameConsumableInventoryEntity.builder()
-                .gameState(gameState).consumable(consumable).build()));
+        gameConsumableInventoryRepository.save(gameState.addConsumable(consumable));
 
         if (!collectionConsumableRepository.existsByMemberAndConsumable(member, consumable)) {
             collectionConsumableRepository.save(CollectionConsumableEntity.builder().member(member).consumable(consumable).build());
         }
     }
 
+    /**
+     * 게임의 장비 슬롯.
+     *
+     * @param gameState 게임
+     * @return 장비 슬롯
+     */
     private GameEquipmentEntity findEquipment(GameStateEntity gameState) {
         return gameEquipmentRepository.findByGameState_GameStateId(gameState.getGameStateId())
                 .stream().findFirst()
                 .orElseThrow(() -> new NoSuchElementException("장비 슬롯을 찾을 수 없습니다."));
     }
 
+    /**
+     * 게임의 캐릭터.
+     *
+     * @param gameState 게임
+     * @return 캐릭터
+     */
     private GameCharacterEntity findCharacter(GameStateEntity gameState) {
         return gameState.getGameCharacter().stream().findFirst()
                 .orElseThrow(() -> new NoSuchElementException("캐릭터 정보가 없습니다."));
     }
 
+    /**
+     * 진열품 한 칸을 만든다.
+     *
+     * @param type        품목 종류
+     * @param id          품목 ID
+     * @param name        이름
+     * @param description 설명
+     * @param price       가격
+     * @return 진열품
+     */
     private ShopStockItem stockItem(String type, Long id, String name, String description, int price) {
         ShopStockItem item = new ShopStockItem();
         item.setItemType(type);
@@ -241,10 +321,25 @@ public class ShopServiceImpl implements ShopService {
         return item;
     }
 
+    /**
+     * 기준 가격에 배율을 곱해 반올림한다.
+     *
+     * @param base   기준 가격
+     * @param factor 배율
+     * @return 가격
+     */
     private int scale(int base, double factor) {
         return (int) Math.round(base * factor);
     }
 
+    /**
+     * 목록에서 무작위로 몇 개 고른다.
+     *
+     * @param list  후보
+     * @param count 고를 수
+     * @param <T>   항목 타입
+     * @return 고른 항목 (후보가 적으면 전부)
+     */
     private <T> List<T> pickRandom(List<T> list, int count) {
         if (list.size() <= count) return new ArrayList<>(list);
         List<T> shuffled = new ArrayList<>(list);

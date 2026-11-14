@@ -40,6 +40,12 @@ public class SkillSynergies {
     private double afflictedMultiplier = 1.0;    // 재앙의 조율: 상태이상이 걸린 적에게 주는 피해
     private final List<String> activeSynergies = new ArrayList<>();
 
+    /**
+     * 보유 스킬의 성질(상태이상·대상·계수)로 발동하는 조합 시너지를 계산한다.
+     *
+     * @param skills 보유 스킬 (null이면 시너지 없음)
+     * @return 발동한 시너지
+     */
     public static SkillSynergies of(Collection<SkillEntity> skills) {
         SkillSynergies synergies = new SkillSynergies();
         if (skills == null) return synergies;
@@ -113,6 +119,12 @@ public class SkillSynergies {
         };
     }
 
+    /**
+     * 상태이상이 하나라도 걸려 있는지 확인한다.
+     *
+     * @param buffs 몬스터의 상태이상 스택
+     * @return 걸려 있으면 true
+     */
     private static boolean isAfflicted(Map<String, Integer> buffs) {
         return buffs != null && buffs.values().stream().anyMatch(stack -> stack != null && stack > 0);
     }

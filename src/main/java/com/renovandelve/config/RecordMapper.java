@@ -4,6 +4,15 @@ import java.util.List;
 
 public class RecordMapper {
 
+    /**
+     * 엔티티 같은 일반 객체를 record로 옮긴다. record 구성 요소와 이름이 같은 getter의 값을 넣는다.
+     *
+     * @param source     값을 꺼낼 객체 (null이면 null)
+     * @param recordType 만들 record 타입
+     * @param <T>        record 타입
+     * @return 새 record
+     * @throws IllegalArgumentException record가 아니거나 값을 꺼내지 못하면
+     */
     public static <T> T map(Object source, Class<T> recordType) {
         if (!recordType.isRecord()) {
             throw new IllegalArgumentException(recordType.getName() + "은 Record가 아닙니다.");
@@ -44,6 +53,14 @@ public class RecordMapper {
     }
 
     // List 변환도 지원
+    /**
+     * 목록을 한꺼번에 record로 옮긴다.
+     *
+     * @param sourceList 값을 꺼낼 객체 목록
+     * @param recordType 만들 record 타입
+     * @param <T>        record 타입
+     * @return 새 record 목록
+     */
     public static <T> List<T> mapList(List<?> sourceList, Class<T> recordType) {
         return sourceList.stream()
                 .map(source -> map(source, recordType))

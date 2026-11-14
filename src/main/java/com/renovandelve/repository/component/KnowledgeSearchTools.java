@@ -1,7 +1,7 @@
 package com.renovandelve.repository.component;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
  * 검색 대상은 GameDataEtlService가 RDB에서 VectorStore로 동기화한 문서이며,
  * 메타데이터 필터로 카테고리를 좁혀 다른 종류의 문서가 섞이지 않게 한다.
  */
-@Log4j2
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class KnowledgeSearchTools {
@@ -38,6 +38,14 @@ public class KnowledgeSearchTools {
             게임 데이터를 의미로 검색합니다. 사용자가 정확한 이름을 모르고 특징·용도·분위기로 물을 때 사용하세요.
             예: '출혈에 좋은 스킬', '방어력을 올려주는 유물', '독을 쓰는 몬스터', '체력이 낮을 때 쓸 만한 소모품'.
             정확한 아이템 이름을 이미 알고 있다면 이 도구 대신 이름 조회 도구를 쓰세요.""")
+    /**
+     * [AI Tool] 특징으로 게임 데이터를 의미 검색한다 (예: "출혈 피해를 늘려주는 것").
+     * 이름을 몰라도 찾을 수 있어 이름 기반 GameTools를 보완한다. 범위는 허용 목록의 카테고리만 받는다.
+     *
+     * @param query    찾고 싶은 특징을 설명하는 한국어 검색어
+     * @param category 검색 범위 (monster, weapon, armor, helmet, skill, relic, consumable, all)
+     * @return 유사한 항목 요약, 없으면 안내 문구
+     */
     public String searchGameKnowledge(
             @ToolParam(description = "찾고 싶은 특징을 설명하는 한국어 검색어. 예: '출혈 피해를 늘려주는 것'") String query,
             @ToolParam(description = "검색 범위. monster, weapon, armor, helmet, skill, relic, consumable 중 하나. 범위를 모르면 all",

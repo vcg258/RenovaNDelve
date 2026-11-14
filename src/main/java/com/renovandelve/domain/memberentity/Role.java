@@ -8,6 +8,11 @@ public enum Role {
     USER,   // 일반 플레이어
     ADMIN;  // 운영자 (회원 관리, ETL, 통계)
 
+    /**
+     * 스프링 시큐리티 권한 이름 (예: ROLE_ADMIN).
+     *
+     * @return ROLE_ 접두사를 붙인 이름
+     */
     public String authority() {
         return "ROLE_" + name();
     }

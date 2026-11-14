@@ -4,7 +4,7 @@ import com.google.gson.Gson;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.AuthenticationException;
@@ -17,11 +17,14 @@ import java.util.Map;
  * 로그인 실패 응답.
  * 계정 존재 여부가 드러나지 않도록 메시지를 통일하되, 정지 계정과 시도 제한은 명확히 안내한다.
  */
-@Log4j2
+@Slf4j
 @RequiredArgsConstructor
 public class LoginFailureHandler implements AuthenticationFailureHandler {
     private final LoginAttemptService loginAttemptService;
 
+    /**
+     * 로그인 실패 응답을 만든다. 정지 계정, 잠김, 일반 실패(남은 횟수 안내)를 구분해 401로 알린다.
+     */
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
                                         AuthenticationException exception) throws IOException {

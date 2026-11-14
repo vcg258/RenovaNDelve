@@ -20,18 +20,44 @@ public final class TokenClaims {
     private TokenClaims() {
     }
 
+    /**
+     * AccessToken 클레임 (typ=access).
+     *
+     * @param loginId 로그인 아이디
+     * @param role    권한
+     * @return 클레임
+     */
     public static Map<String, Object> access(String loginId, String role) {
         return Map.of(LOGIN_ID, loginId, ROLE, role, TYPE, TYPE_ACCESS);
     }
 
+    /**
+     * RefreshToken 클레임 (typ=refresh).
+     *
+     * @param loginId 로그인 아이디
+     * @param role    권한
+     * @return 클레임
+     */
     public static Map<String, Object> refresh(String loginId, String role) {
         return Map.of(LOGIN_ID, loginId, ROLE, role, TYPE, TYPE_REFRESH);
     }
 
+    /**
+     * AccessToken 용도인지 확인한다. RefreshToken을 Bearer로 쓰는 것을 막는다.
+     *
+     * @param claims 클레임
+     * @return access면 true
+     */
     public static boolean isAccess(Map<String, Object> claims) {
         return TYPE_ACCESS.equals(claims.get(TYPE));
     }
 
+    /**
+     * RefreshToken 용도인지 확인한다.
+     *
+     * @param claims 클레임
+     * @return refresh면 true
+     */
     public static boolean isRefresh(Map<String, Object> claims) {
         return TYPE_REFRESH.equals(claims.get(TYPE));
     }

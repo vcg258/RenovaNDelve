@@ -56,6 +56,12 @@ public record Alignment(int heaven, int abyss, int human) {
         return tier == 0 || tier >= MAX_TIER ? null : TIER_THRESHOLDS[tier];
     }
 
+    /**
+     * 한 세력의 성향 점수.
+     *
+     * @param faction 세력
+     * @return 그 세력을 택한 횟수
+     */
     public int score(Faction faction) {
         return switch (faction) {
             case HEAVEN -> heaven;
@@ -64,6 +70,12 @@ public record Alignment(int heaven, int abyss, int human) {
         };
     }
 
+    /**
+     * 그 세력의 가호 단계. 단독 1위 세력이 아니면 0이다.
+     *
+     * @param faction 세력
+     * @return 0 ~ 3
+     */
     private int tierOf(Faction faction) {
         return dominant() == faction ? tier() : 0;
     }
@@ -125,6 +137,12 @@ public record Alignment(int heaven, int abyss, int human) {
         };
     }
 
+    /**
+     * 비율을 반올림한 퍼센트로 바꾼다 (설명 문구용).
+     *
+     * @param ratio 비율 (0.12 → 12)
+     * @return 퍼센트
+     */
     private static int percent(double ratio) {
         return (int) Math.round(ratio * 100);
     }

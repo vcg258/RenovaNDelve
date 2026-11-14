@@ -14,7 +14,7 @@ import com.renovandelve.dto.response.IllustratedEncyclopediaDTO;
 import com.renovandelve.repository.*;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Objects;
 
 @Service
-@Log4j2
+@Slf4j
 @RequiredArgsConstructor
 public class BattleResultServiceImpl implements BattleResultService {
 
@@ -37,6 +37,12 @@ public class BattleResultServiceImpl implements BattleResultService {
     private final RankingRepository rankingRepository;
     private final GameStateRepository gameStateRepository;
 
+    /**
+     * 이번 판에 손에 넣은 스킬·유물·소모품·장비를 회원 도감에 등록한다. 이미 등록된 것은 건너뛴다.
+     *
+     * @param gameState 끝난 게임
+     * @return 이번에 새로 등록된 항목
+     */
     @Override
     @Transactional
     public IllustratedEncyclopediaDTO registerCollection(GameStateEntity gameState) {
@@ -107,6 +113,13 @@ public class BattleResultServiceImpl implements BattleResultService {
         return new IllustratedEncyclopediaDTO(armorList, consumableList, helmetList, relicList, skillList, weaponList);
     }
 
+    /**
+     * 난이도별 랭킹에 기록한다. 쉬움 난이도는 등록하지 않고, 기존 기록보다 높을 때만 바꾼다.
+     *
+     * @param gameState 끝난 게임
+     * @param clearTime 클리어까지 걸린 초 (클리어하지 못했으면 null)
+     * @return 랭킹 기록, 등록하지 않았으면 null
+     */
     @Override
     @Transactional
     public RankingDTO updateRanking(GameStateEntity gameState, Integer clearTime) {
@@ -149,6 +162,13 @@ public class BattleResultServiceImpl implements BattleResultService {
                 saved.getClearTime(), saved.getAchievedAt(), toMemberDTO(member), toGameStateDTO(gameState));
     }
 
+    /**
+     * 게임을 끝낸다: 도감 등록, 랭킹 기록, 결과(CLEAR/DEFEAT) 저장.
+     *
+     * @param gameState 끝낼 게임
+     * @param cleared   클리어했는지
+     * @return 이번에 새로 등록된 도감 항목
+     */
     @Override
     @Transactional
     public IllustratedEncyclopediaDTO terminateGame(GameStateEntity gameState, boolean cleared) {
@@ -169,35 +189,83 @@ public class BattleResultServiceImpl implements BattleResultService {
 
     /* HELPER METHODS */
 
+    /**
+     * 회원을 도감 응답용 DTO로 옮긴다 (아이디 대신 표시 이름).
+     *
+     * @param m 회원
+     * @return DTO
+     */
     private MemberDTO toMemberDTO(MemberEntity m) {
         return MemberDTO.builder().memberId(m.getMemberId()).loginId(m.displayName()).build();
     }
 
+    /**
+     * 스킬 엔티티를 도감 응답용 DTO로 옮긴다.
+     *
+     * @param s 스킬
+     * @return DTO
+     */
     private SkillDTO toSkillDTO(SkillEntity s) {
         return new SkillDTO(s.getName(), s.getTarget(), s.getAttackCount(), s.getCoefficient(), s.getCost(),
                 s.getCooldown(), s.getStatusEffect(), s.getEffectStack(), s.getDescription());
     }
 
+    /**
+     * 유물 엔티티를 도감 응답용 DTO로 옮긴다.
+     *
+     * @param r 유물
+     * @return DTO
+     */
     private RelicDTO toRelicDTO(RelicEntity r) {
         return new RelicDTO(r.getRelicId(), r.getName(), r.getEffectDesc(), r.getRarity(), r.getScoreCost());
     }
 
+    /**
+     * 소모품 엔티티를 도감 응답용 DTO로 옮긴다.
+     *
+     * @param c 소모품
+     * @return DTO
+     */
     private ConsumableDTO toConsumableDTO(ConsumableEntity c) {
         return new ConsumableDTO(c.getConsumableId(), c.getName(), c.getEffectType(), c.getEffectValue(), c.getScoreCost(), c.getDescription());
     }
 
+    /**
+     * 무기 엔티티를 도감 응답용 DTO로 옮긴다.
+     *
+     * @param w 무기
+     * @return DTO
+     */
     private WeaponDTO toWeaponDTO(WeaponEntity w) {
         return new WeaponDTO(w.getWeaponId(), w.getName(), w.getType(), w.getAtkBonus(), w.getSpecialEffect(), w.getScoreCost(), w.getDescription());
     }
 
+    /**
+     * 갑옷 엔티티를 도감 응답용 DTO로 옮긴다.
+     *
+     * @param a 갑옷
+     * @return DTO
+     */
     private ArmorDTO toArmorDTO(ArmorEntity a) {
         return new ArmorDTO(a.getArmorId(), a.getName(), a.getType(), a.getDefBonus(), a.getSpecialEffect(), a.getScoreCost(), a.getDescription());
     }
 
+    /**
+     * 투구 엔티티를 도감 응답용 DTO로 옮긴다.
+     *
+     * @param h 투구
+     * @return DTO
+     */
     private HelmetDTO toHelmetDTO(HelmetEntity h) {
         return new HelmetDTO(h.getHelmetId(), h.getName(), h.getType(), h.getHpBonus(), h.getSpecialEffect(), h.getScoreCost(), h.getDescription());
     }
 
+    /**
+     * 게임 엔티티를 도감 응답용 DTO로 옮긴다.
+     *
+     * @param g 게임
+     * @return DTO
+     */
     private GameStateDTO toGameStateDTO(GameStateEntity g) {
         return GameStateDTO.builder()
                 .gameStateId(g.getGameStateId())

@@ -10,6 +10,11 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class SwaggerConfig {
+    /**
+     * /api/** 경로를 "REST API" 그룹으로 묶는다.
+     *
+     * @return API 문서 그룹
+     */
     @Bean
     public GroupedOpenApi restApi() {
         /* 경로에 /api가 포함된 컨트롤러의 경우에는 REST API로 인식 */
@@ -19,6 +24,11 @@ public class SwaggerConfig {
                 .build();
     }
 
+    /**
+     * /api 밖의 경로를 "COMMON API" 그룹으로 묶는다.
+     *
+     * @return API 문서 그룹
+     */
     @Bean
     public GroupedOpenApi commonApi() {
         /* 경로에 /api가 포함안된 컨트롤러의 경우에는 COMMON API로 인식 */
@@ -29,6 +39,11 @@ public class SwaggerConfig {
                 .build();
     }
 
+    /**
+     * API 문서에 JWT Bearer 인증 방식을 등록한다.
+     *
+     * @return OpenAPI 설정
+     */
     @Bean
     public OpenAPI customOpenAPI() {
         // Security Scheme 정의

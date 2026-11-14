@@ -25,10 +25,21 @@ public enum Faction {
         return tendency;
     }
 
+    /**
+     * 화면과 AI 기록에 쓰는 한국어 이름 (천상 / 마계 / 인간).
+     *
+     * @return 이름
+     */
     public String label() {
         return label;
     }
 
+    /**
+     * 문자열을 세력으로 바꾼다. 알 수 없는 값이나 null이면 null.
+     *
+     * @param value 세력 이름
+     * @return 세력 또는 null
+     */
     public static Faction parse(String value) {
         if (value == null) return null;
         try {

@@ -31,14 +31,29 @@ public enum Pact {
         this.scoreBonus = scoreBonus;
     }
 
+    /**
+     * 서약 이름.
+     *
+     * @return 이름
+     */
     public String title() {
         return title;
     }
 
+    /**
+     * 서약이 거는 제약 설명.
+     *
+     * @return 설명
+     */
     public String description() {
         return description;
     }
 
+    /**
+     * 이 서약의 점수 보너스 비율 (0.15 = +15%).
+     *
+     * @return 보너스 비율
+     */
     public double scoreBonus() {
         return scoreBonus;
     }
@@ -68,6 +83,12 @@ public enum Pact {
         return result;
     }
 
+    /**
+     * 서약 집합을 DB에 저장할 쉼표 구분 문자열로 바꾼다.
+     *
+     * @param pacts 서약 집합
+     * @return 예: IRON_FOE,FURY
+     */
     public static String serialize(Collection<Pact> pacts) {
         return pacts.stream().map(Enum::name).collect(Collectors.joining(","));
     }
@@ -77,6 +98,12 @@ public enum Pact {
         return 1.0 + pacts.stream().mapToDouble(Pact::scoreBonus).sum();
     }
 
+    /**
+     * 서약 이름 목록 (상태 바 표시용).
+     *
+     * @param pacts 서약 집합
+     * @return 이름 목록
+     */
     public static List<String> titles(Collection<Pact> pacts) {
         return new ArrayList<>(pacts.stream().map(Pact::title).toList());
     }

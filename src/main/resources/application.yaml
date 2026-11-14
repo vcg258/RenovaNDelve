@@ -28,6 +28,11 @@ spring:
     placeholder-replacement: false
 
   jpa:
+    # OSIV 끔: 영속성 컨텍스트(DB 커넥션)를 트랜잭션이 끝날 때 닫는다.
+    # 켜 두면 요청이 끝날 때까지 커넥션을 붙잡아, LLM 응답을 기다리는 노드 전진 같은 긴 요청이
+    # 커넥션 풀을 고갈시킨다. 대신 지연 로딩은 반드시 @Transactional 안(서비스)에서 끝내고,
+    # 컨트롤러에는 DTO만 넘긴다.
+    open-in-view: false
     hibernate:
       # 스키마는 Flyway만 바꾼다. Hibernate는 엔티티와 테이블이 맞는지 검사만 한다(전 프로파일 공통).
       # 엔티티를 바꾸면 같은 변경을 db/migration에 V{n}__설명.sql 로 추가해야 기동된다.

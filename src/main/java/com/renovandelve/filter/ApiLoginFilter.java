@@ -5,7 +5,7 @@ import com.renovandelve.handler.LoginAttemptService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -18,7 +18,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.util.Map;
 
-@Log4j2
+@Slf4j
 public class ApiLoginFilter extends AbstractAuthenticationProcessingFilter {
     private final LoginAttemptService loginAttemptService;
 
@@ -27,6 +27,12 @@ public class ApiLoginFilter extends AbstractAuthenticationProcessingFilter {
         this.loginAttemptService = loginAttemptService;
     }
 
+    /**
+     * JSON 본문의 아이디·비밀번호로 로그인한다. 계정+IP 단위로 잠겨 있으면 인증 전에 거부한다.
+     *
+     * @return 인증 결과
+     * @throws AuthenticationException 잠김, 형식 오류, 인증 실패
+     */
     @Override
     public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
             throws AuthenticationException, IOException, ServletException {
@@ -68,7 +74,7 @@ public class ApiLoginFilter extends AbstractAuthenticationProcessingFilter {
         try (Reader reader = new InputStreamReader(request.getInputStream())) {
             return new Gson().fromJson(reader, Map.class);
         } catch (IOException e) {
-            log.error(e.getMessage());
+            log.error("{}", e.getMessage());
         }
         return null;
     }

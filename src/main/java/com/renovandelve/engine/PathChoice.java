@@ -29,6 +29,11 @@ public enum PathChoice {
         this.ambush = ambush;
     }
 
+    /**
+     * 갈림길 이름.
+     *
+     * @return 이름
+     */
     public String title() {
         return title;
     }
@@ -51,18 +56,38 @@ public enum PathChoice {
         };
     }
 
+    /**
+     * 적 HP·공격력 배율 (위험한 길 1.25).
+     *
+     * @return 배율
+     */
     public double enemyMultiplier() {
         return enemyMultiplier;
     }
 
+    /**
+     * 승리 시 점수·골드 배율 (위험한 길 1.5, 은밀한 길 0.7).
+     *
+     * @return 배율
+     */
     public double rewardMultiplier() {
         return rewardMultiplier;
     }
 
+    /**
+     * 승리 시 늘어나는 유물 후보 수 (위험한 길 +1).
+     *
+     * @return 추가 후보 수
+     */
     public int bonusRelicOptions() {
         return bonusRelicOptions;
     }
 
+    /**
+     * 기습 여부. 은밀한 길이면 적 전원이 첫 턴에 기절한다.
+     *
+     * @return 기습이면 true
+     */
     public boolean ambush() {
         return ambush;
     }
