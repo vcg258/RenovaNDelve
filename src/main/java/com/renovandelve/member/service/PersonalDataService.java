@@ -7,6 +7,8 @@ import com.renovandelve.game.dto.response.GameHistoryDTO;
 import com.renovandelve.game.repository.GameStateRepository;
 import com.renovandelve.game.domain.WraithEntity;
 import com.renovandelve.game.repository.WraithRepository;
+import com.renovandelve.game.repository.ChronicleChapterRepository;
+import com.renovandelve.game.dto.response.ChronicleChapterDTO;
 import com.renovandelve.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +47,7 @@ public class PersonalDataService {
     private final ChatMemory chatMemory;
     private final JdbcTemplate jdbcTemplate;
     private final WraithRepository wraithRepository;
+    private final ChronicleChapterRepository chronicleChapterRepository;
 
     @Value("${renovaNDelve.privacy.chat-retention-days:30}")
     private int chatRetentionDays;
@@ -85,6 +88,8 @@ public class PersonalDataService {
         }
         // 망령에는 대화 기록에서 옮겨 둔 선택 문장이 들어 있다
         wraithRepository.deleteAllByMemberId(memberId);
+        // 연대기 본문은 그 원정의 선택을 바탕으로 AI가 쓴 글이다
+        chronicleChapterRepository.deleteAllByMemberId(memberId);
     }
 
     /** 최근 모험 기록 */
@@ -148,6 +153,9 @@ public class PersonalDataService {
         result.put("collectionCounts", collection);
         result.put("wraiths", wraithRepository.findByMemberIdOrderByCreatedAtDesc(managed.getMemberId()).stream()
                 .map(this::toWraithMap)
+                .toList());
+        result.put("chronicle", chronicleChapterRepository.findByMemberIdOrderByChapterNoAsc(managed.getMemberId()).stream()
+                .map(ChronicleChapterDTO::from)
                 .toList());
         result.put("notice", "AI 대화 기록은 마지막 이용 후 %d일 뒤 자동 삭제되며, 내 정보 화면에서 즉시 삭제할 수 있습니다."
                 .formatted(chatRetentionDays));

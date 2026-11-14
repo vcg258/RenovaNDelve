@@ -21,6 +21,10 @@ public record RunReviewDTO(
         String analysis,
 
         @JsonPropertyDescription("다음 판을 위한 구체적인 조언 2~3개. 각 40자 이내이며 제공된 게임 규칙 안에서만 제안")
-        List<String> tips
+        List<String> tips,
+        @JsonPropertyDescription("레노바 연대기에 실릴 이번 원정 장(章)의 제목. 사건이나 장소를 담아 15자 이내. 예: '금화를 쥔 손'")
+        String chapterTitle,
+        @JsonPropertyDescription("레노바 연대기에 실릴 이번 원정 이야기. 3~5문장, 300자 이내. 앞선 장이 있으면 그 이야기를 이어받고, 이번 원정의 선택과 결말을 3인칭 과거형('그는 ~했다')으로 쓴다")
+        String chapter
 ) {
 }

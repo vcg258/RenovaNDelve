@@ -38,6 +38,7 @@ import com.renovandelve.game.domain.WraithEntity;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.test.util.ReflectionTestUtils;
 import com.renovandelve.ai.service.RunReviewService;
+import com.renovandelve.ai.dto.response.RunReviewDTO;
 import com.renovandelve.game.service.redis.GameSessionService;
 import com.renovandelve.ai.service.StageCacheService;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,6 +60,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -101,6 +103,7 @@ class GameEngineServiceImplTest {
     @Mock private WraithService wraithService;
     @Mock private WraithVoiceService wraithVoiceService;
     @Mock private AsyncPrefetchService asyncPrefetchService;
+    @Mock private ChronicleService chronicleService;
 
     @InjectMocks private GameEngineServiceImpl engine;
 
@@ -772,5 +775,41 @@ class GameEngineServiceImplTest {
 
         assertThat(result.result()).isEqualTo("LOSE");
         assertThat(session.getPhase()).isEqualTo(GameSession.PHASE_GAMEOVER);
+    }
+
+    /* ==================== 레노바 연대기 ==================== */
+
+    @Test
+    @DisplayName("회고를 만들 때 앞선 장과 이번 원정의 선택을 넘기고, 받은 회고로 연대기의 장을 남긴다")
+    void reviewWritesTheNextChapter() {
+        GameStateEntity gameState = GameStateEntity.builder().gameStateId(GAME_ID).member(member).build();
+        when(gameStateRepository.findTopByMember_MemberIdOrderByCreatedAtDesc(1L)).thenReturn(Optional.of(gameState));
+        session.setPhase(GameSession.PHASE_GAMEOVER);
+        when(gameSessionService.get(GAME_ID)).thenReturn(session);
+        when(chronicleService.previousChapters(1L)).thenReturn(List.of("제1장 「첫」 시작"));
+        when(chatMemory.get(CONVERSATION_ID)).thenReturn(List.of(new UserMessage("[플레이어의 선택] 마계의 손을 잡았다")));
+        RunReviewDTO review = new RunReviewDTO("칭호", "묘비", "분석", List.of(), "둘째 장", "그는 내려갔다.");
+        when(runReviewService.review(gameState, session, false, List.of("제1장 「첫」 시작"), List.of("마계의 손을 잡았다")))
+                .thenReturn(review);
+
+        assertThat(engine.getRunReview(member)).isSameAs(review);
+        verify(chronicleService).record(gameState, false, review);
+
+        engine.getRunReview(member); // 두 번째 조회는 세션에 남은 회고를 돌려준다
+        verify(runReviewService, times(1)).review(any(), any(), anyBoolean(), any(), any());
+    }
+
+    @Test
+    @DisplayName("연대기 기록이 실패해도 회고는 그대로 돌려준다")
+    void chronicleFailureDoesNotHideTheReview() {
+        GameStateEntity gameState = GameStateEntity.builder().gameStateId(GAME_ID).member(member).build();
+        when(gameStateRepository.findTopByMember_MemberIdOrderByCreatedAtDesc(1L)).thenReturn(Optional.of(gameState));
+        session.setPhase(GameSession.PHASE_CLEAR);
+        when(gameSessionService.get(GAME_ID)).thenReturn(session);
+        RunReviewDTO review = new RunReviewDTO("칭호", "묘비", "분석", List.of(), null, null);
+        when(runReviewService.review(any(), any(), anyBoolean(), any(), any())).thenReturn(review);
+        when(chronicleService.record(any(), anyBoolean(), any())).thenThrow(new RuntimeException("DB down"));
+
+        assertThat(engine.getRunReview(member)).isSameAs(review);
     }
 }
