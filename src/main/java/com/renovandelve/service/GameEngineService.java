@@ -28,6 +28,15 @@ public interface GameEngineService {
     /** 전투: 방어 태세 (공격하지 않고 이번 턴 받는 피해를 크게 줄인다) */
     TurnResultDTO guard(MemberEntity member);
 
+    /** 전투: 숨 고르기. 쓸 수 있는 스킬이 하나도 없을 때만 가능하다 */
+    TurnResultDTO passTurn(MemberEntity member);
+
+    /** 전투: 도망치기. 보스전에서는 불가능하고, 보상 없이 전투를 끝낸다 */
+    TurnResultDTO flee(MemberEntity member);
+
+    /** 스킬 버리기 (전투·조우 중에는 불가) */
+    StatusDTO discardSkill(MemberEntity member, SkillDiscardRequest request);
+
     /** 소모품 사용 (전투 중이면 턴 소모) */
     TurnResultDTO useConsumable(MemberEntity member, ConsumableUseRequest request);
 

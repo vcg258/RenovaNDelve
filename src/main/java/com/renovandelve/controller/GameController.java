@@ -95,6 +95,27 @@ public class GameController {
         return ResponseEntity.ok(serialized(member, () -> gameEngineService.guard(member)));
     }
 
+    @Operation(summary = "전투: 숨 고르기 (1턴)", description = "모든 스킬이 쿨타임일 때만 가능합니다. 피해는 그대로 받고 쿨타임이 2턴 줄어듭니다.")
+    @PostMapping("/battle/pass")
+    public ResponseEntity<TurnResultDTO> passTurn() {
+        MemberEntity member = currentMemberService.getCurrentMember();
+        return ResponseEntity.ok(serialized(member, () -> gameEngineService.passTurn(member)));
+    }
+
+    @Operation(summary = "전투: 도망치기", description = "보상 없이 전투를 끝냅니다. 적이 한 번 공격하며, 보스전에서는 불가능합니다.")
+    @PostMapping("/battle/flee")
+    public ResponseEntity<TurnResultDTO> flee() {
+        MemberEntity member = currentMemberService.getCurrentMember();
+        return ResponseEntity.ok(serialized(member, () -> gameEngineService.flee(member)));
+    }
+
+    @Operation(summary = "스킬 버리기", description = "전투·조우 중에는 불가능합니다. 기본 공격은 스킬이 3개 이상일 때만 버릴 수 있습니다.")
+    @PostMapping("/skill/discard")
+    public ResponseEntity<StatusDTO> discardSkill(@Valid @RequestBody SkillDiscardRequest request) {
+        MemberEntity member = currentMemberService.getCurrentMember();
+        return ResponseEntity.ok(serialized(member, () -> gameEngineService.discardSkill(member, request)));
+    }
+
     @Operation(summary = "소모품 사용 (전투 중이면 턴 소모)")
     @PostMapping("/battle/consumable")
     public ResponseEntity<TurnResultDTO> useConsumable(@Valid @RequestBody ConsumableUseRequest request) {

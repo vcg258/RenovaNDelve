@@ -1,5 +1,8 @@
 package com.renovandelve.service;
 
+import static org.mockito.Mockito.times;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import com.renovandelve.dto.request.SkillDiscardRequest;
 import com.renovandelve.domain.GameCharacterEntity;
 import com.renovandelve.domain.GameSkillSlotEntity;
 import com.renovandelve.domain.relicentity.RelicEntity;
@@ -522,5 +525,119 @@ class GameEngineServiceImplTest {
         assertThatThrownBy(() -> engine.selectReward(member, new RewardSelectRequest("SKILL", 42L, 5L)))
                 .isInstanceOf(IllegalArgumentException.class);
         verify(skillSlotService, never()).learn(any(), any(), any());
+    }
+
+    /* ==================== 숨 고르기 / 도망치기 / 스킬 버리기 ==================== */
+
+    private GameSkillSlotEntity slot(long slotId, int coolTime) {
+        return GameSkillSlotEntity.builder().slotId(slotId).slotIndex((int) slotId).coolTime(coolTime)
+                .skill(SkillEntity.builder().skillId(slotId).name("스킬" + slotId).cooldown(3).build()).build();
+    }
+
+    /** 전투 중인 게임. 슬롯별 남은 쿨타임을 받는다 */
+    private GameStateEntity battleGame(String nodeType, int... coolTimes) {
+        List<GameSkillSlotEntity> slots = new ArrayList<>();
+        for (int i = 0; i < coolTimes.length; i++) slots.add(slot(i + 1, coolTimes[i]));
+        GameCharacterEntity character = GameCharacterEntity.builder()
+                .currentHp(50).maxHp(50).attack(10).defense(3).build();
+        GameStateEntity gameState = GameStateEntity.builder()
+                .gameStateId(GAME_ID).currentStage(1).currentNodeId(3L)
+                .gameCharacter(new ArrayList<>(List.of(character)))
+                .gameSkillSlot(slots)
+                .gameConsumableInventory(new ArrayList<>())
+                .build();
+        when(gameStateRepository.findByMember_MemberIdAndIsActiveTrue(1L)).thenReturn(Optional.of(gameState));
+
+        SessionMonster foe = new SessionMonster();
+        foe.setName("광증의 기사");
+        foe.setMaxHp(40);
+        foe.setCurrentHp(40);
+        session.setPhase(GameSession.PHASE_BATTLE);
+        session.setNodeType(nodeType);
+        session.setMonsters(new ArrayList<>(List.of(foe)));
+        return gameState;
+    }
+
+    @Test
+    @DisplayName("쓸 수 있는 스킬이 하나라도 있으면 숨 고르기를 할 수 없다")
+    void passIsRejectedWhileASkillIsReady() {
+        battleGame("BATTLE", 2, 0, 1);
+
+        assertThatThrownBy(() -> engine.passTurn(member)).isInstanceOf(IllegalStateException.class);
+        verify(battleService, never()).monsterAttackDamage(any(), anyInt(), anyInt(), anyDouble(), any());
+    }
+
+    @Test
+    @DisplayName("모든 스킬이 쿨타임이면 숨 고르기로 턴을 넘기고, 적은 방어 없이 공격한다")
+    void passEndsTheTurnWhenEverySkillIsCooling() {
+        GameStateEntity gameState = battleGame("BATTLE", 2, 3);
+        when(battleService.monsterAttackDamage(any(), anyInt(), anyInt(), anyDouble(), any())).thenReturn(7);
+
+        TurnResultDTO result = engine.passTurn(member);
+
+        assertThat(result.result()).isEqualTo("CONTINUE");
+        assertThat(gameState.getGameCharacter().get(0).getCurrentHp()).isEqualTo(43);
+        // 쿨타임 진행을 두 번 맡긴다 (방어 태세는 한 번)
+        verify(battleService, times(2)).updateCoolTimes(any(), any(), anyInt());
+        verify(battleService).monsterAttackDamage(any(), anyInt(), anyInt(), eq(1.0), any());
+    }
+
+    @Test
+    @DisplayName("보스전에서는 달아날 수 없다")
+    void cannotFleeFromBoss() {
+        battleGame("BOSS", 0);
+
+        assertThatThrownBy(() -> engine.flee(member)).isInstanceOf(IllegalStateException.class);
+        assertThat(session.getPhase()).isEqualTo(GameSession.PHASE_BATTLE);
+    }
+
+    @Test
+    @DisplayName("달아나면 적이 한 번 공격하고, 보상 없이 탐험 단계로 돌아가며, 그 사실이 대화 기록에 남는다")
+    void fleeEndsBattleWithoutReward() {
+        GameStateEntity gameState = battleGame("ELITE", 2, 1);
+        when(battleService.monsterAttackDamage(any(), anyInt(), anyInt(), anyDouble(), any())).thenReturn(10);
+
+        TurnResultDTO result = engine.flee(member);
+
+        assertThat(result.result()).isEqualTo("FLED");
+        assertThat(result.reward()).isNull();
+        assertThat(result.phase()).isEqualTo(GameSession.PHASE_EXPLORE);
+        assertThat(session.getMonsters()).isEmpty();
+        assertThat(gameState.getGameCharacter().get(0).getCurrentHp()).isEqualTo(40);
+        assertThat(gameState.getScore()).isZero();
+        assertThat(gameState.getGameSkillSlot()).allSatisfy(slot -> assertThat(slot.getCoolTime()).isZero());
+        verify(chatMemory).add(eq(CONVERSATION_ID), any(Message.class));
+    }
+
+    @Test
+    @DisplayName("달아나다 쓰러지면 패배다")
+    void fleeingCanBeFatal() {
+        battleGame("BATTLE", 0);
+        when(battleService.monsterAttackDamage(any(), anyInt(), anyInt(), anyDouble(), any())).thenReturn(999);
+
+        TurnResultDTO result = engine.flee(member);
+
+        assertThat(result.result()).isEqualTo("LOSE");
+        assertThat(session.getPhase()).isEqualTo(GameSession.PHASE_GAMEOVER);
+    }
+
+    @Test
+    @DisplayName("전투 중에는 스킬을 버릴 수 없다")
+    void cannotDiscardSkillDuringBattle() {
+        battleGame("BATTLE", 0, 0, 0);
+
+        assertThatThrownBy(() -> engine.discardSkill(member, new SkillDiscardRequest(2L)))
+                .isInstanceOf(IllegalStateException.class);
+        verify(skillSlotService, never()).discard(any(), any());
+    }
+
+    @Test
+    @DisplayName("탐험 중에는 스킬 버리기를 슬롯 규칙에 맡긴다")
+    void discardSkillDelegatesOutsideBattle() {
+        GameStateEntity gameState = activeGame(1, 3);
+
+        engine.discardSkill(member, new SkillDiscardRequest(2L));
+
+        verify(skillSlotService).discard(gameState, 2L);
     }
 }
