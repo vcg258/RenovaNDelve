@@ -1,6 +1,6 @@
 package com.renovandelve.service.redis;
 
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -18,7 +18,7 @@ import java.time.Instant;
  * 기준 시각 하나만 Redis에 둔다. 키 수가 회원 수를 넘지 않고, AccessToken 수명만큼만 보관하면 된다.
  * (그 뒤에는 이전 토큰이 어차피 만료된다)
  */
-@Log4j2
+@Slf4j
 @Service
 public class TokenRevocationService {
     private static final String KEY_PREFIX = "auth:revoked-before:";

@@ -7,7 +7,7 @@ import com.renovandelve.dto.response.AsyncStageResponseDTO;
 import com.renovandelve.dto.response.Encounter;
 import com.renovandelve.service.MonsterService;
 import com.renovandelve.service.redis.StageCacheService;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
@@ -30,7 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@Log4j2
+@Slf4j
 @Service
 public class MonsterRagService {
     private final ChatMemory chatMemory;
@@ -300,7 +300,7 @@ public class MonsterRagService {
         // 10노드 마다 보스 노드
         boolean isBoss = node % 10 == 0;
         if (isBoss || Math.random() > 0.3) {
-            log.info(isBoss ? "보스 노드 진입" : "전투 노드 진입");
+            log.info("{}", isBoss ? "보스 노드 진입" : "전투 노드 진입");
             return AsyncStageResponseDTO.battle(storyText,
                     battle(storyText, scene.keywords(), MIN_SCORE, REFERENCE_SCORE, isBoss));
         }
@@ -534,6 +534,12 @@ public class MonsterRagService {
         return maxScore;
     }
 
+    /**
+     * 검색된 몬스터 문서의 첫 줄에서 이름만 꺼낸다 (디버그 로그용).
+     *
+     * @param text 문서 내용
+     * @return 몬스터 이름
+     */
     private static String firstLine(String text) {
         if (text == null) return "";
         String line = text.strip().lines().findFirst().orElse("");
@@ -541,6 +547,13 @@ public class MonsterRagService {
     }
 
     // 노드/스테이지 계산을 한 곳에서 처리
+    /**
+     * 다음 노드를 미리 만들어 둔다. 10번째 노드 다음은 다음 스테이지 1번 노드다.
+     *
+     * @param currentStage   현재 스테이지
+     * @param currentNodeId  현재 노드
+     * @param conversationId 대화 ID
+     */
     private void prefetch(int currentStage, int currentNodeId, String conversationId) {
         if (currentNodeId % 10 == 0) {
             // 10노드면 다음 스테이지 1노드

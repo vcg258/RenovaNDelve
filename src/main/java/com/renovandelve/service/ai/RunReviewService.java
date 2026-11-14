@@ -7,7 +7,7 @@ import com.renovandelve.dto.response.RunReviewDTO;
 import com.renovandelve.engine.GameSession;
 import com.renovandelve.engine.RelicEffects;
 import com.renovandelve.engine.SessionMonster;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
  * - 대화 메모리를 쓰지 않는 1회성 호출이라 토큰 사용량이 일정하다
  * - 실패하면 null을 돌려주고 화면은 회고 없이 그대로 동작한다 (AI는 연출일 뿐 게임 진행의 조건이 아니다)
  */
-@Log4j2
+@Slf4j
 @Service
 public class RunReviewService {
     private final ChatClient chatClient;
@@ -130,6 +130,12 @@ public class RunReviewService {
         return sb.toString();
     }
 
+    /**
+     * 마지막 전투의 몬스터를 회고 프롬프트용 한 줄로 만든다.
+     *
+     * @param monster 몬스터
+     * @return 이름, 등급, 능력치, 남은 HP
+     */
     private String describeMonster(SessionMonster monster) {
         String grade = switch (monster.getMonsterType()) { case 2 -> "보스"; case 1 -> "엘리트"; default -> "일반"; };
         return "%s(%s, 공격력 %d, 방어력 %d, 남은 HP %d/%d%s)".formatted(
@@ -147,10 +153,23 @@ public class RunReviewService {
         return new RunReviewDTO(cut(review.title(), 20), cut(review.epitaph(), 80), cut(review.analysis(), 240), tips);
     }
 
+    /**
+     * 비어 있는지 확인한다.
+     *
+     * @param value 값
+     * @return null이거나 공백뿐이면 true
+     */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }
 
+    /**
+     * 앞뒤 공백을 지우고 최대 길이로 자른다.
+     *
+     * @param value 값
+     * @param max   최대 길이
+     * @return 자른 값
+     */
     private String cut(String value, int max) {
         if (value == null) return "";
         String trimmed = value.trim();

@@ -1,14 +1,14 @@
 package com.renovandelve.service.redis;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 
-@Log4j2
+@Slf4j
 @Service
 public class SecurityTokenService {
     private final RedisTemplate<String, String> redisTemplate;

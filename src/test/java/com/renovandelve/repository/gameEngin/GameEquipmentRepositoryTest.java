@@ -2,7 +2,7 @@ package com.renovandelve.repository.gameEngin;
 
 import com.renovandelve.domain.GameEquipmentEntity;
 import com.renovandelve.repository.GameEquipmentRepository;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -10,7 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.util.List;
 
 @SpringBootTest
-@Log4j2
+@Slf4j
 class GameEquipmentRepositoryTest {
     @Autowired
     private GameEquipmentRepository gameEquipmentRepository;
@@ -19,6 +19,6 @@ class GameEquipmentRepositoryTest {
     void testFindByGameState_GameStateId() {
         long id = 1;
         List<GameEquipmentEntity> gameEquipmentEntities = gameEquipmentRepository.findByGameState_GameStateId(id);
-        log.info(gameEquipmentEntities);
+        log.info("{}", gameEquipmentEntities);
     }
 }

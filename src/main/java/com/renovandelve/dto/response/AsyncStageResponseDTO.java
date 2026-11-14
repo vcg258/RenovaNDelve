@@ -14,10 +14,24 @@ public record AsyncStageResponseDTO(
         List<MonsterDTO> monsters, // 전투일 때
         Encounter encounter        // 인카운터일 때
 ) {
+    /**
+     * 전투 노드를 만든다.
+     *
+     * @param story    노드 서사
+     * @param monsters 출현할 몬스터
+     * @return 전투 노드
+     */
     public static AsyncStageResponseDTO battle(String story, List<MonsterDTO> monsters) {
         return new AsyncStageResponseDTO("BATTLE", story, monsters, null);
     }
 
+    /**
+     * 조우 노드를 만든다.
+     *
+     * @param story     노드 서사
+     * @param encounter 상황과 선택지 문구
+     * @return 조우 노드
+     */
     public static AsyncStageResponseDTO encounter(String story, Encounter encounter) {
         return new AsyncStageResponseDTO("ENCOUNTER", story, null, encounter);
     }

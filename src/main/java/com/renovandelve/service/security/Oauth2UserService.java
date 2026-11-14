@@ -4,7 +4,7 @@ import com.renovandelve.domain.MemberEntity;
 import com.renovandelve.repository.MemberRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
@@ -13,13 +13,19 @@ import org.springframework.stereotype.Service;
 
 import java.util.Map;
 
-@Log4j2
+@Slf4j
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class Oauth2UserService extends DefaultOAuth2UserService {
     private final MemberRepository memberRepository;
 
+    /**
+     * 구글 사용자 정보를 받아 회원을 찾거나 만든다. 개인정보 최소 수집을 위해 제공자 고유 ID(sub)만 쓴다.
+     *
+     * @param userRequest OAuth2 요청
+     * @return OAuth2 사용자
+     */
     @Override
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
         OAuth2User oAuth2User = super.loadUser(userRequest);

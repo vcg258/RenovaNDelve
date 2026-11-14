@@ -3,7 +3,7 @@ package com.renovandelve.service.ai;
 import com.renovandelve.repository.component.GameTools;
 import com.renovandelve.repository.component.KnowledgeSearchTools;
 import com.renovandelve.repository.component.PlayerContextTools;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SafeGuardAdvisor;
@@ -19,7 +19,7 @@ import java.util.List;
  * 정적 아이템 사전(GameTools) + 현재 플레이어 맥락(PlayerContextTools)을 함께 물려
  * "지금 내 상황에 맞는" 조언이 가능하도록 구성했다.
  */
-@Log4j2
+@Slf4j
 @Service
 public class GuideService {
     private final ChatClient chatClient;

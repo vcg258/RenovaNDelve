@@ -9,7 +9,7 @@ import com.renovandelve.domain.skillentity.SkillEntity;
 import com.renovandelve.domain.weaponentity.WeaponEntity;
 import com.renovandelve.repository.*;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,7 +38,7 @@ import java.util.function.Function;
  * - 삭제 동기화: RDB에서 사라진 행의 벡터 문서도 함께 제거 -> 정합성 유지
  * - 기동 시 자동 실행(비동기) + 관리자 API로 수동/강제 재동기화 가능
  */
-@Log4j2
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GameDataEtlService {
@@ -149,6 +149,11 @@ public class GameDataEtlService {
 
     /* ==================== 문서 구성 ==================== */
 
+    /**
+     * RDB의 게임 데이터 7종(몬스터·무기·갑옷·투구·스킬·유물·소모품)을 벡터 문서로 만든다.
+     *
+     * @return 문서 목록
+     */
     private List<Document> buildAllDocuments() {
         List<Document> documents = new ArrayList<>();
 
@@ -170,6 +175,17 @@ public class GameDataEtlService {
         return documents;
     }
 
+    /**
+     * 엔티티 목록을 벡터 문서로 만든다. 문서 ID는 "카테고리-행ID"에서 결정적으로 만들고,
+     * 내용 해시를 메타데이터에 넣어 다음 동기화 때 바뀐 행만 다시 임베딩하게 한다.
+     *
+     * @param category    카테고리 (메타데이터 필터에 쓴다)
+     * @param entities    엔티티 목록
+     * @param idExtractor 행 ID 꺼내기
+     * @param textBuilder 임베딩할 문장 만들기
+     * @param <T>         엔티티 타입
+     * @return 문서 목록
+     */
     private <T> List<Document> build(String category, List<T> entities,
                                      Function<T, Long> idExtractor, Function<T, String> textBuilder) {
         List<Document> documents = new ArrayList<>(entities.size());
@@ -193,6 +209,12 @@ public class GameDataEtlService {
     /* ---------- 카테고리별 임베딩 텍스트 ---------- */
     // RAG 검색이 '장소/분위기/전투 특성' 키워드로 이뤄지므로 설명 원문을 살려서 구성한다.
 
+    /**
+     * 몬스터 한 행을 임베딩할 문장으로 만든다. 검색이 장소·분위기·특성 키워드로 이뤄지므로 설명 원문을 살린다.
+     *
+     * @param m 몬스터
+     * @return 임베딩할 문장
+     */
     private String monsterText(MonsterEntity m) {
         String grade = switch (m.getMonsterType()) {
             case 2 -> "보스 몬스터"; case 1 -> "엘리트 몬스터"; default -> "일반 몬스터";
@@ -204,6 +226,12 @@ public class GameDataEtlService {
                 """.formatted(m.getName(), grade, nullSafe(m.getDescription()));
     }
 
+    /**
+     * 무기 한 행을 임베딩할 문장으로 만든다. 검색이 장소·분위기·특성 키워드로 이뤄지므로 설명 원문을 살린다.
+     *
+     * @param w 무기
+     * @return 임베딩할 문장
+     */
     private String weaponText(WeaponEntity w) {
         return """
                 [무기] %s
@@ -212,6 +240,12 @@ public class GameDataEtlService {
                 """.formatted(w.getName(), w.getType(), w.getAtkBonus(), w.getScoreCost(), nullSafe(w.getDescription()));
     }
 
+    /**
+     * 갑옷 한 행을 임베딩할 문장으로 만든다. 검색이 장소·분위기·특성 키워드로 이뤄지므로 설명 원문을 살린다.
+     *
+     * @param a 갑옷
+     * @return 임베딩할 문장
+     */
     private String armorText(ArmorEntity a) {
         return """
                 [갑옷] %s
@@ -220,6 +254,12 @@ public class GameDataEtlService {
                 """.formatted(a.getName(), a.getType(), a.getDefBonus(), a.getScoreCost(), nullSafe(a.getDescription()));
     }
 
+    /**
+     * 투구 한 행을 임베딩할 문장으로 만든다. 검색이 장소·분위기·특성 키워드로 이뤄지므로 설명 원문을 살린다.
+     *
+     * @param h 투구
+     * @return 임베딩할 문장
+     */
     private String helmetText(HelmetEntity h) {
         return """
                 [투구] %s
@@ -228,6 +268,12 @@ public class GameDataEtlService {
                 """.formatted(h.getName(), h.getType(), h.getHpBonus(), h.getScoreCost(), nullSafe(h.getDescription()));
     }
 
+    /**
+     * 스킬 한 행을 임베딩할 문장으로 만든다. 검색이 장소·분위기·특성 키워드로 이뤄지므로 설명 원문을 살린다.
+     *
+     * @param s 스킬
+     * @return 임베딩할 문장
+     */
     private String skillText(SkillEntity s) {
         String effect = switch (s.getStatusEffect()) {
             case 1 -> "출혈"; case 2 -> "화상"; case 3 -> "독"; case 4 -> "기절"; default -> "없음";
@@ -241,6 +287,12 @@ public class GameDataEtlService {
                 s.getCooldown(), effect, s.getEffectStack(), s.getCost(), nullSafe(s.getDescription()));
     }
 
+    /**
+     * 유물 한 행을 임베딩할 문장으로 만든다. 검색이 장소·분위기·특성 키워드로 이뤄지므로 설명 원문을 살린다.
+     *
+     * @param r 유물
+     * @return 임베딩할 문장
+     */
     private String relicText(RelicEntity r) {
         return """
                 [유물] %s
@@ -249,6 +301,12 @@ public class GameDataEtlService {
                 """.formatted(r.getName(), r.getRarity(), r.getScoreCost(), nullSafe(r.getEffectDesc()));
     }
 
+    /**
+     * 소모품 한 행을 임베딩할 문장으로 만든다. 검색이 장소·분위기·특성 키워드로 이뤄지므로 설명 원문을 살린다.
+     *
+     * @param c 소모품
+     * @return 임베딩할 문장
+     */
     private String consumableText(ConsumableEntity c) {
         return """
                 [소모품] %s
@@ -286,6 +344,12 @@ public class GameDataEtlService {
         return UUID.nameUUIDFromBytes(("renova:" + docKey).getBytes(StandardCharsets.UTF_8)).toString();
     }
 
+    /**
+     * 내용 해시 (SHA-256 앞 128비트). 바뀐 행을 찾는 데 쓴다.
+     *
+     * @param text 문서 내용
+     * @return 16진수 해시
+     */
     private String sha256(String text) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
@@ -297,6 +361,12 @@ public class GameDataEtlService {
         }
     }
 
+    /**
+     * 비어 있으면 "정보 없음"으로 바꾼다.
+     *
+     * @param text 원문
+     * @return 원문 또는 "정보 없음"
+     */
     private String nullSafe(String text) {
         return text == null || text.isBlank() ? "정보 없음" : text;
     }

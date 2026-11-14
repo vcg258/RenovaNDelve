@@ -20,6 +20,14 @@ public final class MemberSpecifications {
     private MemberSpecifications() {
     }
 
+    /**
+     * 관리자 회원 검색 조건. 키워드는 아이디·닉네임에 대소문자 없이 부분 일치하고, 상태가 있으면 그 상태만 고른다.
+     * (JPQL의 ":param IS NULL" 패턴은 enum 파라미터와 NULL 컬럼에서 결과가 비는 문제가 있어 Specification으로 만들었다)
+     *
+     * @param keyword 아이디 또는 닉네임 일부 (null이면 조건 없음)
+     * @param status  계정 상태 (null이면 전체)
+     * @return 검색 조건
+     */
     public static Specification<MemberEntity> search(String keyword, MemberStatus status) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();

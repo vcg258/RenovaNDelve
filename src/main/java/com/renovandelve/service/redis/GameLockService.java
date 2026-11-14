@@ -1,6 +1,6 @@
 package com.renovandelve.service.redis;
 
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -22,7 +22,7 @@ import java.util.function.Supplier;
  * - SET NX + TTL: 서버가 처리 도중 죽어도 TTL 뒤 자동 해제
  * - 해제는 Lua로 "내가 건 락일 때만" 삭제: TTL이 지나 다른 요청이 새로 건 락을 지우지 않기 위함
  */
-@Log4j2
+@Slf4j
 @Service
 public class GameLockService {
     private static final String KEY_PREFIX = "game:lock:";

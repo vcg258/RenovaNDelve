@@ -35,6 +35,11 @@ public class ApiRateLimitInterceptor implements HandlerInterceptor {
         }
     }
 
+    /**
+     * LLM을 부르는 POST 요청을 회원 단위로 센다. 한도를 넘으면 429와 Retry-After를 돌려주고 컨트롤러로 보내지 않는다.
+     *
+     * @return 통과면 true, 거부면 false (응답은 이미 써 둔다)
+     */
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         if (!"POST".equalsIgnoreCase(request.getMethod())) return true;
@@ -58,6 +63,12 @@ public class ApiRateLimitInterceptor implements HandlerInterceptor {
         return true;
     }
 
+    /**
+     * 요청 경로에 걸리는 제한 규칙을 고른다.
+     *
+     * @param path 요청 URI
+     * @return 적용할 규칙 목록 (없으면 빈 배열)
+     */
     private Rule[] resolveRules(String path) {
         return switch (path) {
             case "/api/rag" -> new Rule[]{

@@ -28,6 +28,12 @@ public class RelicEffects {
     private int critBleedStacks = 0;            // [시너지] 치명타 시 출혈 부여
     private final List<String> activeSynergies = new ArrayList<>();
 
+    /**
+     * 보유 유물 이름으로 효과와 조합 시너지를 계산한다.
+     *
+     * @param relicNames 보유 유물 이름 (null이면 효과 없음)
+     * @return 합산된 효과
+     */
     public static RelicEffects of(Collection<String> relicNames) {
         RelicEffects effects = new RelicEffects();
         if (relicNames == null) return effects;

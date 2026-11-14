@@ -26,6 +26,13 @@ public class GameTools {
     private final ConsumableRepository consumableRepository;
     private final RelicRepository relicRepository;
 
+    /**
+     * [AI Tool] 이름으로 투구 하나를 찾아 능력치와 설명을 돌려준다.
+     * 정확히 일치 → 이름 포함 → 유사도 순의 3중 검색(findBestMatch)으로 찾는다.
+     *
+     * @param name 찾을 투구 이름 (오타·부분 이름 허용)
+     * @return 능력치와 설명, 없으면 안내 문구
+     */
     @Tool(description = "투구(헬멧)의 능력치와 설명을 조회합니다. 플레이어가 특정 투구의 체력 보너스, 특수 효과, 스타팅 포인트 비용을 물어볼 때 호출하세요.")
     public String getHelmetDescription(@ToolParam(description = "조회할 투구의 이름. 예: 철제 투구, 가죽 모자") String name) {
         // 3중 검색
@@ -41,6 +48,13 @@ public class GameTools {
         return notFoundWithData("투구", name, helmetRepository.findAll(), HelmetEntity::getName);
     }
 
+    /**
+     * [AI Tool] 이름으로 갑옷 하나를 찾아 능력치와 설명을 돌려준다.
+     * 정확히 일치 → 이름 포함 → 유사도 순의 3중 검색(findBestMatch)으로 찾는다.
+     *
+     * @param name 찾을 갑옷 이름 (오타·부분 이름 허용)
+     * @return 능력치와 설명, 없으면 안내 문구
+     */
     @Tool(description = "갑옷의 능력치와 설명을 조회합니다. 플레이어가 특정 갑옷의 방어력 보너스, 특수 효과, 스타팅 포인트 비용을 물어볼 때 호출하세요.")
     public String getArmorDescription(@ToolParam(description = "조회할 갑옷의 이름. 예: 사슬 갑옷, 판금 갑옷") String name) {
         Optional<ArmorEntity> find = findBestMatch(
@@ -53,6 +67,13 @@ public class GameTools {
         return notFoundWithData("갑옷", name, armorRepository.findAll(), ArmorEntity::getName);
     }
 
+    /**
+     * [AI Tool] 이름으로 무기 하나를 찾아 능력치와 설명을 돌려준다.
+     * 정확히 일치 → 이름 포함 → 유사도 순의 3중 검색(findBestMatch)으로 찾는다.
+     *
+     * @param name 찾을 무기 이름 (오타·부분 이름 허용)
+     * @return 능력치와 설명, 없으면 안내 문구
+     */
     @Tool(description = "무기의 능력치와 설명을 조회합니다. 플레이어가 특정 무기의 공격력 보너스, 특수 효과, 스타팅 포인트 비용을 물어볼 때 호출하세요.")
     public String getWeaponDescription(@ToolParam(description = "조회할 무기의 이름. 예: 장검, 단검, 스태프") String name) {
         Optional<WeaponEntity> find =
@@ -66,6 +87,13 @@ public class GameTools {
         return notFoundWithData("무기", name, weaponRepository.findAll(), WeaponEntity::getName);
     }
 
+    /**
+     * [AI Tool] 이름으로 소모품 하나를 찾아 능력치와 설명을 돌려준다.
+     * 정확히 일치 → 이름 포함 → 유사도 순의 3중 검색(findBestMatch)으로 찾는다.
+     *
+     * @param name 찾을 소모품 이름 (오타·부분 이름 허용)
+     * @return 능력치와 설명, 없으면 안내 문구
+     */
     @Tool(description = "소모품의 효과와 설명을 조회합니다. 플레이어가 특정 소모품의 효과 타입, 효과 수치, 스타팅 포인트 비용을 물어볼 때 호출하세요.")
     public String getConsumableDescription(@ToolParam(description = "조회할 소모품의 이름. 예: 회복 포션, 불사조의 깃털") String name) {
         Optional<ConsumableEntity> find =
@@ -79,6 +107,13 @@ public class GameTools {
         return notFoundWithData("소모품", name, consumableRepository.findAll(), ConsumableEntity::getName);
     }
 
+    /**
+     * [AI Tool] 이름으로 유물 하나를 찾아 능력치와 설명을 돌려준다.
+     * 정확히 일치 → 이름 포함 → 유사도 순의 3중 검색(findBestMatch)으로 찾는다.
+     *
+     * @param name 찾을 유물 이름 (오타·부분 이름 허용)
+     * @return 능력치와 설명, 없으면 안내 문구
+     */
     @Tool(description = "유물의 효과와 설명을 조회합니다. 플레이어가 특정 유물의 효과, 희귀도, 스타팅 포인트 비용을 물어볼 때 호출하세요.")
     public String getRelicDescription(@ToolParam(description = "조회할 유물의 이름. 예: 피의 반지, 저주받은 목걸이") String name) {
         Optional<RelicEntity> find =
@@ -93,6 +128,11 @@ public class GameTools {
     }
 
 
+    /**
+     * [AI Tool] 등록된 투구 전체를 한 줄씩 요약해 돌려준다.
+     *
+     * @return 목록 문자열, 없으면 안내 문구
+     */
     @Tool(description = "투구 전체 목록을 조회합니다. 플레이어가 어떤 투구가 있는지, 기본 투구가 뭔지, 투구 종류를 물어볼 때 호출하세요. score_cost가 0인 항목이 기본 세트입니다.")
     public String getAllHelmets() {
         List<HelmetEntity> helmets = helmetRepository.findAll();
@@ -103,6 +143,11 @@ public class GameTools {
                 .collect(Collectors.joining("\n"));
     }
 
+    /**
+     * [AI Tool] 등록된 갑옷 전체를 한 줄씩 요약해 돌려준다.
+     *
+     * @return 목록 문자열, 없으면 안내 문구
+     */
     @Tool(description = "갑옷 전체 목록을 조회합니다. 플레이어가 어떤 갑옷이 있는지, 기본 갑옷이 뭔지, 갑옷 종류를 물어볼 때 호출하세요. score_cost가 0인 항목이 기본 세트입니다.")
     public String getAllArmors() {
         List<ArmorEntity> armors = armorRepository.findAll();
@@ -113,6 +158,11 @@ public class GameTools {
                 .collect(Collectors.joining("\n"));
     }
 
+    /**
+     * [AI Tool] 등록된 무기 전체를 한 줄씩 요약해 돌려준다.
+     *
+     * @return 목록 문자열, 없으면 안내 문구
+     */
     @Tool(description = "무기 전체 목록을 조회합니다. 플레이어가 어떤 무기가 있는지, 기본 무기가 뭔지, 무기 종류를 물어볼 때 호출하세요. score_cost가 0인 항목이 기본 세트입니다.")
     public String getAllWeapons() {
         List<WeaponEntity> weapons = weaponRepository.findAll();
@@ -123,6 +173,11 @@ public class GameTools {
                 .collect(Collectors.joining("\n"));
     }
 
+    /**
+     * [AI Tool] 등록된 소모품 전체를 한 줄씩 요약해 돌려준다.
+     *
+     * @return 목록 문자열, 없으면 안내 문구
+     */
     @Tool(description = "소모품 전체 목록을 조회합니다. 플레이어가 어떤 소모품이 있는지, 소모품 종류를 물어볼 때 호출하세요.")
     public String getAllConsumables() {
         List<ConsumableEntity> consumables = consumableRepository.findAll();
@@ -133,6 +188,11 @@ public class GameTools {
                 .collect(Collectors.joining("\n"));
     }
 
+    /**
+     * [AI Tool] 등록된 유물 전체를 한 줄씩 요약해 돌려준다.
+     *
+     * @return 목록 문자열, 없으면 안내 문구
+     */
     @Tool(description = "유물 전체 목록을 조회합니다. 플레이어가 어떤 유물이 있는지, 희귀도별 유물 목록, 기본 유물이 뭔지 물어볼 때 호출하세요.")
     public String getAllRelics() {
         List<RelicEntity> relics = relicRepository.findAll();

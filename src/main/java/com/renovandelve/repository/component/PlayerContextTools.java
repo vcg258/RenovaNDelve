@@ -12,7 +12,7 @@ import com.renovandelve.repository.RankingRepository;
 import com.renovandelve.service.CurrentMemberService;
 import com.renovandelve.service.redis.GameSessionService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  * 실제 게임 세션(스탯/장비/전투 상황)을 읽어 맥락 있는 조언을 가능하게 한다.
  * 예) "지금 이 보스 어떻게 잡아?", "내 스탯 어때?", "뭘 사야 해?"
  */
-@Log4j2
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class PlayerContextTools {
@@ -38,6 +38,11 @@ public class PlayerContextTools {
     private final GameSessionService gameSessionService;
     private final RankingRepository rankingRepository;
 
+    /**
+     * [AI Tool] 로그인한 플레이어의 진행 상황, 능력치, 스킬·유물·소모품, 성향과 가호를 요약한다.
+     *
+     * @return 상태 요약, 진행 중인 게임이 없으면 안내 문구
+     */
     @Tool(description = "플레이어의 현재 상태를 조회합니다. 레벨, HP, 공격력, 방어력, 골드, 진행 중인 스테이지/노드, 착용 장비, 보유 스킬과 쿨타임, 보유 유물과 발동 중인 조합 시너지를 모두 포함합니다. '내 상태', '지금 내 스탯', '뭘 들고 있지', '내가 어디까지 왔지' 같은 질문에 반드시 먼저 호출하세요.")
     @Transactional(readOnly = true)
     public String getMyStatus() {
@@ -105,6 +110,11 @@ public class PlayerContextTools {
         return sb.toString();
     }
 
+    /**
+     * [AI Tool] 지금 전투 중인 적의 HP, 행동 예고, 상태이상을 요약한다.
+     *
+     * @return 전투 요약, 전투 중이 아니면 안내 문구
+     */
     @Tool(description = "지금 진행 중인 전투 상황을 조회합니다. 등장한 몬스터의 이름, 등급, 현재/최대 HP, 공격력, 방어력, 걸려 있는 상태이상 스택을 알려줍니다. '이 몬스터 어떻게 잡아', '지금 누구부터 쳐야 해', '이번 전투 이길 수 있어?' 같은 질문에 호출하세요. 전투 중이 아니면 그 사실을 알려줍니다.")
     @Transactional(readOnly = true)
     public String getCurrentBattle() {
@@ -147,6 +157,11 @@ public class PlayerContextTools {
         return sb.toString();
     }
 
+    /**
+     * [AI Tool] 전투 공식과 규칙(피해 계산, 예고, 방어, 격노, 모닥불 등)을 설명한다.
+     *
+     * @return 규칙 설명
+     */
     @Tool(description = "게임의 전투 규칙과 시스템을 설명합니다. 상태이상(출혈/화상/독/기절)의 정확한 동작, 데미지 계산식, 치명타, 쿨타임, 레벨업, 보상/상점 흐름, 난이도별 배율을 알려줍니다. '출혈이 뭐야', '데미지는 어떻게 계산돼', '독이랑 화상 뭐가 달라' 같은 규칙 질문에 호출하세요.")
     public String getGameRules() {
         return """
@@ -180,6 +195,11 @@ public class PlayerContextTools {
                 """;
     }
 
+    /**
+     * [AI Tool] 유물 조합 시너지 목록과 발동 조건.
+     *
+     * @return 시너지 설명
+     */
     @Tool(description = "유물 조합 시너지 목록을 조회합니다. 어떤 유물을 함께 모으면 추가 효과가 발동하는지 알려줍니다. '유물 조합', '시너지', '어떤 유물을 같이 써야 해' 같은 질문에 호출하세요.")
     public String getRelicSynergyGuide() {
         return """
@@ -193,6 +213,11 @@ public class PlayerContextTools {
                 """;
     }
 
+    /**
+     * [AI Tool] 플레이어의 최근 모험 기록과 최고 점수.
+     *
+     * @return 기록 요약
+     */
     @Tool(description = "플레이어의 역대 최고 기록과 난이도별 랭킹 순위를 조회합니다. '내 최고 기록', '내 랭킹', '몇 등이야' 같은 질문에 호출하세요.")
     @Transactional(readOnly = true)
     public String getMyRecords() {
@@ -222,6 +247,11 @@ public class PlayerContextTools {
 
     /* HELPER METHODS */
 
+    /**
+     * 로그인한 플레이어의 진행 중인 게임. 조회에 실패하면 빈 값으로 넘겨 Tool 응답이 깨지지 않게 한다.
+     *
+     * @return 진행 중인 게임
+     */
     private Optional<GameStateEntity> activeGame() {
         try {
             MemberEntity member = currentMemberService.getCurrentMember();
@@ -232,6 +262,12 @@ public class PlayerContextTools {
         }
     }
 
+    /**
+     * 게임 단계를 AI가 설명하기 좋은 한국어 문장으로 바꾼다.
+     *
+     * @param phase 게임 단계
+     * @return 설명
+     */
     private String phaseKorean(String phase) {
         return switch (String.valueOf(phase)) {
             case GameSession.PHASE_EXPLORE -> "탐험 중 - 다음 노드로 전진할 수 있습니다";
@@ -245,6 +281,12 @@ public class PlayerContextTools {
         };
     }
 
+    /**
+     * 상태이상 코드를 한국어로 바꾼다.
+     *
+     * @param buff BLEED / BURN / POISON / STUN
+     * @return 한국어 이름
+     */
     private String koreanBuff(String buff) {
         return switch (buff) {
             case "BLEED" -> "출혈";
@@ -255,6 +297,12 @@ public class PlayerContextTools {
         };
     }
 
+    /**
+     * 줄바꿈을 접고 160자로 자른다 (Tool 응답이 길어지지 않게).
+     *
+     * @param text 원문
+     * @return 줄인 문장
+     */
     private String shorten(String text) {
         if (text == null) return "정보 없음";
         String flat = text.replaceAll("\\s+", " ").trim();

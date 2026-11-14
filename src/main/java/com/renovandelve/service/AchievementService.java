@@ -34,6 +34,12 @@ public class AchievementService {
     private final CollectionRelicRepository collectionRelicRepository;
     private final CollectionConsumableRepository collectionConsumableRepository;
 
+    /**
+     * 업적 12종의 달성 여부를 계산한다. 별도 테이블 없이 모험 기록과 도감에서 계산한다.
+     *
+     * @param member 회원
+     * @return 업적 목록
+     */
     @Transactional(readOnly = true)
     public List<AchievementDTO> list(MemberEntity member) {
         List<GameStateEntity> games = gameStateRepository.findByMember_MemberIdOrderByCreatedAtDesc(member.getMemberId());
@@ -74,6 +80,15 @@ public class AchievementService {
         return result;
     }
 
+    /**
+     * 업적 한 항목을 만든다.
+     *
+     * @param code        업적 코드
+     * @param title       이름
+     * @param description 조건 설명
+     * @param achieved    달성 여부
+     * @return 업적
+     */
     private AchievementDTO achievement(String code, String title, String description, boolean achieved) {
         return new AchievementDTO(code, title, description, achieved);
     }

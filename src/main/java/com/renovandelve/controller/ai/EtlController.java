@@ -21,11 +21,22 @@ public class EtlController {
 
     @Operation(summary = "RDB -> VectorStore 동기화",
             description = "변경된 행만 다시 임베딩합니다. force=true면 전량 재임베딩(임베딩 비용 발생).")
+    /**
+     * RDB 게임 데이터를 VectorStore와 동기화한다. 바뀐 행만 다시 임베딩한다.
+     *
+     * @param force true면 전부 다시 임베딩
+     * @return 동기화 결과 요약
+     */
     @PostMapping("/sync")
     public ResponseEntity<String> sync(@RequestParam(defaultValue = "false") boolean force) {
         return ResponseEntity.ok(gameDataEtlService.sync(force));
     }
 
+    /**
+     * VectorStore에서 RDB로 만든 문서를 모두 지운다 (재구축 전 정리).
+     *
+     * @return 삭제 결과 요약
+     */
     @Operation(summary = "VectorStore의 RDB 문서 전체 삭제", description = "재구축 전 정리용")
     @DeleteMapping("/purge")
     public ResponseEntity<String> purge() {

@@ -47,6 +47,11 @@ public class RedisConfig {
         return template;
     }
 
+    /**
+     * 문자열 키·값을 그대로 저장하는 RedisTemplate (게임 세션 JSON, 프리페치 캐시).
+     *
+     * @return 문자열 RedisTemplate
+     */
     @Bean(name = "securityRedisTemplate")
     public RedisTemplate<String, String> stringRedisTemplate() {
         RedisTemplate<String, String> template = new RedisTemplate<>();

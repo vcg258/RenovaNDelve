@@ -73,6 +73,12 @@ public class PasswordResetTokenStore {
         return Boolean.TRUE.equals(redisTemplate.hasKey(TOKEN_PREFIX + hash(token)));
     }
 
+    /**
+     * 토큰 형식이 맞는지 확인한다 (비어 있지 않고 길이 제한 안).
+     *
+     * @param token 토큰
+     * @return 형식이 맞으면 true
+     */
     private boolean wellFormed(String token) {
         return token != null && !token.isBlank() && token.length() <= MAX_TOKEN_LENGTH;
     }
@@ -82,6 +88,12 @@ public class PasswordResetTokenStore {
         return hash(value).substring(0, 32);
     }
 
+    /**
+     * SHA-256 해시 (16진수). Redis에는 토큰 원문 대신 이 값만 둔다.
+     *
+     * @param token 원문
+     * @return 해시
+     */
     static String hash(String token) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

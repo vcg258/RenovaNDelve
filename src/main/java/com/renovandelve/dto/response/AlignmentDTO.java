@@ -38,6 +38,12 @@ public record AlignmentDTO(
                             .toList()))
             .toList();
 
+    /**
+     * 가호 계산 결과를 화면용으로 옮긴다. 세 세력의 단계표(말풍선용)를 함께 싣는다.
+     *
+     * @param alignment 성향과 가호
+     * @return 화면용 성향 정보
+     */
     public static AlignmentDTO from(Alignment alignment) {
         Faction dominant = alignment.dominant();
         return new AlignmentDTO(alignment.heaven(), alignment.abyss(), alignment.human(),

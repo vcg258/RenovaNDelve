@@ -22,7 +22,7 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.UserMessage;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.ExecutorService;
@@ -34,7 +34,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
-@Log4j2
+@Slf4j
 @RequiredArgsConstructor
 public class GameEngineServiceImpl implements GameEngineService {
 
@@ -84,6 +84,13 @@ public class GameEngineServiceImpl implements GameEngineService {
 
     /* ==================== 조회 ==================== */
 
+    /**
+     * 진행 중인 원정의 현재 화면 상태를 서버 기준으로 만든다. 단계(phase)에 맞는 노드·보상·상점·요약을 함께 싣는다.
+     * 새로고침이나 화면-서버 단계 불일치 때 화면을 복원하는 데 쓴다.
+     *
+     * @param member 로그인 회원
+     * @return 화면 상태 (원정이 없으면 phase = NONE)
+     */
     @Override
     @Transactional
     public GameViewDTO getView(MemberEntity member) {
@@ -115,6 +122,15 @@ public class GameEngineServiceImpl implements GameEngineService {
 
     /* ==================== 노드 진행 ==================== */
 
+    /**
+     * 갈림길을 골라 다음 노드로 나아간다.
+     * AI가 서사와 전투/조우를 만들고(실패·시간 초과 시 폴백), 몬스터 능력치는 서버가 스테이지·난이도로 정한다.
+     * 보스 노드는 AI 응답과 관계없이 보스전으로 만들고, 이미 전투·조우 중이면 새로 만들지 않고 현재 노드를 돌려준다(멱등).
+     *
+     * @param member    로그인 회원
+     * @param pathValue 고른 길 (SAFE / DANGER / AMBUSH, 알 수 없으면 SAFE)
+     * @return 새 노드
+     */
     @Override
     @Transactional
     public NodeDTO nextNode(MemberEntity member, String pathValue) {
@@ -190,6 +206,14 @@ public class GameEngineServiceImpl implements GameEngineService {
 
     /* ==================== 전투 ==================== */
 
+    /**
+     * 스킬로 한 턴을 진행한다: 공격 → 상태이상 → 쿨타임 → 지속 피해 → 승리 판정 또는 적의 반격.
+     *
+     * @param member  로그인 회원
+     * @param request 슬롯 ID와 대상
+     * @return 턴 결과
+     * @throws IllegalStateException 전투 중이 아니거나 쿨타임이 남았으면
+     */
     @Override
     @Transactional
     public TurnResultDTO useSkill(MemberEntity member, SkillUseRequest request) {
@@ -205,7 +229,7 @@ public class GameEngineServiceImpl implements GameEngineService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("보유하지 않은 스킬 슬롯입니다. slotId=" + request.slotId()));
 
-        if (slot.getCoolTime() > 0) {
+        if (!slot.isReady()) {
             throw new IllegalStateException("쿨타임이 남아 있습니다. (" + slot.getCoolTime() + "턴)");
         }
 
@@ -244,6 +268,12 @@ public class GameEngineServiceImpl implements GameEngineService {
         return processMonsterCounterattack(gameState, session, character, effects, 1.0, log);
     }
 
+    /**
+     * 방어 태세로 한 턴을 넘긴다. 받는 피해가 60% 줄고 모든 스킬 쿨타임이 1턴 진행된다.
+     *
+     * @param member 로그인 회원
+     * @return 턴 결과
+     */
     @Override
     @Transactional
     public TurnResultDTO guard(MemberEntity member) {
@@ -279,7 +309,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         requirePhase(session, GameSession.PHASE_BATTLE, "전투 중이 아닙니다.");
 
         List<GameSkillSlotEntity> slots = gameState.getGameSkillSlot();
-        if (slots.stream().anyMatch(slot -> slot.getCoolTime() <= 0)) {
+        if (gameState.hasReadySkill()) {
             throw new IllegalStateException("쓸 수 있는 스킬이 남아 있습니다. 숨 고르기는 모든 스킬이 쿨타임일 때만 할 수 있습니다.");
         }
 
@@ -329,7 +359,7 @@ public class GameEngineServiceImpl implements GameEngineService {
                 .formatted(gameState.getCurrentStage(), session.getMonsters().stream()
                         .map(SessionMonster::getName).findFirst().orElse("적")));
 
-        gameState.getGameSkillSlot().forEach(slot -> slot.setCoolTime(0));
+        gameState.resetSkillCooldowns();
         session.setTempAtkBonus(0);
         session.setTempDefBonus(0);
         session.setMonsters(new ArrayList<>());
@@ -357,6 +387,15 @@ public class GameEngineServiceImpl implements GameEngineService {
         return statusAssembler.toStatusDTO(gameState);
     }
 
+    /**
+     * 소모품을 쓴다. 탐험 중에는 효과만 적용하고, 전투 중에는 턴을 소모해 적이 반격한다.
+     * 쓴 소모품은 애그리거트 루트에서 빠지며 같은 응답의 상태에도 바로 반영된다.
+     *
+     * @param member  로그인 회원
+     * @param request 소모품 칸 ID
+     * @return 턴 결과
+     * @throws IllegalStateException 탐험·전투가 아닌 단계면
+     */
     @Override
     @Transactional
     public TurnResultDTO useConsumable(MemberEntity member, ConsumableUseRequest request) {
@@ -368,20 +407,15 @@ public class GameEngineServiceImpl implements GameEngineService {
             throw new IllegalStateException("지금은 소모품을 사용할 수 없습니다.");
         }
 
-        GameConsumableInventoryEntity inventory = gameState.getGameConsumableInventory().stream()
-                .filter(i -> i.getSlotId().equals(request.inventorySlotId()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("보유하지 않은 소모품입니다."));
+        GameConsumableInventoryEntity inventory = gameState.findConsumable(request.inventorySlotId());
 
         GameCharacterEntity character = character(gameState);
         ConsumableEntity consumable = inventory.getConsumable();
         List<String> log = new ArrayList<>();
 
         applyConsumableEffect(gameState, session, character, consumable, log);
-        // 엔티티 목록에서도 빼야 한다. 저장소에서만 지우면 같은 트랜잭션 안에서 만드는 응답(StatusDTO)에
-        // 방금 쓴 소모품이 그대로 남아, 화면에서 한 번 더 누를 수 있게 된다 (그때 서버는 "보유하지 않은 소모품")
-        gameState.getGameConsumableInventory().remove(inventory);
-        gameConsumableInventoryRepository.delete(inventory);
+        // 루트의 목록에서 빼면 orphanRemoval로 DB에서도 지워지고, 같은 응답의 상태에도 바로 반영된다
+        gameState.consume(inventory);
 
         if (!inBattle) {
             gameSessionService.save(session);
@@ -399,6 +433,15 @@ public class GameEngineServiceImpl implements GameEngineService {
 
     /* ==================== 인카운터 ==================== */
 
+    /**
+     * 조우 선택지를 고른다. 효과를 적용하고, 고른 세력의 성향을 1 올리고, 선택을 AI 대화 기록에 남긴 뒤
+     * 선택 이전에 만들어 둔 다음 노드는 버린다(다음 장면이 이 선택을 이어받도록).
+     *
+     * @param member  로그인 회원
+     * @param request 선택지 번호
+     * @return 선택 결과
+     * @throws IllegalArgumentException 범위를 벗어난 번호면
+     */
     @Override
     @Transactional
     public EncounterOutcomeDTO chooseEncounter(MemberEntity member, EncounterChoiceRequest request) {
@@ -442,6 +485,14 @@ public class GameEngineServiceImpl implements GameEngineService {
 
     /* ==================== 보상 / 상점 ==================== */
 
+    /**
+     * 전투 보상 중 하나를 고르거나 건너뛴다. 스킬이 가득 찼으면 버릴 슬롯을 함께 받는다.
+     *
+     * @param member  로그인 회원
+     * @param request 보상 종류, ID, 버릴 슬롯
+     * @return 바뀐 상태
+     * @throws IllegalArgumentException 후보에 없는 보상이면
+     */
     @Override
     @Transactional
     public StatusDTO selectReward(MemberEntity member, RewardSelectRequest request) {
@@ -479,6 +530,12 @@ public class GameEngineServiceImpl implements GameEngineService {
         return statusAssembler.toStatusDTO(gameState);
     }
 
+    /**
+     * 상점 진열품. 처음 들어왔을 때 한 번 뽑아 세션에 둔다.
+     *
+     * @param member 로그인 회원
+     * @return 진열품 목록
+     */
     @Override
     @Transactional
     public List<ShopItemDTO> getShop(MemberEntity member) {
@@ -493,6 +550,13 @@ public class GameEngineServiceImpl implements GameEngineService {
         return toShopItems(session.getShop());
     }
 
+    /**
+     * 상점에서 산다. 가격은 서버의 진열품 정보로 정하고, 같은 품목은 한 번만 살 수 있다.
+     *
+     * @param member  로그인 회원
+     * @param request 품목 종류, ID, 버릴 슬롯
+     * @return 바뀐 상태
+     */
     @Override
     @Transactional
     public StatusDTO buyItem(MemberEntity member, PurchaseRequest request) {
@@ -514,6 +578,13 @@ public class GameEngineServiceImpl implements GameEngineService {
         return statusAssembler.toStatusDTO(gameState);
     }
 
+    /**
+     * 골드를 내고 진열품을 새로 뽑는다. 할 때마다 비용이 오른다.
+     *
+     * @param member 로그인 회원
+     * @return 바뀐 화면 상태
+     * @throws IllegalArgumentException 골드가 부족하면
+     */
     @Override
     @Transactional
     public GameViewDTO rerollShop(MemberEntity member) {
@@ -532,6 +603,12 @@ public class GameEngineServiceImpl implements GameEngineService {
         return getView(member);
     }
 
+    /**
+     * 끝난 원정의 AI 회고를 만든다. 한 번 만든 회고와 실패 여부는 세션에 두어 다시 부르지 않는다.
+     *
+     * @param member 로그인 회원
+     * @return 회고, 만들 수 없으면 null
+     */
     @Override
     @Transactional
     public RunReviewDTO getRunReview(MemberEntity member) {
@@ -557,6 +634,12 @@ public class GameEngineServiceImpl implements GameEngineService {
         return review;
     }
 
+    /**
+     * 상점을 나간다. 보스를 쓰러뜨린 직후라면 모닥불로, 아니면 탐험으로 간다.
+     *
+     * @param member 로그인 회원
+     * @return 다음 화면 상태
+     */
     @Override
     @Transactional
     public GameViewDTO leaveShop(MemberEntity member) {
@@ -627,6 +710,12 @@ public class GameEngineServiceImpl implements GameEngineService {
 
     /* ==================== 종료 요약 ==================== */
 
+    /**
+     * 가장 최근 원정의 요약 (끝난 원정 포함).
+     *
+     * @param member 로그인 회원
+     * @return 요약
+     */
     @Override
     @Transactional
     public GameSummaryDTO getSummary(MemberEntity member) {
@@ -639,11 +728,24 @@ public class GameEngineServiceImpl implements GameEngineService {
 
     /* ==================== 내부 로직 ==================== */
 
+    /**
+     * 진행 중인 원정을 찾는다.
+     *
+     * @param member 로그인 회원
+     * @return 진행 중인 게임
+     * @throws java.util.NoSuchElementException 없으면
+     */
     private GameStateEntity activeGame(MemberEntity member) {
         return gameStateRepository.findByMember_MemberIdAndIsActiveTrue(member.getMemberId())
                 .orElseThrow(() -> new NoSuchElementException("진행 중인 게임이 없습니다."));
     }
 
+    /**
+     * 게임의 캐릭터 (한 판에 하나).
+     *
+     * @param gameState 게임
+     * @return 캐릭터
+     */
     private GameCharacterEntity character(GameStateEntity gameState) {
         return gameState.getGameCharacter().stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("캐릭터 정보가 없습니다."));
@@ -695,26 +797,59 @@ public class GameEngineServiceImpl implements GameEngineService {
         };
     }
 
+    /**
+     * 줄바꿈을 접고 120자로 자른다 (AI 기록용).
+     *
+     * @param text 원문
+     * @return 줄인 문장
+     */
     private String shorten(String text) {
         if (text == null) return "";
         String flat = text.replaceAll("\\s+", " ").trim();
         return flat.length() <= 120 ? flat : flat.substring(0, 120) + "...";
     }
 
+    /**
+     * 게임 서사의 대화 기록 ID.
+     *
+     * @param gameState 게임
+     * @return game-{게임 ID}
+     */
     private String conversationId(GameStateEntity gameState) {
         return "game-" + gameState.getGameStateId();
     }
 
+    /**
+     * 지금 단계가 기대한 단계인지 확인한다.
+     *
+     * @param session  게임 세션
+     * @param expected 기대하는 단계
+     * @param message  아닐 때의 안내
+     * @throws IllegalStateException 단계가 다르면
+     */
     private void requirePhase(GameSession session, String expected, String message) {
         if (!expected.equals(session.getPhase())) {
             throw new IllegalStateException(message + " (현재 단계: " + session.getPhase() + ")");
         }
     }
 
+    /**
+     * 조건이 맞지 않으면 잘못된 요청으로 거부한다.
+     *
+     * @param condition 지켜야 할 조건
+     * @param message   거부 문구
+     * @throws IllegalArgumentException 조건이 거짓이면
+     */
     private void require(boolean condition, String message) {
         if (!condition) throw new IllegalArgumentException(message);
     }
 
+    /**
+     * 보유 유물로 효과와 유물 조합 시너지를 계산한다.
+     *
+     * @param gameState 게임
+     * @return 유물 효과
+     */
     private RelicEffects relicEffects(GameStateEntity gameState) {
         List<String> names = gameState.getGameRelicInventory() == null ? List.of()
                 : gameState.getGameRelicInventory().stream()
@@ -723,6 +858,12 @@ public class GameEngineServiceImpl implements GameEngineService {
         return RelicEffects.of(names);
     }
 
+    /**
+     * 보유 스킬로 스킬 조합 시너지를 계산한다.
+     *
+     * @param gameState 게임
+     * @return 스킬 시너지
+     */
     private SkillSynergies skillSynergies(GameStateEntity gameState) {
         if (gameState.getGameSkillSlot() == null) return SkillSynergies.NONE;
         return SkillSynergies.of(gameState.getGameSkillSlot().stream()
@@ -731,6 +872,12 @@ public class GameEngineServiceImpl implements GameEngineService {
                 .toList());
     }
 
+    /**
+     * 이번 원정에 건 서약.
+     *
+     * @param gameState 게임
+     * @return 서약 집합
+     */
     private Set<Pact> pacts(GameStateEntity gameState) {
         return Pact.parse(gameState.getPacts());
     }
@@ -784,6 +931,12 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
     }
 
+    /**
+     * 단검을 들었으면 치명타 확률이 오른다.
+     *
+     * @param gameState 게임
+     * @return 추가 치명타 확률 (단검이 아니면 0)
+     */
     private double daggerCritBonus(GameStateEntity gameState) {
         GameEquipmentEntity equipment = gameState.getGameEquipment();
         if (equipment != null && equipment.getWeapon() != null && equipment.getWeapon().getType() == Type.DAGGER) {
@@ -817,6 +970,13 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
     }
 
+    /**
+     * AI가 서사를 만들지 못했을 때 쓰는 기본 서사.
+     *
+     * @param stage  스테이지
+     * @param battle 전투면 true, 조우면 false
+     * @return 서사 한 줄
+     */
     private String fallbackStory(int stage, boolean battle) {
         String place = switch (stage) {
             case 1 -> "천상의 빛이 희미하게 걸린 무너진 정문";
@@ -830,6 +990,13 @@ public class GameEngineServiceImpl implements GameEngineService {
                 : place + " — 낯선 정적 속에서 빛과 그림자가 당신의 선택을 기다린다.";
     }
 
+    /**
+     * 노드 종류를 정한다: 10번째 노드는 보스, 엘리트가 있으면 강적, 아니면 전투.
+     *
+     * @param node     노드 번호
+     * @param monsters 출현한 몬스터
+     * @return BOSS / ELITE / BATTLE
+     */
     private String resolveNodeType(int node, List<SessionMonster> monsters) {
         if (node % NODES_PER_STAGE == 0) return "BOSS";
         boolean hasElite = monsters.stream().anyMatch(m -> m.getMonsterType() == 1);
@@ -893,6 +1060,12 @@ public class GameEngineServiceImpl implements GameEngineService {
         return result;
     }
 
+    /**
+     * 난이도에 따른 몬스터 능력치 배율 (기준 능력치가 없을 때의 계산용).
+     *
+     * @param difficulty 난이도
+     * @return 배율
+     */
     private double difficultyFactor(Difficulty difficulty) {
         return switch (difficulty) {
             case EASY -> 0.8;
@@ -902,6 +1075,12 @@ public class GameEngineServiceImpl implements GameEngineService {
         };
     }
 
+    /**
+     * 난이도에 따른 점수·골드 배율.
+     *
+     * @param difficulty 난이도
+     * @return 배율
+     */
     private double rewardMultiplier(Difficulty difficulty) {
         return switch (difficulty) {
             case EASY -> 0.7;
@@ -911,6 +1090,15 @@ public class GameEngineServiceImpl implements GameEngineService {
         };
     }
 
+    /**
+     * 스킬이 때릴 대상을 정한다. 전체 공격이면 살아 있는 적 전부, 단일이면 고른 대상(없거나 쓰러졌으면 첫 번째 적).
+     *
+     * @param session    게임 세션
+     * @param skill      쓴 스킬
+     * @param targetKeys 고른 대상
+     * @return 대상
+     * @throws IllegalStateException 살아 있는 적이 없으면
+     */
     private List<SessionMonster> resolveTargets(GameSession session, SkillEntity skill, List<Integer> targetKeys) {
         List<SessionMonster> alive = session.getMonsters().stream()
                 .filter(SessionMonster::isAlive)
@@ -979,12 +1167,10 @@ public class GameEngineServiceImpl implements GameEngineService {
             log.add("불사조의 깃털이 타오르며 되살아났다! (HP 50% 회복)");
             return true;
         }
-        Optional<GameConsumableInventoryEntity> phoenix = gameState.getGameConsumableInventory().stream()
-                .filter(i -> i.getConsumable().getEffectType() == com.renovandelve.domain.consumableentity.Type.RESURRECTION)
-                .findFirst();
+        Optional<GameConsumableInventoryEntity> phoenix =
+                gameState.findConsumableByEffect(com.renovandelve.domain.consumableentity.Type.RESURRECTION);
         if (phoenix.isPresent()) {
-            gameState.getGameConsumableInventory().remove(phoenix.get());
-            gameConsumableInventoryRepository.delete(phoenix.get());
+            gameState.consume(phoenix.get());
             character.revive();
             log.add("불사조의 깃털이 타오르며 되살아났다! (HP 50% 회복)");
             return true;
@@ -992,6 +1178,17 @@ public class GameEngineServiceImpl implements GameEngineService {
         return false;
     }
 
+    /**
+     * 승리 처리: 점수·골드·경험치를 주고(난이도·갈림길·서약·유물·가호 배율 반영), 레벨업과 천상의 가호 회복을 적용한 뒤
+     * 마지막 보스면 원정을 끝내고, 아니면 보상 후보를 만들어 보상 단계로 넘긴다.
+     *
+     * @param gameState 게임
+     * @param session   게임 세션
+     * @param character 캐릭터
+     * @param effects   유물 효과
+     * @param log       전투 기록
+     * @return 턴 결과 (WIN)
+     */
     private TurnResultDTO processVictory(GameStateEntity gameState, GameSession session,
                                          GameCharacterEntity character, RelicEffects effects, List<String> log) {
         int stage = gameState.getCurrentStage();
@@ -1039,7 +1236,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
 
         // 쿨타임 초기화
-        gameState.getGameSkillSlot().forEach(slot -> slot.setCoolTime(0));
+        gameState.resetSkillCooldowns();
 
         // 임시 버프 해제
         session.setTempAtkBonus(0);
@@ -1073,6 +1270,16 @@ public class GameEngineServiceImpl implements GameEngineService {
                 statusAssembler.toStatusDTO(gameState), toRewardView(session.getReward()), false, session.getPhase());
     }
 
+    /**
+     * 전투 보상 후보를 만든다: 아직 없는 스킬, 아직 없는 유물, 소모품을 섞어 고른다.
+     * 가호 3단계면 그 세력이 후보를 하나 더 얹는다(천상: 소모품, 마계: 유물, 인간: 스킬).
+     *
+     * @param gameState    게임
+     * @param exp          이미 지급한 경험치 (표시용)
+     * @param gold         이미 지급한 골드 (표시용)
+     * @param relicOptions 유물 후보 수 (일반 1, 강적 2, 보스 3, 위험한 길 +1)
+     * @return 보상 후보
+     */
     private RewardOptions buildRewardOptions(GameStateEntity gameState, int exp, int gold, int relicOptions) {
         RewardOptions options = new RewardOptions();
         options.setExp(exp);
@@ -1098,6 +1305,15 @@ public class GameEngineServiceImpl implements GameEngineService {
         return options;
     }
 
+    /**
+     * 소모품 효과를 적용한다 (회복, 해독, 일시 강화, 폭탄 피해, 부활 준비).
+     *
+     * @param gameState  게임
+     * @param session    게임 세션 (일시 강화를 담는다)
+     * @param character  캐릭터
+     * @param consumable 쓴 소모품
+     * @param log        기록
+     */
     private void applyConsumableEffect(GameStateEntity gameState, GameSession session,
                                        GameCharacterEntity character, ConsumableEntity consumable, List<String> log) {
         int value = consumable.getEffectValue();
@@ -1189,6 +1405,16 @@ public class GameEngineServiceImpl implements GameEngineService {
         return choices;
     }
 
+    /**
+     * 조우 선택지 하나를 만든다. 결과(effect, value, refId)는 서버만 알고 화면에는 문구만 보낸다.
+     *
+     * @param faction 세력
+     * @param label   선택지 문구 (AI가 쓴 것)
+     * @param effect  결과 종류
+     * @param value   결과 수치
+     * @param refId   얻을 아이템 ID (없으면 null)
+     * @return 선택지
+     */
     private EncounterChoice choice(Faction faction, String label, String effect, int value, Long refId) {
         EncounterChoice choice = new EncounterChoice();
         choice.setFaction(faction.name());
@@ -1199,6 +1425,14 @@ public class GameEngineServiceImpl implements GameEngineService {
         return choice;
     }
 
+    /**
+     * 조우 선택지의 결과를 적용한다 (회복, 피해, 골드, 유물, 소모품, 아무 일 없음).
+     *
+     * @param gameState 게임
+     * @param character 캐릭터
+     * @param choice    고른 선택지
+     * @return 결과 문구
+     */
     private String applyEncounterEffect(GameStateEntity gameState, GameCharacterEntity character, EncounterChoice choice) {
         switch (choice.getEffect()) {
             case "HEAL" -> {
@@ -1235,30 +1469,53 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
     }
 
+    /**
+     * 유물을 얻는다. 같은 유물은 두 번 가질 수 없다.
+     *
+     * @param gameState 게임
+     * @param relicId   유물 ID
+     * @throws IllegalStateException 이미 가진 유물이면
+     */
     private void addRelic(GameStateEntity gameState, Long relicId) {
-        boolean owned = gameState.getGameRelicInventory().stream()
-                .anyMatch(inventory -> inventory.getRelic().getRelicId().equals(relicId));
-        if (owned) throw new IllegalStateException("이미 보유 중인 유물입니다.");
+        if (gameState.ownsRelic(relicId)) throw new IllegalStateException("이미 보유 중인 유물입니다.");
         RelicEntity relic = relicRepository.findById(relicId)
                 .orElseThrow(() -> new NoSuchElementException("유물을 찾을 수 없습니다."));
-        // 저장과 함께 엔티티 목록에도 넣어야 같은 응답의 상태에 바로 보인다 (소모품 사용과 반대 방향의 같은 문제)
-        gameState.getGameRelicInventory().add(gameRelicInventoryRepository.save(GameRelicInventoryEntity.builder()
-                .gameState(gameState).relic(relic).build()));
+        // cascade로도 저장되지만, 같은 응답에 담을 칸 ID를 지금 받기 위해 바로 저장한다
+        gameRelicInventoryRepository.save(gameState.addRelic(relic));
     }
 
+    /**
+     * 소모품을 얻는다.
+     *
+     * @param gameState    게임
+     * @param consumableId 소모품 ID
+     */
     private void addConsumable(GameStateEntity gameState, Long consumableId) {
         ConsumableEntity consumable = consumableRepository.findById(consumableId)
                 .orElseThrow(() -> new NoSuchElementException("소모품을 찾을 수 없습니다."));
-        gameState.getGameConsumableInventory().add(gameConsumableInventoryRepository.save(GameConsumableInventoryEntity.builder()
-                .gameState(gameState).consumable(consumable).build()));
+        // 소모품 칸 ID는 화면이 "사용" 요청에 실어 보내므로 응답 전에 받아 둬야 한다
+        gameConsumableInventoryRepository.save(gameState.addConsumable(consumable));
     }
 
+    /**
+     * 원정을 끝낸다: 도감·랭킹 기록, 단계 전환, AI 결말 요약.
+     *
+     * @param gameState 게임
+     * @param session   게임 세션
+     * @param cleared   클리어했는지
+     */
     private void terminate(GameStateEntity gameState, GameSession session, boolean cleared) {
         battleResultService.terminateGame(gameState, cleared);
         session.setPhase(cleared ? GameSession.PHASE_CLEAR : GameSession.PHASE_GAMEOVER);
         session.setSummaryNarrative(generateNarrative(gameState));
     }
 
+    /**
+     * AI로 원정 결말 요약을 만든다. 실패하면 기본 문장을 쓴다.
+     *
+     * @param gameState 게임
+     * @return 결말 요약
+     */
     private String generateNarrative(GameStateEntity gameState) {
         try {
             return monsterRagService.genarateGameOverStory(conversationId(gameState));
@@ -1268,6 +1525,13 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
     }
 
+    /**
+     * 원정 요약을 만든다. 결말 요약이 아직 없으면 이때 만들어 세션에 둔다.
+     *
+     * @param gameState 게임
+     * @param session   게임 세션
+     * @return 요약
+     */
     private GameSummaryDTO buildSummary(GameStateEntity gameState, GameSession session) {
         boolean cleared = GameSession.PHASE_CLEAR.equals(session.getPhase());
         int level = gameState.getGameCharacter() == null ? 1
@@ -1286,6 +1550,12 @@ public class GameEngineServiceImpl implements GameEngineService {
 
     /* ==================== DTO 변환 ==================== */
 
+    /**
+     * 세션의 몬스터를 화면용으로 옮긴다 (예고 행동, 격노 포함).
+     *
+     * @param monsters 몬스터
+     * @return 화면용 몬스터
+     */
     private List<BattleMonsterDTO> toBattleMonsterDTOs(List<SessionMonster> monsters) {
         if (monsters == null) return List.of();
         return monsters.stream()
@@ -1295,6 +1565,12 @@ public class GameEngineServiceImpl implements GameEngineService {
                 .toList();
     }
 
+    /**
+     * 세션의 전투 노드를 응답으로 만든다 (고른 길과 그 효과 안내 포함).
+     *
+     * @param session 게임 세션
+     * @return 노드
+     */
     private NodeDTO battleNode(GameSession session) {
         return new NodeDTO(session.getNodeType(), session.getStory(), toBattleMonsterDTOs(session.getMonsters()),
                 null, session.getPath(), session.getPathNote());
@@ -1307,16 +1583,34 @@ public class GameEngineServiceImpl implements GameEngineService {
                 null, session.getPathNote());
     }
 
+    /**
+     * 조우 선택지의 세력 목록 (화면 색과 말풍선용).
+     *
+     * @param session 게임 세션
+     * @return 세력 이름 목록
+     */
     private List<String> choiceFactions(GameSession session) {
         return session.getChoices().stream()
                 .map(choice -> choice.getFaction() == null ? "" : choice.getFaction())
                 .toList();
     }
 
+    /**
+     * 조우 선택지의 문구 목록.
+     *
+     * @param session 게임 세션
+     * @return 문구 목록
+     */
     private List<String> choiceLabels(GameSession session) {
         return session.getChoices().stream().map(EncounterChoice::getLabel).toList();
     }
 
+    /**
+     * 세션의 보상 후보 ID를 화면용 정보로 바꾼다.
+     *
+     * @param options 보상 후보
+     * @return 화면용 보상, 없으면 null
+     */
     private RewardViewDTO toRewardView(RewardOptions options) {
         if (options == null) return null;
         List<SkillInfoDTO> skills = skillRepository.findAllById(options.getSkillIds()).stream()
@@ -1328,6 +1622,12 @@ public class GameEngineServiceImpl implements GameEngineService {
         return new RewardViewDTO(options.getExp(), options.getGold(), skills, relics, consumables);
     }
 
+    /**
+     * 세션의 진열품을 화면용으로 옮긴다.
+     *
+     * @param stock 진열품
+     * @return 화면용 진열품
+     */
     private List<ShopItemDTO> toShopItems(List<ShopStockItem> stock) {
         if (stock == null) return List.of();
         return stock.stream()

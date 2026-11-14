@@ -18,6 +18,16 @@ import java.util.List;
 @AllArgsConstructor
 @Table(name = "skill")
 public class SkillEntity {
+
+    /**
+     * 기본 공격인지 판정한다.
+     * 스타팅 포인트 비용이 0인 스킬은 기본 공격 하나뿐이며, 원정 준비 화면도 같은 기준으로 구분한다.
+     *
+     * @return 비용이 0이면 true
+     */
+    public boolean isBasic() {
+        return this.cost == 0;
+    }
     @PositiveOrZero // Unsigned 대체자
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Id private Long skillId; // 기술 고유 ID (PK)

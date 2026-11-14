@@ -24,6 +24,13 @@ public class RefreshCookieFactory {
         this.secure = secure;
     }
 
+    /**
+     * RefreshToken 쿠키 헤더 값을 만든다 (httpOnly, SameSite=Strict, path=/api/auth, Secure는 설정값).
+     *
+     * @param refreshToken  토큰
+     * @param maxAgeSeconds 유효 시간 (초)
+     * @return Set-Cookie 헤더 값
+     */
     public String issue(String refreshToken, long maxAgeSeconds) {
         return ResponseCookie.from(NAME, refreshToken)
                 .httpOnly(true)
@@ -35,6 +42,11 @@ public class RefreshCookieFactory {
                 .toString();
     }
 
+    /**
+     * RefreshToken 쿠키를 지우는 헤더 값 (빈 값, 유효 시간 0).
+     *
+     * @return Set-Cookie 헤더 값
+     */
     public String expire() {
         return issue("", 0);
     }

@@ -1,7 +1,7 @@
 package com.renovandelve.service;
 
 import com.renovandelve.util.EmailNormalizer;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
  *   "메일을 보낸 경우에만 응답이 늦다"는 차이로 계정 존재 여부가 드러난다.
  * - 본문(재설정 링크 포함)과 받는 사람 주소 전체는 로그에 남기지 않는다.
  */
-@Log4j2
+@Slf4j
 @Service
 public class MailService {
     private final JavaMailSender mailSender;
@@ -37,10 +37,22 @@ public class MailService {
         }
     }
 
+    /**
+     * SMTP 계정이 설정돼 있는지 확인한다. 없으면 서버는 뜨고 메일만 보내지 않는다.
+     *
+     * @return 설정돼 있으면 true
+     */
     public boolean isConfigured() {
         return !username.isEmpty();
     }
 
+    /**
+     * 메일을 비동기로 보낸다. 설정이 없거나 실패하면 로그만 남긴다(받는 주소는 가려서).
+     *
+     * @param to      받는 주소
+     * @param subject 제목
+     * @param text    본문
+     */
     @Async
     public void send(String to, String subject, String text) {
         if (!isConfigured()) {

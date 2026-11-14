@@ -14,7 +14,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,12 +24,16 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-@Log4j2
+@Slf4j
 @RequiredArgsConstructor
 public class TokenCheckFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final TokenRevocationService tokenRevocationService;
 
+    /**
+     * 인증이 필요한 요청의 AccessToken을 검사해 SecurityContext에 인증 정보를 넣는다.
+     * 용도가 RefreshToken이거나, 정지·권한 변경 등으로 폐기된 토큰이면 거부한다.
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
@@ -75,6 +79,13 @@ public class TokenCheckFilter extends OncePerRequestFilter {
     }
 
     // AccessToken 검증
+    /**
+     * Authorization 헤더에서 Bearer 토큰을 꺼내 서명과 만료를 검증한다.
+     *
+     * @param request 요청
+     * @return 토큰의 클레임
+     * @throws com.renovandelve.exception.AccessTokenException 헤더가 없거나 형식·서명·만료가 잘못되면
+     */
     private Map<String, Object> validateAccessToken(HttpServletRequest request) {
         String headerStr = request.getHeader("Authorization");
 

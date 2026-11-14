@@ -1,6 +1,6 @@
 package com.renovandelve.handler;
 
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -17,7 +17,7 @@ import java.util.NoSuchElementException;
  * 전역 예외 처리.
  * 프론트가 일관되게 파싱할 수 있도록 {"error": "메시지"} 형태로 통일한다.
  */
-@Log4j2
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 

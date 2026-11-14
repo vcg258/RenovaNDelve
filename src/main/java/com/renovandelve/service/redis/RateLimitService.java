@@ -1,6 +1,6 @@
 package com.renovandelve.service.redis;
 
-import lombok.extern.log4j.Log4j2;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -18,7 +18,7 @@ import java.time.Duration;
  * - fail-open(기본): 제한을 포기하고 통과. 요청 제한은 보조 방어선이므로, 이것 때문에 로그인까지 막히는 쪽이 더 큰 손해다.
  * - fail-closed: 거부. 통과시키면 곧바로 외부 API 비용이 나가는 경로(가이드 챗봇)에 쓴다.
  */
-@Log4j2
+@Slf4j
 @Service
 public class RateLimitService {
     private static final String KEY_PREFIX = "ratelimit:";
