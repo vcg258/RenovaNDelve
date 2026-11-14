@@ -76,6 +76,9 @@ public interface GameEngineService {
     /** 상점에서 나가 탐험 재개 */
     GameViewDTO leaveShop(MemberEntity member);
 
+    /** 악마의 계약 파기 (천상 성향 3 이상, 골드를 바친다, 탐험 중에만) */
+    GameViewDTO breakContract(MemberEntity member);
+
     /** 게임 종료(클리어/게임오버) 요약 - AI 서사 요약 포함 */
     GameSummaryDTO getSummary(MemberEntity member);
 }

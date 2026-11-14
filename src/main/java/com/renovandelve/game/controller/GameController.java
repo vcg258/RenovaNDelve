@@ -334,6 +334,18 @@ public class GameController {
     }
 
     /**
+     * 걸린 악마의 계약을 파기한다. 천상 성향이 충분할 때 골드를 바치고, 탐험 중에만 할 수 있다.
+     *
+     * @return 바뀐 화면 상태
+     */
+    @Operation(summary = "악마의 계약 파기 (천상 성향 3 이상)")
+    @PostMapping("/contract/break")
+    public ResponseEntity<GameViewDTO> breakContract() {
+        MemberEntity member = currentMemberService.getCurrentMember();
+        return ResponseEntity.ok(serialized(member, () -> gameEngineService.breakContract(member)));
+    }
+
+    /**
      * 끝난 원정의 요약 (AI 서사 요약 포함).
      *
      * @return 요약

@@ -42,6 +42,7 @@ import com.renovandelve.game.dto.response.ShopItemDTO;
 import com.renovandelve.game.dto.response.StatusDTO;
 import com.renovandelve.game.dto.response.TurnResultDTO;
 import com.renovandelve.game.engine.Alignment;
+import com.renovandelve.game.engine.DemonContract;
 import com.renovandelve.game.engine.EncounterChoice;
 import com.renovandelve.game.engine.Faction;
 import com.renovandelve.game.engine.GameSession;
@@ -72,6 +73,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.ExecutorService;
@@ -134,6 +136,9 @@ public class GameEngineServiceImpl implements GameEngineService {
     long aiNodeBudgetSeconds = AI_NODE_BUDGET_SECONDS;
     /** 망령 장면은 한 번의 짧은 호출이라 상한을 따로 짧게 둔다. 넘기면 정해진 문장을 쓴다 */
     static final long WRAITH_VOICE_BUDGET_SECONDS = 20;
+    /** 조우에서 계약서를 내밀 확률 (설정 renovaNDelve.game.contract-offer-chance, 기본 0.25). 테스트에서 0 / 1로 고정한다 */
+    @Value("${renovaNDelve.game.contract-offer-chance:" + DemonContract.OFFER_CHANCE + "}")
+    double contractOfferChance = DemonContract.OFFER_CHANCE;
     /** 망령 기록에 옮겨 둘 선택 줄 수 */
     private static final int WRAITH_MEMORY_LINES = 3;
     private static final String CHOICE_PREFIX = "[플레이어의 선택]";
@@ -208,6 +213,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         PathChoice path = PathChoice.parse(pathValue);
 
         gameState.moveToNextNode();
+        session.setContractNote(tickDebt(gameState));
         gameStateRepository.save(gameState);
 
         int stage = gameState.getCurrentStage();
@@ -238,8 +244,9 @@ public class GameEngineServiceImpl implements GameEngineService {
             List<SessionMonster> monsters = buildSessionMonsters(ai.monsters(), gameState);
             applyPath(monsters, path);           // 갈림길 선택에 따른 적 강도 / 기습
             applyPacts(monsters, pacts(gameState)); // 서약으로 스스로 건 제약
-            battleService.rollIntents(monsters); // 첫 턴 행동 예고
             String nodeType = resolveNodeType(node, monsters);
+            session.setContractNote(joinNotes(session.getContractNote(), applyContractToBattle(gameState, monsters, nodeType)));
+            battleService.rollIntents(monsters); // 첫 턴 행동 예고
 
             session.setPhase(GameSession.PHASE_BATTLE);
             session.setPath(path.name());
@@ -258,19 +265,27 @@ public class GameEngineServiceImpl implements GameEngineService {
         Encounter encounter = ai.encounter() != null ? ai.encounter()
                 : new Encounter("빛과 그림자가 동시에 당신을 부른다.", List.of());
         List<EncounterChoice> choices = buildEncounterChoices(encounter, gameState);
+        String encounterType = "ENCOUNTER";
+        // 걸린 계약이 없으면 가끔 마계가 계약서를 내민다 (조항은 숨기고 작은 글씨만 보여 준다)
+        if (gameState.demonContract() == null && random.nextDouble() < contractOfferChance) {
+            choices = buildContractChoices(gameState);
+            encounterType = "CONTRACT";
+        }
 
         session.setPhase(GameSession.PHASE_ENCOUNTER);
         session.setPath(PathChoice.SAFE.name()); // 조우 이벤트에는 길 선택이 영향을 주지 않는다
         // 고른 길이 무시된 것을 숨기지 않는다 (효과가 적용되지 않은 것처럼 보인다는 플레이 피드백)
         session.setPathNote(path == PathChoice.SAFE ? null
                 : "%s을 골랐지만 싸움이 벌어지지 않았다. 조우에서는 길의 효과가 적용되지 않는다.".formatted(path.title()));
-        session.setNodeType("ENCOUNTER");
+        session.setNodeType(encounterType);
         session.setStory(ai.story() != null ? ai.story() : encounter.text());
         session.setMonsters(new ArrayList<>());
         session.setChoices(choices);
         gameSessionService.save(session);
 
-        return encounterNode(session, encounter.text());
+        return encounterNode(session, "CONTRACT".equals(encounterType)
+                ? "어둠 속에서 붉은 인장이 찍힌 계약서가 펼쳐진다. 서명란 아래, 작은 글씨가 희미하게 빛난다."
+                : encounter.text());
     }
 
     /* ==================== 전투 ==================== */
@@ -1364,6 +1379,22 @@ public class GameEngineServiceImpl implements GameEngineService {
             case "ELITE", "WRAITH" -> 2;
             default -> 1;
         } + path.bonusRelicOptions();
+        // 계약 조항 '전리품은 그의 몫': 이번 전리품을 고르지 못하고 바로 상점으로 간다
+        DemonContract contract = gameState.demonContract();
+        if (contract != null && contract.clause() == DemonContract.Clause.SPOILS_CLAIM) {
+            gameState.bindContract(null);
+            log.add("계약서의 작은 글씨가 타오른다: 전리품은 그의 몫이다. 붉은 손이 전리품을 거둬 간다. (계약 종료)");
+            session.setPathNote(null);
+            session.setReward(null);
+            session.setPhase(GameSession.PHASE_SHOP);
+            session.setShop(shopService.generateStock(gameState));
+            session.setShopRerolls(0);
+            gameSessionService.save(session);
+            gameStateRepository.save(gameState);
+            return new TurnResultDTO("WIN", log, toBattleMonsterDTOs(session.getMonsters()),
+                    statusAssembler.toStatusDTO(gameState), null, false, session.getPhase());
+        }
+
         RewardOptions reward = buildRewardOptions(gameState, totalExp, totalGold, relicOptions);
         if (recoveredRelicId != null && !reward.getRelicIds().contains(recoveredRelicId)) {
             List<Long> relicIds = new ArrayList<>(reward.getRelicIds());
@@ -1573,6 +1604,12 @@ public class GameEngineServiceImpl implements GameEngineService {
                 String name = relicRepository.findById(choice.getRefId()).map(RelicEntity::getName).orElse("무언가");
                 return "계약이 성립했다. 유물 [%s]이(가) 손안에서 맥박친다.".formatted(name);
             }
+            case "CONTRACT_SIGN" -> {
+                return signContract(gameState, character, choice);
+            }
+            case "CONTRACT_REFUSE" -> {
+                return "계약서를 찢지도, 서명하지도 않고 돌아섰다. 붉은 인장이 아쉬운 듯 식어 간다.";
+            }
             default -> {
                 return "아무 일도 일어나지 않았다. 다만 무언가가 당신을 지켜보고 있다.";
             }
@@ -1675,6 +1712,161 @@ public class GameEngineServiceImpl implements GameEngineService {
     }
 
     /**
+     * 악마의 계약을 파기한다. 천상 성향이 충분할 때만, 골드를 바치고 탐험 중에만 할 수 있다.
+     *
+     * @param member 로그인 회원
+     * @return 바뀐 화면 상태
+     * @throws IllegalStateException 계약이 없거나, 탐험 중이 아니거나, 천상 성향이 모자라면
+     */
+    @Override
+    @Transactional
+    public GameViewDTO breakContract(MemberEntity member) {
+        GameStateEntity gameState = activeGame(member);
+        GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
+        requirePhase(session, GameSession.PHASE_EXPLORE, "탐험 중에만 계약을 파기할 수 있습니다.");
+        DemonContract contract = gameState.demonContract();
+        if (contract == null) throw new IllegalStateException("걸린 계약이 없습니다.");
+        if (gameState.getHeavenAffinity() < DemonContract.BREAK_HEAVEN_AFFINITY) {
+            throw new IllegalStateException("천상의 성향이 %d 이상이어야 계약을 파기할 수 있습니다."
+                    .formatted(DemonContract.BREAK_HEAVEN_AFFINITY));
+        }
+        gameState.deductGold(DemonContract.breakCost(gameState.getCurrentStage()));
+        gameState.bindContract(null);
+        gameStateRepository.save(gameState);
+        remember(gameState, "[플레이어의 선택] 천상의 빛에 금화를 바쳐 마계와 맺은 계약을 불살랐다.");
+        session.setStory("흰 불꽃이 계약서를 삼킨다. 작은 글씨는 끝내 읽히지 않은 채 재가 되었다.");
+        gameSessionService.save(session);
+        return getView(member);
+    }
+
+    /**
+     * 계약 선택지: 서명(마계)과 거절(인간). 혜택은 문구에 드러내고, 조항은 작은 글씨 힌트로만 보여 준다.
+     *
+     * @param gameState 게임
+     * @return 선택지 두 개
+     */
+    private List<EncounterChoice> buildContractChoices(GameStateEntity gameState) {
+        int stage = gameState.getCurrentStage();
+        List<DemonContract.Boon> boons = new ArrayList<>(List.of(DemonContract.Boon.values()));
+        List<RelicEntity> relicPool = relicRepository.findByRelicNotOwner(gameState.getGameStateId());
+        if (relicPool.isEmpty()) boons.remove(DemonContract.Boon.RELIC);
+        DemonContract.Boon boon = boons.get(random.nextInt(boons.size()));
+        DemonContract.Clause[] clauses = DemonContract.Clause.values();
+        DemonContract contract = DemonContract.of(boon, clauses[random.nextInt(clauses.length)]);
+
+        String gift = switch (boon) {
+            case GOLD -> "골드 +" + DemonContract.Boon.goldAmount(stage);
+            case RELIC -> "유물 하나";
+            default -> boon.summary();
+        };
+        EncounterChoice sign = choice(Faction.ABYSS, "서명한다 — 받는 것: %s · 작은 글씨: \"%s\""
+                .formatted(gift, contract.clause().hint()), "CONTRACT_SIGN", 0,
+                boon == DemonContract.Boon.RELIC ? relicPool.get(random.nextInt(relicPool.size())).getRelicId() : null);
+        sign.setContract(contract.serialize());
+        EncounterChoice refuse = choice(Faction.HUMAN, "서명하지 않고 돌아선다", "CONTRACT_REFUSE", 0, null);
+        return new ArrayList<>(List.of(sign, refuse));
+    }
+
+    /**
+     * 계약에 서명한다: 혜택을 지금 받고, 조항은 게임에 걸어 둔다.
+     *
+     * @param gameState 게임
+     * @param character 캐릭터
+     * @param choice    서명 선택지
+     * @return 결과 문구
+     */
+    private String signContract(GameStateEntity gameState, GameCharacterEntity character, EncounterChoice choice) {
+        DemonContract contract = DemonContract.parse(choice.getContract());
+        if (contract == null) return "계약서의 글씨가 번져 읽을 수 없다. 아무 일도 일어나지 않았다.";
+        String gift = switch (contract.boon()) {
+            case GOLD -> {
+                int gold = DemonContract.Boon.goldAmount(gameState.getCurrentStage());
+                gameState.gainGold(gold);
+                yield "골드 +" + gold;
+            }
+            case POWER -> {
+                character.applyAttackDelta(4);
+                yield "공격력 +4";
+            }
+            case VIGOR -> {
+                character.applyMaxHpDelta(20);
+                character.heal(20);
+                yield "최대 HP +20";
+            }
+            case RELIC -> {
+                if (choice.getRefId() == null || gameState.ownsRelic(choice.getRefId())) yield "유물은 이미 손에 있었다";
+                addRelic(gameState, choice.getRefId());
+                yield "유물 [%s]".formatted(relicRepository.findById(choice.getRefId()).map(RelicEntity::getName).orElse("?"));
+            }
+        };
+        gameState.bindContract(contract);
+        return "피로 서명했다. %s. 계약서는 품 안에서 따뜻하게 맥박친다.".formatted(gift);
+    }
+
+    /**
+     * 노드를 하나 나아갈 때 빚 조항을 센다. 다 차면 골드를 가져간다.
+     *
+     * @param gameState 게임
+     * @return 발동했으면 안내, 아니면 null
+     */
+    private String tickDebt(GameStateEntity gameState) {
+        DemonContract contract = gameState.demonContract();
+        if (contract == null || contract.clause() != DemonContract.Clause.GOLD_DEBT) return null;
+        DemonContract next = contract.tick();
+        if (!next.due()) {
+            gameState.bindContract(next);
+            return null;
+        }
+        int taken = (int) Math.round(gameState.getGold() * DemonContract.GOLD_DEBT_RATIO);
+        gameState.gainGold(-taken);
+        gameState.bindContract(null);
+        return "계약서의 작은 글씨가 타오른다: 빚을 받으러 왔다. 골드 -%d. (계약 종료)".formatted(taken);
+    }
+
+    /**
+     * 전투가 시작될 때 걸리는 조항: 그림자(적 공격력 +25%, 두 번), 피의 십일조(보스전에서 현재 HP 30%).
+     *
+     * @param gameState 게임
+     * @param monsters  이번 전투의 적
+     * @param nodeType  노드 종류
+     * @return 발동했으면 안내, 아니면 null
+     */
+    private String applyContractToBattle(GameStateEntity gameState, List<SessionMonster> monsters, String nodeType) {
+        DemonContract contract = gameState.demonContract();
+        if (contract == null) return null;
+        if (contract.clause() == DemonContract.Clause.SHADOW_PACT) {
+            for (SessionMonster monster : monsters) {
+                monster.setAtk(Math.max(1, (int) Math.round(monster.getAtk() * DemonContract.SHADOW_ATTACK_MULTIPLIER)));
+            }
+            DemonContract next = contract.tick();
+            gameState.bindContract(next.due() ? null : next);
+            return "계약서의 작은 글씨가 타오른다: 그림자가 적의 편에 섰다. 적 공격력 +25%%.%s"
+                    .formatted(next.due() ? " (계약 종료)" : " (한 번 더 남았다)");
+        }
+        if (contract.clause() == DemonContract.Clause.BLOOD_TITHE && "BOSS".equals(nodeType)) {
+            GameCharacterEntity character = character(gameState);
+            int taken = Math.min(character.getCurrentHp() - 1, (int) Math.round(character.getCurrentHp() * DemonContract.BLOOD_TITHE_RATIO));
+            character.takeDamage(Math.max(0, taken));
+            gameState.bindContract(null);
+            return "계약서의 작은 글씨가 타오른다: 왕좌 앞에서 피로 값을 치른다. HP -%d. (계약 종료)".formatted(Math.max(0, taken));
+        }
+        return null;
+    }
+
+    /**
+     * 안내 두 줄을 합친다.
+     *
+     * @param a 앞 안내
+     * @param b 뒤 안내
+     * @return 합친 안내, 둘 다 없으면 null
+     */
+    private static String joinNotes(String a, String b) {
+        if (a == null) return b;
+        if (b == null) return a;
+        return a + " / " + b;
+    }
+
+    /**
      * 망령전을 시작한다. 능력치는 이 스테이지·난이도의 강적 기준치로 서버가 정하고, 갈림길·서약도 그대로 적용한다.
      * AI는 등장 장면만 쓴다. 미리 만들어 둔 이 노드는 쓰지 않으므로 버리고, 다음 노드를 미리 만들기 시작한다.
      *
@@ -1696,6 +1888,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         List<SessionMonster> monsters = new ArrayList<>(List.of(monster));
         applyPath(monsters, path);
         applyPacts(monsters, pacts(gameState));
+        session.setContractNote(joinNotes(session.getContractNote(), applyContractToBattle(gameState, monsters, "WRAITH")));
         battleService.rollIntents(monsters);
 
         String story = wraithAppearance(wraith);
@@ -1814,14 +2007,15 @@ public class GameEngineServiceImpl implements GameEngineService {
      */
     private NodeDTO battleNode(GameSession session) {
         return new NodeDTO(session.getNodeType(), session.getStory(), toBattleMonsterDTOs(session.getMonsters()),
-                null, session.getPath(), session.getPathNote());
+                null, session.getPath(), session.getPathNote(), session.getContractNote());
     }
 
     /** 조우에는 길 효과가 없으므로 path는 비운다. 고른 길이 무시됐다면 그 안내만 싣는다 */
     private NodeDTO encounterNode(GameSession session, String encounterText) {
-        return new NodeDTO("ENCOUNTER", session.getStory(), null,
+        String type = "CONTRACT".equals(session.getNodeType()) ? "CONTRACT" : "ENCOUNTER";
+        return new NodeDTO(type, session.getStory(), null,
                 new EncounterDTO(encounterText, choiceLabels(session), choiceFactions(session)),
-                null, session.getPathNote());
+                null, session.getPathNote(), session.getContractNote());
     }
 
     /**

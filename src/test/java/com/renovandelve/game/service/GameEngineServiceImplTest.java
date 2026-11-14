@@ -24,6 +24,7 @@ import com.renovandelve.ai.dto.response.Encounter;
 import com.renovandelve.game.dto.response.NodeDTO;
 import com.renovandelve.game.engine.EncounterChoice;
 import com.renovandelve.game.engine.GameSession;
+import com.renovandelve.game.engine.DemonContract;
 import com.renovandelve.catalog.repository.ConsumableRepository;
 import com.renovandelve.game.repository.GameConsumableInventoryRepository;
 import com.renovandelve.game.repository.GameRelicInventoryRepository;
@@ -120,6 +121,7 @@ class GameEngineServiceImplTest {
         when(gameSessionService.getOrCreate(GAME_ID)).thenReturn(session);
         when(monsterBaseStatusRepository.findByStageAndDifficulty(any(Short.class), any(Short.class)))
                 .thenReturn(Optional.empty());
+        engine.contractOfferChance = 0; // 계약 제안은 계약 테스트에서만 켠다
     }
 
     /** 진행 중인 게임을 하나 만들어 저장소가 돌려주게 한다 */
@@ -811,5 +813,168 @@ class GameEngineServiceImplTest {
         when(chronicleService.record(any(), anyBoolean(), any())).thenThrow(new RuntimeException("DB down"));
 
         assertThat(engine.getRunReview(member)).isSameAs(review);
+    }
+
+    /* ==================== 악마의 계약서 ==================== */
+
+    private GameStateEntity withContract(int stage, long node, DemonContract contract) {
+        GameStateEntity gameState = activeGame(stage, node);
+        gameState.bindContract(contract);
+        return gameState;
+    }
+
+    @Test
+    @DisplayName("계약 제안: 서명(마계)과 거절(인간) 두 선택지, 문구에는 혜택과 작은 글씨만 있고 조항 이름은 없다")
+    void contractOfferHidesTheClause() {
+        activeGame(1, 1);
+        engine.contractOfferChance = 1;
+        when(monsterRagService.chat(1, 2, CONVERSATION_ID)).thenReturn(AsyncStageResponseDTO.encounter("서사",
+                new Encounter("상황", List.of("a", "b", "c"))));
+
+        NodeDTO node = engine.nextNode(member, "SAFE");
+
+        assertThat(node.nodeType()).isEqualTo("CONTRACT");
+        assertThat(session.getChoices()).extracting("faction").containsExactly("ABYSS", "HUMAN");
+        EncounterChoice sign = session.getChoices().get(0);
+        DemonContract contract = DemonContract.parse(sign.getContract());
+        assertThat(contract).isNotNull();
+        assertThat(node.encounter().choices().get(0)).contains(contract.clause().hint())
+                .doesNotContain(contract.clause().name());
+    }
+
+    @Test
+    @DisplayName("이미 계약이 걸려 있으면 계약을 제안하지 않는다")
+    void noSecondContract() {
+        withContract(1, 1, DemonContract.of(DemonContract.Boon.GOLD, DemonContract.Clause.SPOILS_CLAIM));
+        engine.contractOfferChance = 1;
+        when(monsterRagService.chat(1, 2, CONVERSATION_ID)).thenReturn(AsyncStageResponseDTO.encounter("서사",
+                new Encounter("상황", List.of("a", "b", "c"))));
+
+        assertThat(engine.nextNode(member, "SAFE").nodeType()).isEqualTo("ENCOUNTER");
+        assertThat(session.getChoices()).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("서명하면 혜택을 바로 받고 계약이 걸리며, 마계 성향이 오른다")
+    void signingGivesTheBoonAndBindsTheClause() {
+        GameStateEntity gameState = activeGame(2, 3);
+        session.setPhase(GameSession.PHASE_ENCOUNTER);
+        session.setStory("계약서");
+        EncounterChoice sign = choice("ABYSS", "CONTRACT_SIGN");
+        sign.setContract(DemonContract.of(DemonContract.Boon.GOLD, DemonContract.Clause.GOLD_DEBT).serialize());
+        session.setChoices(new ArrayList<>(List.of(sign, choice("HUMAN", "CONTRACT_REFUSE"))));
+
+        engine.chooseEncounter(member, new EncounterChoiceRequest(0));
+
+        assertThat(gameState.getGold()).isEqualTo(DemonContract.Boon.goldAmount(2));
+        assertThat(gameState.demonContract().clause()).isEqualTo(DemonContract.Clause.GOLD_DEBT);
+        assertThat(gameState.getAbyssAffinity()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("빚 조항: 세 노드를 더 나아가면 골드의 60%를 가져가고 계약이 끝난다")
+    void goldDebtComesDueAfterThreeNodes() {
+        GameStateEntity gameState = withContract(1, 1, DemonContract.of(DemonContract.Boon.GOLD, DemonContract.Clause.GOLD_DEBT));
+        gameState.gainGold(100);
+        when(monsterRagService.chat(anyInt(), anyInt(), anyString()))
+                .thenReturn(AsyncStageResponseDTO.encounter("서사", new Encounter("상황", List.of("a", "b", "c"))));
+
+        for (int i = 0; i < 2; i++) {
+            NodeDTO node = engine.nextNode(member, "SAFE");
+            assertThat(node.contractNote()).isNull();
+            session.setPhase(GameSession.PHASE_EXPLORE);
+        }
+        NodeDTO third = engine.nextNode(member, "SAFE");
+
+        assertThat(third.contractNote()).contains("빚을 받으러", "-60");
+        assertThat(gameState.getGold()).isEqualTo(40);
+        assertThat(gameState.demonContract()).isNull();
+    }
+
+    @Test
+    @DisplayName("그림자 조항: 두 번의 전투에서 적 공격력이 25% 오른다")
+    void shadowPactStrengthensTwoBattles() {
+        GameStateEntity gameState = withContract(1, 1, DemonContract.of(DemonContract.Boon.POWER, DemonContract.Clause.SHADOW_PACT));
+        when(monsterRagService.chat(anyInt(), anyInt(), anyString()))
+                .thenReturn(AsyncStageResponseDTO.battle("서사", List.of(monster("고블린", 0))));
+
+        NodeDTO first = engine.nextNode(member, "SAFE");
+        // 기준 능력치가 없을 때 스테이지 1 일반 공격력 = 7 + 4 = 11 -> 1.25배 = 14
+        assertThat(session.getMonsters().get(0).getAtk()).isEqualTo(14);
+        assertThat(first.contractNote()).contains("한 번 더");
+        assertThat(gameState.demonContract().remaining()).isEqualTo(1);
+
+        session.setPhase(GameSession.PHASE_EXPLORE);
+        NodeDTO second = engine.nextNode(member, "SAFE");
+        assertThat(second.contractNote()).contains("계약 종료");
+        assertThat(gameState.demonContract()).isNull();
+    }
+
+    @Test
+    @DisplayName("피의 십일조: 보스전이 시작될 때 지금 HP의 30%를 잃는다 (일반 전투에서는 발동하지 않는다)")
+    void bloodTitheWaitsForTheBoss() {
+        GameStateEntity gameState = withContract(1, 9, DemonContract.of(DemonContract.Boon.VIGOR, DemonContract.Clause.BLOOD_TITHE));
+        when(monsterRagService.chat(1, 10, CONVERSATION_ID))
+                .thenReturn(AsyncStageResponseDTO.battle("서사", List.of(monster("뼈의 군주", 2))));
+
+        NodeDTO node = engine.nextNode(member, "SAFE");
+
+        assertThat(node.contractNote()).contains("피로 값을", "HP -15");
+        assertThat(gameState.getGameCharacter().get(0).getCurrentHp()).isEqualTo(35);
+        assertThat(gameState.demonContract()).isNull();
+    }
+
+    @Test
+    @DisplayName("전리품 조항: 다음 승리에서 보상 단계를 건너뛰고 바로 상점으로 간다")
+    void spoilsClaimSkipsTheReward() {
+        GameStateEntity gameState = activeGame(1, 3);
+        session.setPhase(GameSession.PHASE_BATTLE);
+        when(shopService.generateStock(any())).thenReturn(new ArrayList<>());
+        // winBattleOn이 게임을 새로 만들므로 직접 세운다
+        TurnResultDTO first = winBattleOn("SAFE");
+        assertThat(first.phase()).isEqualTo(GameSession.PHASE_REWARD);
+
+        lastGame.bindContract(DemonContract.of(DemonContract.Boon.GOLD, DemonContract.Clause.SPOILS_CLAIM));
+        session.setPhase(GameSession.PHASE_BATTLE);
+        SessionMonster foe = new SessionMonster();
+        foe.setName("고블린");
+        foe.setMaxHp(10);
+        foe.setCurrentHp(10);
+        session.setMonsters(new ArrayList<>(List.of(foe)));
+
+        TurnResultDTO result = engine.useSkill(member, new SkillUseRequest(1L, List.of()));
+
+        assertThat(result.result()).isEqualTo("WIN");
+        assertThat(result.reward()).isNull();
+        assertThat(result.phase()).isEqualTo(GameSession.PHASE_SHOP);
+        assertThat(result.log()).anyMatch(line -> line.contains("전리품은 그의 몫"));
+        assertThat(lastGame.demonContract()).isNull();
+        assertThat(lastGame.getGold()).isPositive(); // 골드·경험치는 그대로 받는다
+    }
+
+    @Test
+    @DisplayName("파기: 천상 성향 3 이상이면 골드를 바치고 계약을 없앤다. 모자라면 거부한다")
+    void breakingNeedsHeaven() {
+        GameStateEntity gameState = withContract(2, 3, DemonContract.of(DemonContract.Boon.GOLD, DemonContract.Clause.GOLD_DEBT));
+        gameState.gainGold(500);
+        session.setPhase(GameSession.PHASE_EXPLORE);
+
+        assertThatThrownBy(() -> engine.breakContract(member)).isInstanceOf(IllegalStateException.class);
+
+        for (int i = 0; i < 3; i++) gameState.gainAffinity(com.renovandelve.game.engine.Faction.HEAVEN);
+        engine.breakContract(member);
+
+        assertThat(gameState.demonContract()).isNull();
+        assertThat(gameState.getGold()).isEqualTo(500 - DemonContract.breakCost(2));
+    }
+
+    @Test
+    @DisplayName("저장 형식이 깨졌으면 계약이 없는 것으로 본다")
+    void brokenContractValueIsIgnored() {
+        assertThat(DemonContract.parse("GOLD:NOPE:1")).isNull();
+        assertThat(DemonContract.parse("GOLD")).isNull();
+        assertThat(DemonContract.parse(null)).isNull();
+        DemonContract c = DemonContract.of(DemonContract.Boon.RELIC, DemonContract.Clause.SHADOW_PACT);
+        assertThat(DemonContract.parse(c.serialize())).isEqualTo(c);
     }
 }

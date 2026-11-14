@@ -11,6 +11,7 @@ import com.renovandelve.catalog.domain.consumableentity.ConsumableEntity;
 import com.renovandelve.catalog.domain.relicentity.RelicEntity;
 import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.game.engine.Alignment;
+import com.renovandelve.game.engine.DemonContract;
 import com.renovandelve.game.engine.Faction;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -105,6 +106,9 @@ public class GameStateEntity { //제외
     @Column(length = 120)
     private String pacts; // 이번 원정에 건 서약 (Pact 이름을 쉼표로 구분). 없으면 NULL
 
+    @Column(length = 60)
+    private String contract; // 걸린 악마의 계약 ("혜택:조항:남은횟수"). 조항은 서버 전용. 없으면 NULL
+
     @Column(length = 20)
     private String result; // 종료 결과 (CLEAR / DEFEAT / ABANDON). 진행 중이거나 과거 기록이면 NULL
 
@@ -184,6 +188,24 @@ public class GameStateEntity { //제외
      */
     public Alignment alignment() {
         return new Alignment(heavenAffinity, abyssAffinity, humanAffinity);
+    }
+
+    /**
+     * 걸린 악마의 계약.
+     *
+     * @return 계약, 없으면 null
+     */
+    public DemonContract demonContract() {
+        return DemonContract.parse(contract);
+    }
+
+    /**
+     * 계약을 걸거나 남은 횟수를 갱신한다. null이면 계약이 끝난다.
+     *
+     * @param value 계약 (null이면 해제)
+     */
+    public void bindContract(DemonContract value) {
+        this.contract = value == null ? null : value.serialize();
     }
 
     /**
