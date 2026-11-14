@@ -6,11 +6,18 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 - **1.0.0 전까지는 베타입니다.** 밸런스 수치와 API가 바뀔 수 있습니다.
 - 각 버전은 같은 이름의 git 태그(`v0.4.0` 등)로 표시되어 있습니다. 괄호 안의 번호는 그 버전에 들어간 PR입니다.
 
-## [Unreleased]
+## [0.5.0] - 2026-11-15 — 전생의 망령
+
+### 추가
+- **전생의 망령**: 패배한 원정이 망령으로 남아, 다음 원정에서 쓰러진 스테이지·노드(2~9)에 강적으로 나타난다 (백엔드 #12, 프론트 #9)
+  - 능력치는 그 스테이지·난이도의 강적 기준치 x HP 1.25, 갈림길·서약도 그대로 적용된다. 공격할 때 전생의 주력 스킬 이름을 외친다
+  - 등장 장면은 AI가 그 원정의 선택(대화 기록에서 옮겨 둔 최근 3줄)을 바탕으로 쓴다. 20초를 넘기거나 실패하면 정해진 문장
+  - 처치하면 그 원정에서 가졌던 유물 중 지금 없는 하나가 보상 후보 맨 앞에 온다. 세 번 달아나면 흩어지고, 새로 쓰러지면 이전 망령은 밀려난다
+  - 원정 준비 화면에 기다리는 망령 안내 (`GET /api/game/wraith`), 전용 스프라이트
+  - Flyway `V3__wraith.sql`. 탈퇴 시 삭제, 내 정보 내려받기에 포함
 
 ### 변경
 - **패키지를 도메인별로 재구성**: `game / catalog / member / auth / collection / ranking / ai / global`. 각 모듈 안은 기존 계층(controller / service / repository / domain / dto)을 유지했고, 로직은 바꾸지 않았다 (백엔드 #11)
-  - 배포 전 Redis에 남은 게임 세션·다음 노드 캐시는 클래스 이름이 바뀌어 읽히지 않는다. 진행 중인 원정을 끝내거나 해당 키를 지우고 배포한다
 
 ## [0.4.0] - 2026-11-15 — 구조 정리와 기록
 
@@ -86,6 +93,7 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 - 엔티티 20여 개와 Repository, Spring Security(JWT), Spring AI(RAG 파이프라인, Tools)
 - 게임 엔진은 미완성(동작하지 않음), 프론트엔드는 저장소가 폐기되어 남아 있지 않다
 
+[0.5.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/vcg258/RenovaNDelve/compare/v0.2.0...v0.2.1

@@ -5,6 +5,8 @@ import com.renovandelve.ranking.domain.RankingEntity;
 import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.game.dto.response.GameHistoryDTO;
 import com.renovandelve.game.repository.GameStateRepository;
+import com.renovandelve.game.domain.WraithEntity;
+import com.renovandelve.game.repository.WraithRepository;
 import com.renovandelve.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +44,7 @@ public class PersonalDataService {
     private final GameStateRepository gameStateRepository;
     private final ChatMemory chatMemory;
     private final JdbcTemplate jdbcTemplate;
+    private final WraithRepository wraithRepository;
 
     @Value("${renovaNDelve.privacy.chat-retention-days:30}")
     private int chatRetentionDays;
@@ -80,6 +83,8 @@ public class PersonalDataService {
         for (GameStateEntity game : gameStateRepository.findByMember_MemberIdOrderByCreatedAtDesc(memberId)) {
             chatMemory.clear(gameConversationId(game.getGameStateId()));
         }
+        // 망령에는 대화 기록에서 옮겨 둔 선택 문장이 들어 있다
+        wraithRepository.deleteAllByMemberId(memberId);
     }
 
     /** 최근 모험 기록 */
@@ -141,6 +146,9 @@ public class PersonalDataService {
         result.put("rankings", rankings);
         result.put("games", games);
         result.put("collectionCounts", collection);
+        result.put("wraiths", wraithRepository.findByMemberIdOrderByCreatedAtDesc(managed.getMemberId()).stream()
+                .map(this::toWraithMap)
+                .toList());
         result.put("notice", "AI 대화 기록은 마지막 이용 후 %d일 뒤 자동 삭제되며, 내 정보 화면에서 즉시 삭제할 수 있습니다."
                 .formatted(chatRetentionDays));
         return result;
@@ -163,6 +171,26 @@ public class PersonalDataService {
         } catch (Exception e) {
             log.error("[개인정보 파기] AI 대화 기록 정리 실패: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 망령 기록을 내려받기용 맵으로 옮긴다.
+     *
+     * @param wraith 망령
+     * @return 쓰러진 자리, 레벨, 상대, 기술, 세력, 선택 기록, 상태, 기록 일시
+     */
+    private Map<String, Object> toWraithMap(WraithEntity wraith) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("stage", wraith.getStage());
+        map.put("node", wraith.getNode());
+        map.put("level", wraith.getLevel());
+        map.put("killerName", wraith.getKillerName());
+        map.put("skills", wraith.skillNames());
+        map.put("faction", wraith.getFaction());
+        map.put("memories", wraith.memoryLines());
+        map.put("status", wraith.getStatus().name());
+        map.put("createdAt", wraith.getCreatedAt());
+        return map;
     }
 
     /**

@@ -7,6 +7,7 @@ import com.renovandelve.game.domain.GameCharacterEntity;
 import com.renovandelve.game.domain.GameConsumableInventoryEntity;
 import com.renovandelve.game.domain.GameEquipmentEntity;
 import com.renovandelve.game.domain.GameSkillSlotEntity;
+import com.renovandelve.game.domain.WraithEntity;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.catalog.domain.MonsterBaseStatusEntity;
 import com.renovandelve.catalog.domain.consumableentity.ConsumableEntity;
@@ -59,11 +60,14 @@ import com.renovandelve.game.repository.GameStateRepository;
 import com.renovandelve.catalog.repository.MonsterBaseStatusRepository;
 import com.renovandelve.catalog.repository.RelicRepository;
 import com.renovandelve.catalog.repository.SkillRepository;
+import com.renovandelve.ai.service.AsyncPrefetchService;
 import com.renovandelve.ai.service.MonsterRagService;
+import com.renovandelve.ai.service.WraithVoiceService;
 import com.renovandelve.ai.service.RunReviewService;
 import com.renovandelve.game.service.redis.GameSessionService;
 import com.renovandelve.ai.service.StageCacheService;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -101,6 +105,9 @@ public class GameEngineServiceImpl implements GameEngineService {
     private final ChatMemory chatMemory;
     private final StageCacheService stageCacheService;
     private final SkillSlotService skillSlotService;
+    private final WraithService wraithService;
+    private final WraithVoiceService wraithVoiceService;
+    private final AsyncPrefetchService asyncPrefetchService;
 
     private final Random random = new Random();
 
@@ -124,6 +131,11 @@ public class GameEngineServiceImpl implements GameEngineService {
     static final long AI_NODE_BUDGET_SECONDS = 75;
     /** 테스트에서 줄일 수 있도록 필드로 둔다 */
     long aiNodeBudgetSeconds = AI_NODE_BUDGET_SECONDS;
+    /** 망령 장면은 한 번의 짧은 호출이라 상한을 따로 짧게 둔다. 넘기면 정해진 문장을 쓴다 */
+    static final long WRAITH_VOICE_BUDGET_SECONDS = 20;
+    /** 망령 기록에 옮겨 둘 선택 줄 수 */
+    private static final int WRAITH_MEMORY_LINES = 3;
+    private static final String CHOICE_PREFIX = "[플레이어의 선택]";
     /** LLM 호출은 대기 시간이 대부분인 블로킹 IO -> 가상 스레드 */
     private final ExecutorService aiExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -199,6 +211,14 @@ public class GameEngineServiceImpl implements GameEngineService {
         int node = gameState.getCurrentNodeId() == null ? 1 : gameState.getCurrentNodeId().intValue();
         String conversationId = conversationId(gameState);
 
+        // 지난 원정에서 이 자리에 쓰러졌다면, 그 망령이 AI가 고른 적 대신 길을 막는다 (보스 노드 제외)
+        if (node % NODES_PER_STAGE != 0) {
+            Optional<WraithEntity> wraith = wraithService.waitingAt(member.getMemberId(), gameState.getGameStateId(), stage, node);
+            if (wraith.isPresent()) {
+                return startWraithBattle(gameState, session, wraith.get(), path, conversationId);
+            }
+        }
+
         AsyncStageResponseDTO ai = generateNodeContent(stage, node, conversationId);
 
         // 보스 노드(10노드)는 무조건 전투.
@@ -223,6 +243,7 @@ public class GameEngineServiceImpl implements GameEngineService {
             session.setPathNote(path.battleNote());
             session.setNodeType(nodeType);
             session.setStory(ai.story());
+            session.setWraithId(null);
             session.setMonsters(monsters);
             session.setChoices(new ArrayList<>());
             gameSessionService.save(session);
@@ -400,6 +421,12 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
 
         log.add("적을 따돌렸다. 전리품은 없다.");
+        if (session.getWraithId() != null) {
+            boolean faded = wraithService.escape(session.getWraithId());
+            log.add(faded ? "세 번째로 등을 보이자 망령은 더 쫓아오지 않았다. 안개처럼 흩어져 다시는 나타나지 않는다."
+                    : "망령은 쫓아오지 않았다. 다음 원정에도 같은 자리에서 기다릴 것이다.");
+            session.setWraithId(null);
+        }
         stats(session).recordFlee(session.getMonsters());
         remember(gameState, "[플레이어의 선택] 스테이지 %d에서 %s을(를) 상대하다 싸움을 포기하고 달아났다."
                 .formatted(gameState.getCurrentStage(), session.getMonsters().stream()
@@ -1290,6 +1317,18 @@ public class GameEngineServiceImpl implements GameEngineService {
                     .formatted(stage, bossName));
         }
 
+        // 망령을 쓰러뜨렸으면 그 원정에서 가졌던 유물 하나가 보상 후보로 돌아온다
+        Long recoveredRelicId = null;
+        if (session.getWraithId() != null) {
+            List<Long> owned = gameState.getGameRelicInventory() == null ? List.of()
+                    : gameState.getGameRelicInventory().stream().map(i -> i.getRelic().getRelicId()).toList();
+            recoveredRelicId = wraithService.slay(session.getWraithId(), owned).orElse(null);
+            log.add("망령이 흩어진다. 지난 원정의 당신은 이제 이 자리에 없다.");
+            if (recoveredRelicId != null) log.add("흩어진 자리에 낯익은 유물이 떨어져 있다. (보상 후보)");
+            remember(gameState, "[플레이어의 선택] 스테이지 %d에서 지난 원정에 쓰러진 자신의 망령을 쓰러뜨렸다.".formatted(stage));
+            session.setWraithId(null);
+        }
+
         // 쿨타임 초기화
         gameState.resetSkillCooldowns();
 
@@ -1312,10 +1351,16 @@ public class GameEngineServiceImpl implements GameEngineService {
         // 강한 적일수록 유물을 고를 기회가 많다: 일반 1 / 엘리트 2 / 보스 3 (+ 위험한 길 보너스)
         int relicOptions = switch (String.valueOf(session.getNodeType())) {
             case "BOSS" -> 3;
-            case "ELITE" -> 2;
+            case "ELITE", "WRAITH" -> 2;
             default -> 1;
         } + path.bonusRelicOptions();
-        session.setReward(buildRewardOptions(gameState, totalExp, totalGold, relicOptions));
+        RewardOptions reward = buildRewardOptions(gameState, totalExp, totalGold, relicOptions);
+        if (recoveredRelicId != null && !reward.getRelicIds().contains(recoveredRelicId)) {
+            List<Long> relicIds = new ArrayList<>(reward.getRelicIds());
+            relicIds.add(0, recoveredRelicId);
+            reward.setRelicIds(relicIds);
+        }
+        session.setReward(reward);
         session.setPathNote(null);
         session.setPhase(GameSession.PHASE_REWARD);
         gameSessionService.save(session);
@@ -1560,9 +1605,113 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @param cleared   클리어했는지
      */
     private void terminate(GameStateEntity gameState, GameSession session, boolean cleared) {
+        if (!cleared) leaveWraith(gameState, session);
+        session.setWraithId(null);
         battleResultService.terminateGame(gameState, cleared);
         session.setPhase(cleared ? GameSession.PHASE_CLEAR : GameSession.PHASE_GAMEOVER);
         session.setSummaryNarrative(generateNarrative(gameState));
+    }
+
+    /**
+     * 패배한 원정을 망령으로 남긴다. 실패해도 원정 종료는 막지 않는다.
+     *
+     * @param gameState 패배한 원정
+     * @param session   게임 세션 (쓰러뜨린 적)
+     */
+    private void leaveWraith(GameStateEntity gameState, GameSession session) {
+        try {
+            String killer = session.getMonsters() == null ? null : session.getMonsters().stream()
+                    .filter(SessionMonster::isAlive).map(SessionMonster::getName).findFirst().orElse(null);
+            wraithService.recordDeath(gameState, killer, recentChoices(gameState));
+        } catch (Exception e) {
+            log.warn("망령 기록 실패 gameStateId={} 원인={}", gameState.getGameStateId(), e.getMessage());
+        }
+    }
+
+    /**
+     * 이 원정에서 내린 선택 중 최근 몇 줄 (AI 대화 기록의 "[플레이어의 선택]" 줄).
+     *
+     * @param gameState 게임
+     * @return 선택 문장, 오래된 것부터
+     */
+    private List<String> recentChoices(GameStateEntity gameState) {
+        try {
+            List<String> lines = chatMemory.get(conversationId(gameState)).stream()
+                    .map(Message::getText)
+                    .filter(text -> text != null && text.startsWith(CHOICE_PREFIX))
+                    .map(text -> shorten(text.substring(CHOICE_PREFIX.length())))
+                    .toList();
+            return lines.subList(Math.max(0, lines.size() - WRAITH_MEMORY_LINES), lines.size());
+        } catch (Exception e) {
+            log.warn("선택 기록 읽기 실패 gameStateId={} 원인={}", gameState.getGameStateId(), e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * 망령전을 시작한다. 능력치는 이 스테이지·난이도의 강적 기준치로 서버가 정하고, 갈림길·서약도 그대로 적용한다.
+     * AI는 등장 장면만 쓴다. 미리 만들어 둔 이 노드는 쓰지 않으므로 버리고, 다음 노드를 미리 만들기 시작한다.
+     *
+     * @param gameState      게임
+     * @param session        게임 세션
+     * @param wraith         망령
+     * @param path           고른 길
+     * @param conversationId 서사 대화 기록 ID
+     * @return 전투 노드
+     */
+    private NodeDTO startWraithBattle(GameStateEntity gameState, GameSession session, WraithEntity wraith,
+                                      PathChoice path, String conversationId) {
+        int stage = gameState.getCurrentStage();
+        int node = gameState.getCurrentNodeId().intValue();
+
+        SessionMonster monster = buildSessionMonsters(List.of(new MonsterDTO(null, WraithService.WRAITH_NAME,
+                (short) 1, WraithService.SCORE_REWARD, null)), gameState).get(0);
+        WraithService.dress(monster, wraith);
+        List<SessionMonster> monsters = new ArrayList<>(List.of(monster));
+        applyPath(monsters, path);
+        applyPacts(monsters, pacts(gameState));
+        battleService.rollIntents(monsters);
+
+        String story = wraithAppearance(wraith);
+        remember(gameState, "[플레이어의 선택] 스테이지 %d에서 지난 원정에 쓰러진 자신의 망령과 마주쳤다.".formatted(stage));
+        try {
+            stageCacheService.delete(conversationId, stage, node);
+            asyncPrefetchService.prefetchNextStage(stage, node + 1, conversationId);
+        } catch (Exception e) {
+            log.warn("망령 노드의 프리페치 처리 실패: {}", e.getMessage());
+        }
+
+        session.setPhase(GameSession.PHASE_BATTLE);
+        session.setPath(path.name());
+        session.setPathNote(path.battleNote());
+        session.setNodeType("WRAITH");
+        session.setStory(story);
+        session.setWraithId(wraith.getWraithId());
+        session.setMonsters(monsters);
+        session.setChoices(new ArrayList<>());
+        gameSessionService.save(session);
+        log.info("망령 출현 gameStateId={} wraithId={} stage={} node={}",
+                gameState.getGameStateId(), wraith.getWraithId(), stage, node);
+        return battleNode(session);
+    }
+
+    /**
+     * 망령의 등장 장면. 시간 상한을 넘기면 정해진 문장을 쓴다.
+     *
+     * @param wraith 망령
+     * @return 장면
+     */
+    private String wraithAppearance(WraithEntity wraith) {
+        Future<String> pending = aiExecutor.submit(() -> wraithVoiceService.appearance(wraith));
+        try {
+            String text = pending.get(WRAITH_VOICE_BUDGET_SECONDS, TimeUnit.SECONDS);
+            if (text != null && !text.isBlank()) return text;
+        } catch (Exception e) {
+            pending.cancel(true);
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            log.warn("망령 장면 생성 시간 초과 또는 실패: {}", e.getMessage());
+        }
+        return "안개 속에서 낯익은 걸음걸이가 다가온다. 지난 원정에서 이곳에 쓰러진 당신이다.";
     }
 
     /**

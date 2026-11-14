@@ -31,7 +31,12 @@ import com.renovandelve.game.repository.GameStateRepository;
 import com.renovandelve.catalog.repository.MonsterBaseStatusRepository;
 import com.renovandelve.catalog.repository.RelicRepository;
 import com.renovandelve.catalog.repository.SkillRepository;
+import com.renovandelve.ai.service.AsyncPrefetchService;
 import com.renovandelve.ai.service.MonsterRagService;
+import com.renovandelve.ai.service.WraithVoiceService;
+import com.renovandelve.game.domain.WraithEntity;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.test.util.ReflectionTestUtils;
 import com.renovandelve.ai.service.RunReviewService;
 import com.renovandelve.game.service.redis.GameSessionService;
 import com.renovandelve.ai.service.StageCacheService;
@@ -93,6 +98,9 @@ class GameEngineServiceImplTest {
     @Mock private ChatMemory chatMemory;
     @Mock private StageCacheService stageCacheService;
     @Mock private SkillSlotService skillSlotService;
+    @Mock private WraithService wraithService;
+    @Mock private WraithVoiceService wraithVoiceService;
+    @Mock private AsyncPrefetchService asyncPrefetchService;
 
     @InjectMocks private GameEngineServiceImpl engine;
 
@@ -641,5 +649,128 @@ class GameEngineServiceImplTest {
         engine.discardSkill(member, new SkillDiscardRequest(2L));
 
         verify(skillSlotService).discard(gameState, 2L);
+    }
+
+    /* ==================== 전생의 망령 ==================== */
+
+    private WraithEntity wraith(long id, int stage, int node) {
+        WraithEntity wraith = WraithEntity.builder()
+                .memberId(1L).sourceGameStateId(3L).stage(stage).node(node).level(4)
+                .killerName("광증의 기사").skills(List.of("화염구", "출혈 베기")).relicIds(List.of(77L))
+                .memories(List.of("마계의 손을 잡았다")).build();
+        ReflectionTestUtils.setField(wraith, "wraithId", id);
+        return wraith;
+    }
+
+    @Test
+    @DisplayName("망령이 기다리는 자리에 오면 AI가 고른 적 대신 망령이 나타나고, 능력치는 서버의 강적 기준치를 따른다")
+    void wraithReplacesTheNodeWhereYouFell() {
+        activeGame(2, 4); // 다음이 5번째 노드
+        when(wraithService.waitingAt(1L, GAME_ID, 2, 5)).thenReturn(Optional.of(wraith(99L, 2, 5)));
+        when(wraithVoiceService.appearance(any())).thenReturn("안개 속의 당신이 말한다.");
+
+        NodeDTO node = engine.nextNode(member, "SAFE");
+
+        assertThat(node.nodeType()).isEqualTo("WRAITH");
+        assertThat(node.story()).isEqualTo("안개 속의 당신이 말한다.");
+        assertThat(session.getWraithId()).isEqualTo(99L);
+        SessionMonster foe = session.getMonsters().get(0);
+        assertThat(foe.getName()).isEqualTo(WraithService.WRAITH_NAME);
+        assertThat(foe.getMonsterType()).isEqualTo((short) 1);
+        assertThat(foe.getMoves()).containsExactly("화염구", "출혈 베기");
+        // 기준 능력치가 없을 때의 계산: (40 + 2 * 25) = 90, 강적 1.6배(편차 ±10%) 뒤 망령 1.25배
+        assertThat(foe.getMaxHp()).isBetween((int) (90 * 1.6 * 0.9 * 1.25) - 1, (int) (90 * 1.6 * 1.1 * 1.25) + 1);
+        verify(monsterRagService, never()).chat(anyInt(), anyInt(), anyString());
+        verify(asyncPrefetchService).prefetchNextStage(2, 6, CONVERSATION_ID);
+    }
+
+    @Test
+    @DisplayName("보스 노드에서는 망령을 찾지 않는다")
+    void wraithNeverTakesTheBossNode() {
+        activeGame(1, 9);
+        when(monsterRagService.chat(1, 10, CONVERSATION_ID))
+                .thenReturn(AsyncStageResponseDTO.battle("서사", List.of(monster("악마화된 왕", 2))));
+
+        engine.nextNode(member, "SAFE");
+
+        verify(wraithService, never()).waitingAt(any(), any(), anyInt(), anyInt());
+        assertThat(session.getNodeType()).isEqualTo("BOSS");
+    }
+
+    @Test
+    @DisplayName("망령을 쓰러뜨리면 처치로 기록되고, 그 원정의 유물이 보상 후보 맨 앞에 돌아온다")
+    void slainWraithReturnsARelic() {
+        when(relicRepository.findByRelicNotOwner(GAME_ID)).thenReturn(List.of(
+                RelicEntity.builder().relicId(1L).name("a").build(),
+                RelicEntity.builder().relicId(2L).name("b").build(),
+                RelicEntity.builder().relicId(3L).name("c").build()));
+        when(wraithService.slay(eq(99L), any())).thenReturn(Optional.of(77L));
+
+        TurnResultDTO result = winBattleOnWraith(99L);
+
+        assertThat(session.getReward().getRelicIds()).hasSize(3).first().isEqualTo(77L); // 강적 2개 + 돌아온 1개
+        assertThat(session.getWraithId()).isNull();
+        assertThat(result.log()).anyMatch(line -> line.contains("망령이 흩어진다"));
+    }
+
+    /** 일반 전투로 게임을 세운 뒤, 같은 게임에서 망령전을 이긴다 */
+    private TurnResultDTO winBattleOnWraith(Long wraithId) {
+        winBattleOn("SAFE");
+        session.setWraithId(wraithId);
+        session.setNodeType("WRAITH");
+        session.setPhase(GameSession.PHASE_BATTLE);
+        SessionMonster monster = new SessionMonster();
+        monster.setName(WraithService.WRAITH_NAME);
+        monster.setMaxHp(10);
+        monster.setCurrentHp(10);
+        monster.setMonsterType((short) 1);
+        session.setMonsters(new ArrayList<>(List.of(monster)));
+        return engine.useSkill(member, new SkillUseRequest(1L, List.of()));
+    }
+
+    @Test
+    @DisplayName("망령에게서 달아나면 도주 횟수가 쌓이고, 이번 전투의 망령 표시는 지워진다")
+    void fleeingFromWraithCountsAnEscape() {
+        battleGame("WRAITH", 1);
+        session.setWraithId(99L);
+        when(battleService.monsterAttackDamage(any(), anyInt(), anyInt(), anyDouble(), any())).thenReturn(5);
+        when(wraithService.escape(99L)).thenReturn(false);
+
+        TurnResultDTO result = engine.flee(member);
+
+        assertThat(result.result()).isEqualTo("FLED");
+        verify(wraithService).escape(99L);
+        assertThat(session.getWraithId()).isNull();
+        assertThat(result.log()).anyMatch(line -> line.contains("같은 자리에서 기다릴 것"));
+    }
+
+    @Test
+    @DisplayName("쓰러지면 쓰러뜨린 적과 최근 선택 3줄을 담아 망령을 남긴다")
+    void defeatLeavesAWraith() {
+        GameStateEntity gameState = battleGame("BATTLE", 0);
+        when(battleService.monsterAttackDamage(any(), anyInt(), anyInt(), anyDouble(), any())).thenReturn(999);
+        when(chatMemory.get(CONVERSATION_ID)).thenReturn(List.of(
+                new UserMessage("[플레이어의 선택] 첫째"),
+                new UserMessage("서사 요청"),
+                new UserMessage("[플레이어의 선택] 둘째"),
+                new UserMessage("[플레이어의 선택] 셋째"),
+                new UserMessage("[플레이어의 선택] 넷째")));
+
+        engine.flee(member);
+
+        verify(wraithService).recordDeath(gameState, "광증의 기사", List.of("둘째", "셋째", "넷째"));
+    }
+
+    @Test
+    @DisplayName("망령 기록이 실패해도 원정은 정상적으로 끝난다")
+    void wraithFailureDoesNotBlockGameOver() {
+        battleGame("BATTLE", 0);
+        when(battleService.monsterAttackDamage(any(), anyInt(), anyInt(), anyDouble(), any())).thenReturn(999);
+        when(wraithService.recordDeath(any(), any(), any())).thenThrow(new RuntimeException("DB down"));
+
+        TurnResultDTO result = engine.flee(member);
+
+        assertThat(result.result()).isEqualTo("LOSE");
+        assertThat(session.getPhase()).isEqualTo(GameSession.PHASE_GAMEOVER);
     }
 }

@@ -235,9 +235,23 @@ public class BattleServiceImpl implements BattleService {
             damage = Math.max(1, (int) Math.round(damage * incomingMultiplier));
 
             totalDamage += damage;
-            log.add("%s의 %s! %d의 피해".formatted(monster.getName(), heavy ? "강공" : "공격", damage));
+            log.add("%s의 %s! %d의 피해".formatted(monster.getName(), attackName(monster, heavy), damage));
         }
         return totalDamage;
+    }
+
+    /**
+     * 공격 기록에 쓸 이름. 기술 이름이 있는 적(망령)은 그 기술을 외치고, 강공이면 뒤에 "강공"이 붙는다.
+     *
+     * @param monster 공격하는 적
+     * @param heavy   강공이면 true
+     * @return 기록에 쓸 공격 이름
+     */
+    private String attackName(SessionMonster monster, boolean heavy) {
+        List<String> moves = monster.getMoves();
+        if (moves == null || moves.isEmpty()) return heavy ? "강공" : "공격";
+        String move = "[" + moves.get(random.nextInt(moves.size())) + "]";
+        return heavy ? move + " 강공" : move;
     }
 
     /**

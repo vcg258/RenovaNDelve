@@ -1,6 +1,8 @@
 package com.renovandelve.game.controller;
 
 import com.renovandelve.member.domain.MemberEntity;
+import com.renovandelve.game.dto.response.WraithDTO;
+import com.renovandelve.game.service.WraithService;
 import com.renovandelve.game.dto.request.ConsumableUseRequest;
 import com.renovandelve.game.dto.request.EncounterChoiceRequest;
 import com.renovandelve.game.dto.request.NewGameRequest;
@@ -46,6 +48,7 @@ public class GameController {
     private final GameStateService gameStateService;
     private final CurrentMemberService currentMemberService;
     private final GameLockService gameLockService;
+    private final WraithService wraithService;
 
     /**
      * 게임 상태를 바꾸는 요청은 회원당 한 번에 하나만 처리한다.
@@ -64,6 +67,20 @@ public class GameController {
     @GetMapping("/options")
     public ResponseEntity<SetupOptionsDTO> getOptions() {
         return ResponseEntity.ok(gameStateService.getSetupOptions(currentMemberService.getCurrentMember()));
+    }
+
+    /**
+     * 다음 원정에서 기다리는 전생의 망령. 없으면 204.
+     *
+     * @return 망령 안내
+     */
+    @Operation(summary = "기다리는 전생의 망령 조회 (원정 준비 화면 안내)")
+    @GetMapping("/wraith")
+    public ResponseEntity<WraithDTO> wraith() {
+        MemberEntity member = currentMemberService.getCurrentMember();
+        return wraithService.current(member.getMemberId())
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     /**
