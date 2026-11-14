@@ -1,5 +1,9 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.collection.domain.CollectionSkillEntity;
+import com.renovandelve.collection.repository.CollectionSkillRepository;
+import com.renovandelve.member.domain.MemberEntity;
+
 import com.renovandelve.game.domain.GameSkillSlotEntity;
 import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.catalog.domain.skillentity.SkillEntity;
@@ -28,6 +32,7 @@ public class SkillSlotService {
 
     private final GameSkillSlotRepository gameSkillSlotRepository;
     private final SkillRepository skillRepository;
+    private final CollectionSkillRepository collectionSkillRepository;
 
     /**
      * 기본 공격인지 판정한다.
@@ -56,6 +61,9 @@ public class SkillSlotService {
         SkillEntity skill = skillRepository.findById(skillId)
                 .orElseThrow(() -> new NoSuchElementException("스킬을 찾을 수 없습니다."));
 
+        // 배우는 순간 도감에 남긴다. 원정 끝에만 등록하면 도중에 교체한 스킬이 빠진다
+        registerInCollection(gameState, skill);
+
         if (replaceSlotId != null) {
             gameState.replaceSkill(replaceSlotId, skill);
             return skill;
@@ -64,6 +72,18 @@ public class SkillSlotService {
         // cascade로도 저장되지만 커밋 시점이라, 같은 응답에 담을 슬롯 ID를 지금 받기 위해 바로 저장한다
         gameSkillSlotRepository.save(slot);
         return skill;
+    }
+
+    /**
+     * 스킬을 도감에 등록한다. 이미 있으면 그대로 둔다.
+     *
+     * @param gameState 게임 (회원)
+     * @param skill     배운 스킬
+     */
+    private void registerInCollection(GameStateEntity gameState, SkillEntity skill) {
+        MemberEntity member = gameState.getMember();
+        if (member == null || collectionSkillRepository.existsByMemberAndSkill(member, skill)) return;
+        collectionSkillRepository.save(CollectionSkillEntity.builder().member(member).skill(skill).build());
     }
 
     /**

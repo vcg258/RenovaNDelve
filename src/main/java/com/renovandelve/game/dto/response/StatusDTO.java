@@ -29,4 +29,6 @@ public class StatusDTO {
         List<String> pacts; //이번 원정에 건 서약 이름
         AlignmentDTO alignment; //성향 (천상 / 마계 / 인간)과 발동 중인 가호
         ContractDTO contract; //걸린 악마의 계약 (없으면 null)
+        String kingdom; //이 원정에 고정된 왕국 정세 이름 (효과가 없는 균형이거나 예전 원정이면 null)
+        List<String> kingdomEffects; //그 정세의 효과
 }

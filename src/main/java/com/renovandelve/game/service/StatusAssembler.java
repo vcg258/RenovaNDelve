@@ -20,6 +20,7 @@ import com.renovandelve.catalog.dto.WeaponDTO;
 import com.renovandelve.game.dto.response.AlignmentDTO;
 import com.renovandelve.game.dto.response.ContractDTO;
 import com.renovandelve.game.dto.response.StatusDTO;
+import com.renovandelve.game.engine.KingdomState;
 import com.renovandelve.game.engine.Pact;
 import com.renovandelve.game.engine.RelicEffects;
 import com.renovandelve.game.engine.SkillSynergies;
@@ -40,6 +41,12 @@ public class StatusAssembler {
      * @param gameState 게임
      * @return 화면용 상태
      */
+    /** 효과가 있는 정세만 (균형이거나 예전 원정이면 null) */
+    private static KingdomState activeKingdom(GameStateEntity gameState) {
+        KingdomState kingdom = gameState.kingdomState();
+        return kingdom == null || kingdom == KingdomState.BALANCE ? null : kingdom;
+    }
+
     public StatusDTO toStatusDTO(GameStateEntity gameState) {
         GameStateDTO stateDTO = GameStateDTO.builder()
                 .gameStateId(gameState.getGameStateId())
@@ -123,6 +130,8 @@ public class StatusAssembler {
                 .alignment(AlignmentDTO.from(gameState.alignment()))
                 .contract(ContractDTO.of(gameState.demonContract(), gameState.getHeavenAffinity(), gameState.getGold(),
                         gameState.getCurrentStage()))
+                .kingdom(activeKingdom(gameState) == null ? null : activeKingdom(gameState).title())
+                .kingdomEffects(activeKingdom(gameState) == null ? List.of() : activeKingdom(gameState).effects())
                 .build();
     }
 
