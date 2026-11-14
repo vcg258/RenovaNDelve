@@ -977,4 +977,37 @@ class GameEngineServiceImplTest {
         DemonContract c = DemonContract.of(DemonContract.Boon.RELIC, DemonContract.Clause.SHADOW_PACT);
         assertThat(DemonContract.parse(c.serialize())).isEqualTo(c);
     }
+
+    /* ==================== 왕국의 저울 ==================== */
+
+    @Test
+    @DisplayName("정세 '넓어지는 문': 적 공격력 +10%, 첫 노드에서 정세가 대화 기록에 남는다")
+    void abyssKingdomStrengthensEnemies() {
+        GameStateEntity gameState = GameStateEntity.builder()
+                .gameStateId(GAME_ID).currentStage(1).currentNodeId(0L).kingdom("ABYSS_WIDENING")
+                .gameCharacter(new ArrayList<>(List.of(GameCharacterEntity.builder()
+                        .currentHp(50).maxHp(50).attack(10).defense(3).build())))
+                .build();
+        when(gameStateRepository.findByMember_MemberIdAndIsActiveTrue(1L)).thenReturn(Optional.of(gameState));
+        when(monsterRagService.chat(1, 1, CONVERSATION_ID))
+                .thenReturn(AsyncStageResponseDTO.battle("서사", List.of(monster("고블린", 0))));
+
+        engine.nextNode(member, "SAFE");
+
+        // 기준 능력치가 없을 때 스테이지 1 일반 공격력 11 -> 1.1배 = 12
+        assertThat(session.getMonsters().get(0).getAtk()).isEqualTo(12);
+        verify(chatMemory).add(eq(CONVERSATION_ID), any(Message.class));
+    }
+
+    @Test
+    @DisplayName("정세가 없는 예전 원정은 그대로다")
+    void noKingdomNoEffect() {
+        activeGame(1, 1);
+        when(monsterRagService.chat(1, 2, CONVERSATION_ID))
+                .thenReturn(AsyncStageResponseDTO.battle("서사", List.of(monster("고블린", 0))));
+
+        engine.nextNode(member, "SAFE");
+
+        assertThat(session.getMonsters().get(0).getAtk()).isEqualTo(11);
+    }
 }

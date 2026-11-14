@@ -12,6 +12,7 @@ import com.renovandelve.catalog.domain.relicentity.RelicEntity;
 import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.game.engine.Alignment;
 import com.renovandelve.game.engine.DemonContract;
+import com.renovandelve.game.engine.KingdomState;
 import com.renovandelve.game.engine.Faction;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -110,6 +111,9 @@ public class GameStateEntity { //제외
     private String contract; // 걸린 악마의 계약 ("혜택:조항:남은횟수"). 조항은 서버 전용. 없으면 NULL
 
     @Column(length = 20)
+    private String kingdom; // 원정을 시작할 때 고정한 왕국 정세 (KingdomState 이름). 예전 원정은 NULL
+
+    @Column(length = 20)
     private String result; // 종료 결과 (CLEAR / DEFEAT / ABANDON). 진행 중이거나 과거 기록이면 NULL
 
     @Column(nullable = false, updatable = false)
@@ -188,6 +192,15 @@ public class GameStateEntity { //제외
      */
     public Alignment alignment() {
         return new Alignment(heavenAffinity, abyssAffinity, humanAffinity);
+    }
+
+    /**
+     * 이 원정에 고정된 왕국 정세.
+     *
+     * @return 정세, 없으면 null (효과 없음)
+     */
+    public KingdomState kingdomState() {
+        return KingdomState.parse(kingdom);
     }
 
     /**
