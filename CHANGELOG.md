@@ -146,8 +146,9 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 
 4인 팀 프로젝트의 마지막 상태입니다. 데드라인 초과로 중단되었습니다.
 
+- README(설계): 게임 루프, 서사·수치 분리 원칙, 서버 권위 게임 세션, 필드 강도 시스템, 프리페치, 아키텍처, API 명세. 이후 버전의 README는 이 문서를 바탕으로 한다
 - 엔티티 20여 개와 Repository, Spring Security(JWT), Spring AI(RAG 파이프라인, Tools)
-- 게임 엔진은 미완성(동작하지 않음), 프론트엔드는 저장소가 폐기되어 남아 있지 않다
+- 게임 엔진은 설계대로 동작하지 않는 미완성 상태, 프론트엔드는 저장소가 폐기되어 남아 있지 않다
 
 [0.9.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.7.0...v0.8.0
