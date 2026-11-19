@@ -43,6 +43,7 @@ import com.renovandelve.game.dto.response.RunStatsDTO;
 import com.renovandelve.game.dto.response.ShopItemDTO;
 import com.renovandelve.game.dto.response.StatusDTO;
 import com.renovandelve.game.dto.response.TurnResultDTO;
+import com.renovandelve.game.mapper.GameMapper;
 import com.renovandelve.game.engine.Alignment;
 import com.renovandelve.game.engine.DemonContract;
 import com.renovandelve.game.engine.KingdomState;
@@ -57,6 +58,7 @@ import com.renovandelve.game.engine.RunStats;
 import com.renovandelve.game.engine.SessionMonster;
 import com.renovandelve.game.engine.ShopStockItem;
 import com.renovandelve.game.engine.SkillSynergies;
+import com.renovandelve.game.engine.StatusEffect;
 import com.renovandelve.catalog.repository.ConsumableRepository;
 import com.renovandelve.game.repository.GameConsumableInventoryRepository;
 import com.renovandelve.game.repository.GameRelicInventoryRepository;
@@ -102,6 +104,7 @@ public class GameEngineServiceImpl implements GameEngineService {
     private final GameSessionService gameSessionService;
     private final StatusAssembler statusAssembler;
     private final CatalogMapper catalogMapper;
+    private final GameMapper gameMapper;
     private final RunReviewService runReviewService;
     private final ChatMemory chatMemory;
     private final StageCacheService stageCacheService;
@@ -355,7 +358,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         }
 
         // 2) 상태이상 부여 + 쿨타임 갱신 + 도트 피해
-        battleService.applyStatusEffect(skill, synergies.extraStacks(skill.getStatusEffect()), targets, log);
+        battleService.applyStatusEffect(skill, synergies.extraStacks(StatusEffect.ofCode(skill.getStatusEffect())), targets, log);
         battleService.updateCoolTimes(slots, slot.getSlotId(), effects.getCooldownReduction());
         battleService.applyDotDamage(session.getMonsters(), log);
 
@@ -472,8 +475,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         gameSessionService.save(session);
         gameStateRepository.save(gameState);
 
-        return new TurnResultDTO("FLED", log, List.of(), statusAssembler.toStatusDTO(gameState),
-                null, false, session.getPhase());
+        return TurnResultDTO.fled(log, statusAssembler.toStatusDTO(gameState), session.getPhase());
     }
 
     /**
@@ -525,8 +527,8 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         if (!inBattle) {
             gameSessionService.save(session);
-            return new TurnResultDTO("CONTINUE", log, toBattleMonsterDTOs(session.getMonsters()),
-                    statusAssembler.toStatusDTO(gameState), null, false, session.getPhase());
+            return TurnResultDTO.ongoing(log, toBattleMonsterDTOs(session.getMonsters()),
+                    statusAssembler.toStatusDTO(gameState), session.getPhase());
         }
 
         // 전투 중 소모품 사용은 턴을 소모한다
@@ -1146,40 +1148,73 @@ public class GameEngineServiceImpl implements GameEngineService {
      * 능력치는 스테이지 x 난이도 기반의 확정 수치를 서버가 부여한다.
      */
     private List<SessionMonster> buildSessionMonsters(List<MonsterDTO> monsterDTOs, GameStateEntity gameState) {
+        BaseStats base = baseStats(gameState);
+        List<SessionMonster> monsters = new ArrayList<>();
+        int key = 0;
+        for (MonsterDTO dto : limitElites(monsterDTOs, base.stage())) {
+            monsters.add(newSessionMonster(key++, dto.monsterId(), dto.name(), dto.monsterType(),
+                    dto.scoreReward(), dto.description(), base));
+        }
+        return monsters;
+    }
+
+    /** 이 스테이지·난이도에서 일반 몬스터의 기준 능력치 */
+    private record BaseStats(int stage, int hp, int atk, int def) {
+    }
+
+    /**
+     * 이 스테이지·난이도의 기준 능력치. {@code monster_base_status}에 행이 없으면 식으로 계산한다.
+     *
+     * @param gameState 게임
+     * @return 기준 능력치
+     */
+    private BaseStats baseStats(GameStateEntity gameState) {
         int stage = Math.min(FINAL_STAGE, Math.max(1, gameState.getCurrentStage()));
         short difficultyIndex = (short) gameState.getDifficulty().ordinal();
 
         MonsterBaseStatusEntity base = monsterBaseStatusRepository
                 .findByStageAndDifficulty((short) stage, difficultyIndex)
                 .orElse(null);
+        double factor = difficultyFactor(gameState.getDifficulty());
 
-        int baseHp = base != null ? base.getBaseHp() : (int) ((40 + stage * 25) * difficultyFactor(gameState.getDifficulty()));
-        int baseAtk = base != null ? base.getBaseAtk() : (int) ((7 + stage * 4) * difficultyFactor(gameState.getDifficulty()));
-        int baseDef = base != null ? base.getBaseDef() : (int) ((1 + stage * 2) * difficultyFactor(gameState.getDifficulty()));
+        int hp = base != null ? base.getBaseHp() : (int) ((40 + stage * 25) * factor);
+        int atk = base != null ? base.getBaseAtk() : (int) ((7 + stage * 4) * factor);
+        int def = base != null ? base.getBaseDef() : (int) ((1 + stage * 2) * factor);
+        return new BaseStats(stage, hp, atk, def);
+    }
 
-        List<SessionMonster> monsters = new ArrayList<>();
-        int key = 0;
-        for (MonsterDTO dto : limitElites(monsterDTOs, stage)) {
-            double hpMult = switch (dto.monsterType()) { case 2 -> 3.2; case 1 -> 1.6; default -> 1.0; };
-            double atkMult = switch (dto.monsterType()) { case 2 -> 1.7; case 1 -> 1.25; default -> 1.0; };
-            double defMult = switch (dto.monsterType()) { case 2 -> 1.5; case 1 -> 1.2; default -> 1.0; };
-            double variance = 0.9 + random.nextDouble() * 0.2; // +-10%
+    /**
+     * 몬스터 한 마리를 만든다. 종류(일반 / 엘리트 / 보스)에 따라 기준 능력치에 배율을 곱하고 HP에 +-10% 편차를 준다.
+     *
+     * @param key         전투 안에서의 번호
+     * @param monsterId   몬스터 ID (망령처럼 DB에 없는 몬스터는 null)
+     * @param name        이름
+     * @param monsterType 0 일반 / 1 엘리트 / 2 보스
+     * @param scoreReward 처치 점수
+     * @param description 설명
+     * @param base        기준 능력치
+     * @return 세션 몬스터
+     */
+    private SessionMonster newSessionMonster(int key, Long monsterId, String name, short monsterType,
+                                             int scoreReward, String description, BaseStats base) {
+        double hpMult = switch (monsterType) { case 2 -> 3.2; case 1 -> 1.6; default -> 1.0; };
+        double atkMult = switch (monsterType) { case 2 -> 1.7; case 1 -> 1.25; default -> 1.0; };
+        double defMult = switch (monsterType) { case 2 -> 1.5; case 1 -> 1.2; default -> 1.0; };
+        double variance = 0.9 + random.nextDouble() * 0.2; // +-10%
 
-            SessionMonster monster = new SessionMonster();
-            monster.setKey(key++);
-            monster.setMonsterId(dto.monsterId());
-            monster.setName(dto.name());
-            monster.setMonsterType(dto.monsterType());
-            int hp = Math.max(1, (int) (baseHp * hpMult * variance));
-            monster.setMaxHp(hp);
-            monster.setCurrentHp(hp);
-            monster.setAtk(Math.max(1, (int) (baseAtk * atkMult)));
-            monster.setDef(Math.max(0, (int) (baseDef * defMult)));
-            monster.setScoreReward(dto.scoreReward());
-            monster.setDescription(dto.description());
-            monsters.add(monster);
-        }
-        return monsters;
+        SessionMonster monster = new SessionMonster();
+        monster.setKey(key);
+        monster.setMonsterId(monsterId);
+        monster.setName(name);
+        monster.setMonsterType(monsterType);
+        int hp = Math.max(1, (int) (base.hp() * hpMult * variance));
+        monster.setMaxHp(hp);
+        monster.setCurrentHp(hp);
+        monster.setAtk(Math.max(1, (int) (base.atk() * atkMult)));
+        monster.setDef(Math.max(0, (int) (base.def() * defMult)));
+        monster.setScoreReward(scoreReward);
+        monster.setDescription(description);
+        return monster;
     }
 
     /**
@@ -1269,8 +1304,8 @@ public class GameEngineServiceImpl implements GameEngineService {
         // 다음 턴 행동 예고 (플레이어는 이것을 보고 공격/방어/대상을 정한다)
         battleService.rollIntents(session.getMonsters());
         gameSessionService.save(session);
-        return new TurnResultDTO("CONTINUE", log, toBattleMonsterDTOs(session.getMonsters()),
-                statusAssembler.toStatusDTO(gameState), null, false, session.getPhase());
+        return TurnResultDTO.ongoing(log, toBattleMonsterDTOs(session.getMonsters()),
+                statusAssembler.toStatusDTO(gameState), session.getPhase());
     }
 
     /**
@@ -1301,8 +1336,8 @@ public class GameEngineServiceImpl implements GameEngineService {
         terminate(gameState, session, false);
         log.add("당신은 쓰러졌다... 모험이 여기서 끝났다.");
         gameSessionService.save(session);
-        return new TurnResultDTO("LOSE", log, toBattleMonsterDTOs(session.getMonsters()),
-                statusAssembler.toStatusDTO(gameState), null, false, session.getPhase());
+        return TurnResultDTO.lost(log, toBattleMonsterDTOs(session.getMonsters()),
+                statusAssembler.toStatusDTO(gameState), session.getPhase());
     }
 
     /**
@@ -1421,8 +1456,8 @@ public class GameEngineServiceImpl implements GameEngineService {
             remember(gameState, "[모험의 결말] 악마화된 왕을 쓰러뜨렸다. " + endingLine(gameState.alignment()));
             gameSessionService.save(session);
             gameStateRepository.save(gameState);
-            return new TurnResultDTO("WIN", log, toBattleMonsterDTOs(session.getMonsters()),
-                    statusAssembler.toStatusDTO(gameState), null, true, session.getPhase());
+            return TurnResultDTO.cleared(log, toBattleMonsterDTOs(session.getMonsters()),
+                    statusAssembler.toStatusDTO(gameState), session.getPhase());
         }
 
         // 보상 후보 생성 -> REWARD 단계
@@ -1444,8 +1479,8 @@ public class GameEngineServiceImpl implements GameEngineService {
             session.setShopRerolls(0);
             gameSessionService.save(session);
             gameStateRepository.save(gameState);
-            return new TurnResultDTO("WIN", log, toBattleMonsterDTOs(session.getMonsters()),
-                    statusAssembler.toStatusDTO(gameState), null, false, session.getPhase());
+            return TurnResultDTO.won(log, toBattleMonsterDTOs(session.getMonsters()),
+                    statusAssembler.toStatusDTO(gameState), null, session.getPhase());
         }
 
         RewardOptions reward = buildRewardOptions(gameState, totalExp, totalGold, relicOptions);
@@ -1460,8 +1495,8 @@ public class GameEngineServiceImpl implements GameEngineService {
         gameSessionService.save(session);
         gameStateRepository.save(gameState);
 
-        return new TurnResultDTO("WIN", log, toBattleMonsterDTOs(session.getMonsters()),
-                statusAssembler.toStatusDTO(gameState), toRewardView(session.getReward()), false, session.getPhase());
+        return TurnResultDTO.won(log, toBattleMonsterDTOs(session.getMonsters()),
+                statusAssembler.toStatusDTO(gameState), toRewardView(session.getReward()), session.getPhase());
     }
 
     /**
@@ -1935,8 +1970,9 @@ public class GameEngineServiceImpl implements GameEngineService {
         int stage = gameState.getCurrentStage();
         int node = gameState.getCurrentNodeId().intValue();
 
-        SessionMonster monster = buildSessionMonsters(List.of(new MonsterDTO(null, WraithService.WRAITH_NAME,
-                (short) 1, WraithService.SCORE_REWARD, null)), gameState).get(0);
+        // 망령은 DB에 없는 몬스터라 엘리트(1) 기준치로 직접 만든다
+        SessionMonster monster = newSessionMonster(0, null, WraithService.WRAITH_NAME, (short) 1,
+                WraithService.SCORE_REWARD, null, baseStats(gameState));
         WraithService.dress(monster, wraith);
         List<SessionMonster> monsters = new ArrayList<>(List.of(monster));
         applyPath(monsters, path);
@@ -2040,11 +2076,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      */
     private List<BattleMonsterDTO> toBattleMonsterDTOs(List<SessionMonster> monsters) {
         if (monsters == null) return List.of();
-        return monsters.stream()
-                .map(m -> new BattleMonsterDTO(m.getKey(), m.getMonsterId(), m.getName(), m.getMonsterType(),
-                        m.getMaxHp(), m.getCurrentHp(), m.getAtk(), m.getDef(), m.getBuffs(), m.getDescription(),
-                        m.getIntent() == null ? BattleServiceImpl.INTENT_ATTACK : m.getIntent(), m.isEnraged()))
-                .toList();
+        return gameMapper.toBattleMonsterDTOs(monsters);
     }
 
     /**
@@ -2054,16 +2086,16 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @return 노드
      */
     private NodeDTO battleNode(GameSession session) {
-        return new NodeDTO(session.getNodeType(), session.getStory(), toBattleMonsterDTOs(session.getMonsters()),
-                null, session.getPath(), session.getPathNote(), session.getContractNote());
+        return NodeDTO.battle(session.getNodeType(), session.getStory(), toBattleMonsterDTOs(session.getMonsters()),
+                session.getPath(), session.getPathNote(), session.getContractNote());
     }
 
     /** 조우에는 길 효과가 없으므로 path는 비운다. 고른 길이 무시됐다면 그 안내만 싣는다 */
     private NodeDTO encounterNode(GameSession session, String encounterText) {
         String type = "CONTRACT".equals(session.getNodeType()) ? "CONTRACT" : "ENCOUNTER";
-        return new NodeDTO(type, session.getStory(), null,
+        return NodeDTO.encounter(type, session.getStory(),
                 new EncounterDTO(encounterText, choiceLabels(session), choiceFactions(session)),
-                null, session.getPathNote(), session.getContractNote());
+                session.getPathNote(), session.getContractNote());
     }
 
     /**
@@ -2113,9 +2145,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         if (stock == null) return List.of();
         GameEquipmentEntity equipped = gameState.getGameEquipment();
         return stock.stream()
-                .map(item -> new ShopItemDTO(item.getItemType(), item.getItemId(), item.getName(),
-                        item.getDescription(), item.getPrice(), item.isSold(),
-                        item.getBonus(), currentBonus(item.getItemType(), equipped)))
+                .map(item -> gameMapper.toShopItemDTO(item, currentBonus(item.getItemType(), equipped)))
                 .toList();
     }
 

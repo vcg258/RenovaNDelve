@@ -50,6 +50,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import com.renovandelve.game.mapper.GameMapper;
+import com.renovandelve.game.mapper.GameMapperImpl;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -102,6 +104,7 @@ class GameEngineServiceImplTest {
     @Mock private GameSessionService gameSessionService;
     @Mock private StatusAssembler statusAssembler;
     @Spy private CatalogMapper catalogMapper = new CatalogMapperImpl();
+    @Spy private GameMapper gameMapper = new GameMapperImpl(new CatalogMapperImpl());
     @Spy private AiCallRunner aiCallRunner = new AiCallRunner();
     @Mock private RunReviewService runReviewService;
     @Mock private ChatMemory chatMemory;

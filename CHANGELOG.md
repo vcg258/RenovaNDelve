@@ -19,6 +19,8 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 - 스킬 버리기는 허용 단계(탐험·전리품·상점·모닥불)를 적는 방식으로 바꿨다 (백엔드 #20)
 - 운영 프로파일은 Flyway `baseline-on-migrate`를 끈다 (백엔드 #20)
 - 갈림길 화면에 "길의 효과는 전투에만 걸린다"는 안내를 붙였다 (프론트 #16)
+- 우리 도메인 테이블은 JPA로만 다룬다. `JdbcTemplate`은 Spring AI가 관리하는 테이블(`vector_store`, `spring_ai_chat_memory`)에만 남긴다 (백엔드 #20)
+- Redis 세션의 전투 몬스터·상점 진열품을 화면용으로 옮기는 변환을 `GameMapper`(MapStruct)로 옮겼다. 전투 결과·노드 응답은 정적 팩토리(`TurnResultDTO.won` 등)로 만든다 (백엔드 #20)
 
 ### 수정
 - 같은 아이디·이메일로 동시에 가입하면 500이 나던 문제 (이제 400). 그 밖의 DB 제약 위반은 409 (백엔드 #20)
