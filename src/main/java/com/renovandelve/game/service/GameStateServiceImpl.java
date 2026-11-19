@@ -96,7 +96,7 @@ public class GameStateServiceImpl implements GameStateService {
      * @param request 난이도, 장비, 스킬, 유물, 서약
      * @param member  회원
      * @return 새 게임
-     * @throws IllegalArgumentException 예산 초과, 알 수 없는 장비·서약
+     * @throws BusinessException 예산 초과, 알 수 없는 장비·서약
      */
     @Override
     @Transactional
@@ -205,7 +205,7 @@ public class GameStateServiceImpl implements GameStateService {
      *
      * @param value 난이도 문자열
      * @return 난이도
-     * @throws IllegalArgumentException 알 수 없는 값이면
+     * @throws BusinessException 알 수 없는 값이면
      */
     private Difficulty parseDifficulty(String value) {
         if (value == null || value.isBlank()) return Difficulty.NORMAL;

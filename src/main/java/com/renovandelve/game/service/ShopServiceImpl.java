@@ -10,7 +10,6 @@ import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.catalog.domain.helmetentity.HelmetEntity;
 import com.renovandelve.catalog.domain.relicentity.Rarity;
 import com.renovandelve.catalog.domain.relicentity.RelicEntity;
-import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
 import com.renovandelve.game.engine.Pact;
 import com.renovandelve.game.engine.ShopStockItem;
@@ -126,8 +125,7 @@ public class ShopServiceImpl implements ShopService {
      * @param member        회원 (도감 등록용)
      * @param stockItem     산 진열품
      * @param replaceSlotId 버릴 스킬 슬롯 (없으면 null)
-     * @throws IllegalStateException 슬롯이 가득 찼는데 버릴 슬롯이 없으면
-     * @throws IllegalArgumentException 골드가 부족하면
+     * @throws BusinessException 슬롯이 가득 찼는데 버릴 슬롯이 없으면, 골드가 부족하면
      */
     @Override
     @Transactional
@@ -210,7 +208,7 @@ public class ShopServiceImpl implements ShopService {
     }
 
     /**
-     * 스킬을 배우고 도감에 등록한다.
+     * 스킬을 배운다 (도감 등록 포함).
      *
      * @param gameState     게임
      * @param member        회원
@@ -218,9 +216,8 @@ public class ShopServiceImpl implements ShopService {
      * @param replaceSlotId 버릴 스킬 슬롯 (없으면 null)
      */
     private void purchaseSkill(GameStateEntity gameState, MemberEntity member, Long skillId, Long replaceSlotId) {
-        SkillEntity skill = skillSlotService.learn(gameState, skillId, replaceSlotId);
-
-        collectionService.registerSkill(member, skill);
+        // 도감 등록은 learn이 배우는 순간 한다
+        skillSlotService.learn(gameState, skillId, replaceSlotId);
     }
 
     /**
@@ -229,7 +226,7 @@ public class ShopServiceImpl implements ShopService {
      * @param gameState 게임
      * @param member    회원
      * @param relicId   유물 ID
-     * @throws IllegalStateException 이미 가진 유물이면
+     * @throws BusinessException 이미 가진 유물이면
      */
     private void purchaseRelic(GameStateEntity gameState, MemberEntity member, Long relicId) {
         if (gameState.ownsRelic(relicId)) {

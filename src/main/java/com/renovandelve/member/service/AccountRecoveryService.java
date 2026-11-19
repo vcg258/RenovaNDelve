@@ -134,7 +134,7 @@ public class AccountRecoveryService {
 
     /**
      * 비밀번호 재설정 확정. 토큰은 여기서 소비되며, 실패하든 성공하든 다시 쓸 수 없다.
-     * @throws IllegalArgumentException 토큰이 없거나 만료됐거나 이미 쓰인 경우
+     * @throws BusinessException 토큰이 없거나 만료됐거나 이미 쓰인 경우
      */
     @Transactional
     public void resetPassword(String token, String newPassword) {

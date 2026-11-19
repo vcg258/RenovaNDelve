@@ -313,7 +313,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @param member  로그인 회원
      * @param request 슬롯 ID와 대상
      * @return 턴 결과
-     * @throws IllegalStateException 전투 중이 아니거나 쿨타임이 남았으면
+     * @throws BusinessException 전투 중이 아니거나 쿨타임이 남았으면
      */
     @Override
     @Transactional
@@ -502,7 +502,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @param member  로그인 회원
      * @param request 소모품 칸 ID
      * @return 턴 결과
-     * @throws IllegalStateException 탐험·전투가 아닌 단계면
+     * @throws BusinessException 탐험·전투가 아닌 단계면
      */
     @Override
     @Transactional
@@ -549,7 +549,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @param member  로그인 회원
      * @param request 선택지 번호
      * @return 선택 결과
-     * @throws IllegalArgumentException 범위를 벗어난 번호면
+     * @throws BusinessException 범위를 벗어난 번호면
      */
     @Override
     @Transactional
@@ -601,7 +601,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @param member  로그인 회원
      * @param request 보상 종류, ID, 버릴 슬롯
      * @return 바뀐 상태
-     * @throws IllegalArgumentException 후보에 없는 보상이면
+     * @throws BusinessException 후보에 없는 보상이면
      */
     @Override
     @Transactional
@@ -693,7 +693,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      *
      * @param member 로그인 회원
      * @return 바뀐 화면 상태
-     * @throws IllegalArgumentException 골드가 부족하면
+     * @throws BusinessException 골드가 부족하면
      */
     @Override
     @Transactional
@@ -942,7 +942,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @param session  게임 세션
      * @param expected 기대하는 단계
      * @param message  아닐 때의 안내
-     * @throws IllegalStateException 단계가 다르면
+     * @throws BusinessException 단계가 다르면
      */
     private void requirePhase(GameSession session, String expected, String message) {
         if (!expected.equals(session.getPhase())) {
@@ -955,7 +955,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      *
      * @param condition 지켜야 할 조건
      * @param message   거부 문구
-     * @throws IllegalArgumentException 조건이 거짓이면
+     * @throws BusinessException 조건이 거짓이면
      */
     private void require(boolean condition, String message) {
         if (!condition) throw new BusinessException(ErrorCode.INVALID_REQUEST, message);
@@ -1710,7 +1710,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      *
      * @param gameState 게임
      * @param relicId   유물 ID
-     * @throws IllegalStateException 이미 가진 유물이면
+     * @throws BusinessException 이미 가진 유물이면
      */
     private void addRelic(GameStateEntity gameState, Long relicId) {
         if (gameState.ownsRelic(relicId)) throw new BusinessException(ErrorCode.RELIC_ALREADY_OWNED);
@@ -1805,7 +1805,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      *
      * @param member 로그인 회원
      * @return 바뀐 화면 상태
-     * @throws IllegalStateException 계약이 없거나, 탐험 중이 아니거나, 천상 성향이 모자라면
+     * @throws BusinessException 계약이 없거나, 탐험 중이 아니거나, 천상 성향이 모자라면
      */
     @Override
     @Transactional

@@ -262,7 +262,7 @@ public class GameStateEntity { //제외
     /**
      * 천상의 성향으로 악마의 계약을 파기한다. 파기 비용만큼 골드를 낸다.
      *
-     * @throws IllegalStateException 걸린 계약이 없거나 천상의 성향이 모자라면
+     * @throws BusinessException 걸린 계약이 없거나 천상의 성향이 모자라면
      */
     public void breakContract() {
         if (demonContract() == null) throw new BusinessException(ErrorCode.NO_CONTRACT);
@@ -386,7 +386,7 @@ public class GameStateEntity { //제외
      *
      * @param slotId 슬롯 ID
      * @return 슬롯
-     * @throws IllegalArgumentException 이 게임의 슬롯이 아니면
+     * @throws BusinessException 이 게임의 슬롯이 아니면
      */
     public GameSkillSlotEntity findSkillSlot(Long slotId) {
         return gameSkillSlot.stream()
@@ -400,7 +400,7 @@ public class GameStateEntity { //제외
      *
      * @param skill 배울 스킬
      * @return 새로 만든 슬롯 (저장은 cascade로 함께 된다)
-     * @throws IllegalStateException 이미 가진 스킬이거나 슬롯이 가득 찼으면
+     * @throws BusinessException 이미 가진 스킬이거나 슬롯이 가득 찼으면
      */
     public GameSkillSlotEntity learnSkill(SkillEntity skill) {
         requireNotOwned(skill);
@@ -421,7 +421,7 @@ public class GameStateEntity { //제외
      * @param slotId 버릴 스킬이 든 슬롯
      * @param skill  새로 배울 스킬
      * @return 바뀐 슬롯
-     * @throws IllegalStateException 이미 가진 스킬이거나 기본 공격을 버릴 수 없는 상태면
+     * @throws BusinessException 이미 가진 스킬이거나 기본 공격을 버릴 수 없는 상태면
      */
     public GameSkillSlotEntity replaceSkill(Long slotId, SkillEntity skill) {
         requireNotOwned(skill);
@@ -436,7 +436,7 @@ public class GameStateEntity { //제외
      *
      * @param slotId 버릴 스킬이 든 슬롯
      * @return 버린 스킬
-     * @throws IllegalStateException 마지막 한 개이거나 기본 공격을 버릴 수 없는 상태면
+     * @throws BusinessException 마지막 한 개이거나 기본 공격을 버릴 수 없는 상태면
      */
     public SkillEntity forgetSkill(Long slotId) {
         GameSkillSlotEntity slot = findSkillSlot(slotId);
@@ -475,7 +475,7 @@ public class GameStateEntity { //제외
      * 이미 가진 스킬이면 거부한다.
      *
      * @param skill 배우려는 스킬
-     * @throws IllegalStateException 이미 가진 스킬이면
+     * @throws BusinessException 이미 가진 스킬이면
      */
     private void requireNotOwned(SkillEntity skill) {
         if (hasSkill(skill.getSkillId())) {
@@ -510,7 +510,7 @@ public class GameStateEntity { //제외
      *
      * @param relic 얻을 유물
      * @return 새 인벤토리 칸 (저장은 cascade로 함께 된다)
-     * @throws IllegalStateException 이미 가진 유물이면
+     * @throws BusinessException 이미 가진 유물이면
      */
     public GameRelicInventoryEntity addRelic(RelicEntity relic) {
         if (ownsRelic(relic.getRelicId())) {
@@ -540,7 +540,7 @@ public class GameStateEntity { //제외
      *
      * @param slotId 인벤토리 칸 ID
      * @return 소모품 칸
-     * @throws IllegalArgumentException 이 게임의 소모품이 아니거나 이미 쓴 것이면
+     * @throws BusinessException 이 게임의 소모품이 아니거나 이미 쓴 것이면
      */
     public GameConsumableInventoryEntity findConsumable(Long slotId) {
         return gameConsumableInventory.stream()
@@ -566,7 +566,7 @@ public class GameStateEntity { //제외
      * 소모품을 써서 없앤다. 목록에서 빠진 칸은 orphanRemoval로 DB에서도 지워진다.
      *
      * @param inventory 쓸 소모품 칸
-     * @throws NoSuchElementException 이 게임의 소모품이 아니면
+     * @throws BusinessException 이 게임의 소모품이 아니면
      */
     public void consume(GameConsumableInventoryEntity inventory) {
         if (!gameConsumableInventory.remove(inventory)) {

@@ -238,7 +238,7 @@ public class AdminServiceImpl implements AdminService {
      * @param target  대상 회원
      * @param actor   처리하는 관리자
      * @param message 거부 문구
-     * @throws IllegalStateException 본인이면
+     * @throws BusinessException 본인이면
      */
     private void guardSelf(MemberEntity target, MemberEntity actor, String message) {
         if (target.getMemberId().equals(actor.getMemberId())) {
@@ -252,7 +252,7 @@ public class AdminServiceImpl implements AdminService {
      * @param status   상태 문자열
      * @param nullable true면 비어 있을 때 null을 돌려준다
      * @return 계정 상태
-     * @throws IllegalArgumentException 비어 있는데 필수이거나 알 수 없는 값이면
+     * @throws BusinessException 비어 있는데 필수이거나 알 수 없는 값이면
      */
     private MemberStatus parseStatus(String status, boolean nullable) {
         if (status == null || status.isBlank()) {

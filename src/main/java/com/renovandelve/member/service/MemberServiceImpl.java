@@ -55,7 +55,7 @@ public class MemberServiceImpl implements MemberService {
      * 회원가입. 아이디·닉네임·이메일 중복과 금칙어를 검사하고, 동의 일시와 약관 버전을 함께 저장한다.
      *
      * @param request 가입 정보
-     * @throws IllegalArgumentException 중복이거나 쓸 수 없는 값이면
+     * @throws BusinessException 중복이거나 쓸 수 없는 값이면
      */
     @Override
     @Transactional
@@ -134,8 +134,7 @@ public class MemberServiceImpl implements MemberService {
      *
      * @param member  회원
      * @param request 현재 비밀번호, 새 비밀번호
-     * @throws IllegalArgumentException 현재 비밀번호가 틀리거나 새 비밀번호가 같으면
-     * @throws IllegalStateException    비밀번호가 없는 소셜 계정이면
+     * @throws BusinessException 현재 비밀번호가 틀리거나 새 비밀번호가 같으면, 비밀번호가 없는 소셜 계정이면
      */
     @Override
     @Transactional
@@ -165,7 +164,7 @@ public class MemberServiceImpl implements MemberService {
      *
      * @param member  회원
      * @param request 새 닉네임
-     * @throws IllegalArgumentException 같거나 중복이거나 금칙어면
+     * @throws BusinessException 같거나 중복이거나 금칙어면
      */
     @Override
     @Transactional
@@ -186,7 +185,7 @@ public class MemberServiceImpl implements MemberService {
      *
      * @param member  회원
      * @param request 이름, 이메일, 현재 비밀번호
-     * @throws IllegalArgumentException 비밀번호가 틀리거나 이메일이 중복이면
+     * @throws BusinessException 비밀번호가 틀리거나 이메일이 중복이면
      */
     @Override
     @Transactional
@@ -291,7 +290,7 @@ public class MemberServiceImpl implements MemberService {
      * 닉네임을 검사한다.
      *
      * @param nickname 닉네임
-     * @throws IllegalArgumentException 금칙어이거나 중복이면
+     * @throws BusinessException 금칙어이거나 중복이면
      */
     private void validateNickname(String nickname) {
         if (isForbidden(nickname)) {
