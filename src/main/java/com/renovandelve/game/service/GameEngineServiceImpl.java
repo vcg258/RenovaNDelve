@@ -1,8 +1,8 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.catalog.mapper.CatalogMapper;
 import com.renovandelve.catalog.service.MonsterService;
 
-import com.renovandelve.global.config.RecordMapper;
 import com.renovandelve.game.domain.GameCharacterEntity;
 import com.renovandelve.game.domain.GameConsumableInventoryEntity;
 import com.renovandelve.game.domain.GameEquipmentEntity;
@@ -104,6 +104,7 @@ public class GameEngineServiceImpl implements GameEngineService {
     private final ShopService shopService;
     private final GameSessionService gameSessionService;
     private final StatusAssembler statusAssembler;
+    private final CatalogMapper catalogMapper;
     private final RunReviewService runReviewService;
     private final ChatMemory chatMemory;
     private final StageCacheService stageCacheService;
@@ -115,8 +116,10 @@ public class GameEngineServiceImpl implements GameEngineService {
 
     private final Random random = new Random();
 
-    private static final int FINAL_STAGE = 5;
-    private static final int NODES_PER_STAGE = 10;
+    /** 마지막 스테이지. 이 스테이지의 보스를 쓰러뜨리면 클리어 (가이드 Tool도 이 값을 쓴다) */
+    public static final int FINAL_STAGE = 5;
+    /** 스테이지당 노드 수. 마지막 노드가 보스 */
+    public static final int NODES_PER_STAGE = 10;
     private static final double BASE_CRIT_CHANCE = 0.08;
     private static final double DAGGER_CRIT_BONUS = 0.15;
     private static final double PLAYER_GUARD_MULTIPLIER = 0.4; // 방어 태세: 받는 피해 60% 감소
@@ -176,7 +179,7 @@ public class GameEngineServiceImpl implements GameEngineService {
             case GameSession.PHASE_BATTLE -> node = battleNode(session);
             case GameSession.PHASE_ENCOUNTER -> node = encounterNode(session, session.getStory());
             case GameSession.PHASE_REWARD -> reward = toRewardView(session.getReward());
-            case GameSession.PHASE_SHOP -> shop = toShopItems(session.getShop());
+            case GameSession.PHASE_SHOP -> shop = toShopItems(session.getShop(), gameState);
             case GameSession.PHASE_GAMEOVER, GameSession.PHASE_CLEAR -> summary = buildSummary(gameState, session);
             default -> { /* EXPLORE */ }
         }
@@ -650,7 +653,7 @@ public class GameEngineServiceImpl implements GameEngineService {
             session.setShop(shopService.generateStock(gameState));
             gameSessionService.save(session);
         }
-        return toShopItems(session.getShop());
+        return toShopItems(session.getShop(), gameState);
     }
 
     /**
@@ -2095,26 +2098,42 @@ public class GameEngineServiceImpl implements GameEngineService {
      */
     private RewardViewDTO toRewardView(RewardOptions options) {
         if (options == null) return null;
-        List<SkillInfoDTO> skills = skillRepository.findAllById(options.getSkillIds()).stream()
-                .map(SkillInfoDTO::from).toList();
-        List<RelicDTO> relics = relicRepository.findAllById(options.getRelicIds()).stream()
-                .map(r -> RecordMapper.map(r, RelicDTO.class)).toList();
-        List<ConsumableDTO> consumables = consumableRepository.findAllById(options.getConsumableIds()).stream()
-                .map(c -> RecordMapper.map(c, ConsumableDTO.class)).toList();
+        List<SkillInfoDTO> skills = catalogMapper.toSkillInfoDTOs(skillRepository.findAllById(options.getSkillIds()));
+        List<RelicDTO> relics = catalogMapper.toRelicDTOs(relicRepository.findAllById(options.getRelicIds()));
+        List<ConsumableDTO> consumables = catalogMapper.toConsumableDTOs(consumableRepository.findAllById(options.getConsumableIds()));
         return new RewardViewDTO(options.getExp(), options.getGold(), skills, relics, consumables);
     }
 
     /**
-     * 세션의 진열품을 화면용으로 옮긴다.
+     * 세션의 진열품을 화면용으로 옮긴다. 장비에는 지금 착용 중인 같은 부위 장비의 보너스를 붙인다.
      *
-     * @param stock 진열품
+     * @param stock     진열품
+     * @param gameState 게임 (착용 장비 비교용)
      * @return 화면용 진열품
      */
-    private List<ShopItemDTO> toShopItems(List<ShopStockItem> stock) {
+    private List<ShopItemDTO> toShopItems(List<ShopStockItem> stock, GameStateEntity gameState) {
         if (stock == null) return List.of();
+        GameEquipmentEntity equipped = gameState.getGameEquipment();
         return stock.stream()
                 .map(item -> new ShopItemDTO(item.getItemType(), item.getItemId(), item.getName(),
-                        item.getDescription(), item.getPrice(), item.isSold()))
+                        item.getDescription(), item.getPrice(), item.isSold(),
+                        item.getBonus(), currentBonus(item.getItemType(), equipped)))
                 .toList();
+    }
+
+    /**
+     * 착용 중인 같은 부위 장비의 보너스. 장비가 아닌 진열품이면 null, 그 부위가 비어 있으면 0.
+     *
+     * @param itemType 진열품 종류
+     * @param equipped 장비 슬롯 (없을 수 있음)
+     * @return 보너스
+     */
+    private Integer currentBonus(String itemType, GameEquipmentEntity equipped) {
+        return switch (itemType) {
+            case "WEAPON" -> equipped == null || equipped.getWeapon() == null ? 0 : equipped.getWeapon().getAtkBonus();
+            case "ARMOR" -> equipped == null || equipped.getArmor() == null ? 0 : equipped.getArmor().getDefBonus();
+            case "HELMET" -> equipped == null || equipped.getHelmet() == null ? 0 : equipped.getHelmet().getHpBonus();
+            default -> null;
+        };
     }
 }

@@ -1,26 +1,14 @@
 package com.renovandelve.member.service;
 
+import com.renovandelve.collection.mapper.CollectionMapper;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.ranking.domain.RankingEntity;
-import com.renovandelve.catalog.domain.armorentity.ArmorEntity;
-import com.renovandelve.catalog.domain.consumableentity.ConsumableEntity;
-import com.renovandelve.catalog.domain.helmetentity.HelmetEntity;
-import com.renovandelve.catalog.domain.relicentity.RelicEntity;
-import com.renovandelve.catalog.domain.skillentity.SkillEntity;
-import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
-import com.renovandelve.catalog.dto.ArmorDTO;
 import com.renovandelve.collection.dto.CollectionArmorDTO;
 import com.renovandelve.collection.dto.CollectionConsumableDTO;
 import com.renovandelve.collection.dto.CollectionHelmetDTO;
 import com.renovandelve.collection.dto.CollectionRelicDTO;
 import com.renovandelve.collection.dto.CollectionSkillDTO;
 import com.renovandelve.collection.dto.CollectionWeaponDTO;
-import com.renovandelve.catalog.dto.ConsumableDTO;
-import com.renovandelve.catalog.dto.HelmetDTO;
-import com.renovandelve.member.dto.MemberDTO;
-import com.renovandelve.catalog.dto.RelicDTO;
-import com.renovandelve.catalog.dto.SkillDTO;
-import com.renovandelve.catalog.dto.WeaponDTO;
 import com.renovandelve.member.dto.request.ContactChangeRequest;
 import com.renovandelve.member.dto.request.NicknameChangeRequest;
 import com.renovandelve.member.dto.request.PasswordChangeRequest;
@@ -56,6 +44,7 @@ public class MemberServiceImpl implements MemberService {
     private final TokenRevocationService tokenRevocationService;
     private final PasswordEncoder passwordEncoder;
     private final PersonalDataService personalDataService;
+    private final CollectionMapper collectionMapper;
 
     private static final List<String> FORBIDDEN_NICKNAMES = List.of("관리자", "운영자", "admin", "administrator", "gm");
 
@@ -259,32 +248,29 @@ public class MemberServiceImpl implements MemberService {
     @Transactional
     public IllustratedEncyclopediaDTO getEncyclopedia(MemberEntity member) {
         MemberEntity managed = managed(member);
-        MemberDTO memberDTO = MemberDTO.builder()
-                .memberId(managed.getMemberId()).loginId(managed.displayName()).build();
-
         List<CollectionArmorDTO> armors = managed.getCollectionArmor().stream()
                 .filter(c -> c.getArmor() != null)
-                .map(c -> new CollectionArmorDTO(c.getCollectionId(), c.getAcquiredAt(), memberDTO, toArmorDTO(c.getArmor())))
+                .map(collectionMapper::toDTO)
                 .toList();
         List<CollectionConsumableDTO> consumables = managed.getCollectionConsumable().stream()
                 .filter(c -> c.getConsumable() != null)
-                .map(c -> new CollectionConsumableDTO(c.getCollectionId(), c.getAcquiredAt(), memberDTO, toConsumableDTO(c.getConsumable())))
+                .map(collectionMapper::toDTO)
                 .toList();
         List<CollectionHelmetDTO> helmets = managed.getCollectionHelmet().stream()
                 .filter(c -> c.getHelmet() != null)
-                .map(c -> new CollectionHelmetDTO(c.getCollectionId(), c.getAcquiredAt(), memberDTO, toHelmetDTO(c.getHelmet())))
+                .map(collectionMapper::toDTO)
                 .toList();
         List<CollectionRelicDTO> relics = managed.getCollectionRelic().stream()
                 .filter(c -> c.getRelic() != null)
-                .map(c -> new CollectionRelicDTO(c.getCollectionId(), c.getAcquiredAt(), memberDTO, toRelicDTO(c.getRelic())))
+                .map(collectionMapper::toDTO)
                 .toList();
         List<CollectionSkillDTO> skills = managed.getCollectionSkill().stream()
                 .filter(c -> c.getSkill() != null)
-                .map(c -> new CollectionSkillDTO(c.getCollectionId(), c.getAcquiredAt(), memberDTO, toSkillDTO(c.getSkill())))
+                .map(collectionMapper::toDTO)
                 .toList();
         List<CollectionWeaponDTO> weapons = managed.getCollectionWeapon().stream()
                 .filter(c -> c.getWeapon() != null)
-                .map(c -> new CollectionWeaponDTO(c.getCollectionId(), c.getAcquiredAt(), memberDTO, toWeaponDTO(c.getWeapon())))
+                .map(collectionMapper::toDTO)
                 .toList();
 
         return new IllustratedEncyclopediaDTO(armors, consumables, helmets, relics, skills, weapons);
@@ -322,66 +308,5 @@ public class MemberServiceImpl implements MemberService {
     private boolean isForbidden(String nickname) {
         String normalized = nickname.replaceAll("\\s", "").toLowerCase();
         return FORBIDDEN_NICKNAMES.stream().anyMatch(normalized::contains);
-    }
-
-    /**
-     * 스킬 엔티티를 응답용 DTO로 옮긴다.
-     *
-     * @param s 스킬
-     * @return DTO
-     */
-    private SkillDTO toSkillDTO(SkillEntity s) {
-        return new SkillDTO(s.getName(), s.getTarget(), s.getAttackCount(), s.getCoefficient(), s.getCost(),
-                s.getCooldown(), s.getStatusEffect(), s.getEffectStack(), s.getDescription());
-    }
-
-    /**
-     * 유물 엔티티를 응답용 DTO로 옮긴다.
-     *
-     * @param r 유물
-     * @return DTO
-     */
-    private RelicDTO toRelicDTO(RelicEntity r) {
-        return new RelicDTO(r.getRelicId(), r.getName(), r.getEffectDesc(), r.getRarity(), r.getScoreCost());
-    }
-
-    /**
-     * 소모품 엔티티를 응답용 DTO로 옮긴다.
-     *
-     * @param c 소모품
-     * @return DTO
-     */
-    private ConsumableDTO toConsumableDTO(ConsumableEntity c) {
-        return new ConsumableDTO(c.getConsumableId(), c.getName(), c.getEffectType(), c.getEffectValue(), c.getScoreCost(), c.getDescription());
-    }
-
-    /**
-     * 무기 엔티티를 응답용 DTO로 옮긴다.
-     *
-     * @param w 무기
-     * @return DTO
-     */
-    private WeaponDTO toWeaponDTO(WeaponEntity w) {
-        return new WeaponDTO(w.getWeaponId(), w.getName(), w.getType(), w.getAtkBonus(), w.getSpecialEffect(), w.getScoreCost(), w.getDescription());
-    }
-
-    /**
-     * 갑옷 엔티티를 응답용 DTO로 옮긴다.
-     *
-     * @param a 갑옷
-     * @return DTO
-     */
-    private ArmorDTO toArmorDTO(ArmorEntity a) {
-        return new ArmorDTO(a.getArmorId(), a.getName(), a.getType(), a.getDefBonus(), a.getSpecialEffect(), a.getScoreCost(), a.getDescription());
-    }
-
-    /**
-     * 투구 엔티티를 응답용 DTO로 옮긴다.
-     *
-     * @param h 투구
-     * @return DTO
-     */
-    private HelmetDTO toHelmetDTO(HelmetEntity h) {
-        return new HelmetDTO(h.getHelmetId(), h.getName(), h.getType(), h.getHpBonus(), h.getSpecialEffect(), h.getScoreCost(), h.getDescription());
     }
 }

@@ -1,6 +1,6 @@
 package com.renovandelve.game.service;
 
-import com.renovandelve.global.config.RecordMapper;
+import com.renovandelve.catalog.mapper.CatalogMapper;
 import com.renovandelve.game.domain.GameCharacterEntity;
 import com.renovandelve.game.domain.GameEquipmentEntity;
 import com.renovandelve.member.domain.MemberEntity;
@@ -11,11 +11,6 @@ import com.renovandelve.catalog.domain.helmetentity.HelmetEntity;
 import com.renovandelve.catalog.domain.relicentity.RelicEntity;
 import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
-import com.renovandelve.catalog.dto.ArmorDTO;
-import com.renovandelve.catalog.dto.HelmetDTO;
-import com.renovandelve.catalog.dto.RelicDTO;
-import com.renovandelve.game.dto.SkillInfoDTO;
-import com.renovandelve.catalog.dto.WeaponDTO;
 import com.renovandelve.game.dto.request.NewGameRequest;
 import com.renovandelve.game.dto.response.PactDTO;
 import com.renovandelve.game.dto.response.SetupOptionsDTO;
@@ -67,6 +62,7 @@ public class GameStateServiceImpl implements GameStateService {
     private final CollectionSkillRepository collectionSkillRepository;
     private final CollectionRelicRepository collectionRelicRepository;
     private final CollectionConsumableRepository collectionConsumableRepository;
+    private final CatalogMapper catalogMapper;
 
     public static final int STARTING_BUDGET = 800;   // 스타팅 포인트 기본 예산
     // 메타 진행: 도감에 등록한 항목 1종마다 다음 판의 예산이 늘어난다 (죽어도 남는 성장)
@@ -90,11 +86,11 @@ public class GameStateServiceImpl implements GameStateService {
         return new SetupOptionsDTO(
                 STARTING_BUDGET + bonus,
                 bonus,
-                RecordMapper.mapList(weaponRepository.findAll(), WeaponDTO.class),
-                RecordMapper.mapList(armorRepository.findAll(), ArmorDTO.class),
-                RecordMapper.mapList(helmetRepository.findAll(), HelmetDTO.class),
-                skillRepository.findAll().stream().map(SkillInfoDTO::from).toList(),
-                RecordMapper.mapList(relicRepository.findAll(), RelicDTO.class),
+                catalogMapper.toWeaponDTOs(weaponRepository.findAll()),
+                catalogMapper.toArmorDTOs(armorRepository.findAll()),
+                catalogMapper.toHelmetDTOs(helmetRepository.findAll()),
+                catalogMapper.toSkillInfoDTOs(skillRepository.findAll()),
+                catalogMapper.toRelicDTOs(relicRepository.findAll()),
                 Arrays.stream(Pact.values()).map(PactDTO::from).toList()
         );
     }

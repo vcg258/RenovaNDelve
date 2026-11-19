@@ -243,6 +243,25 @@ npm run dev
 
 - `http://localhost:5173` 접속 — `/api`는 Vite 프록시로 8080에 전달되어 CORS/쿠키 문제 없음
 
+### 6. 함께 배포 (jar 하나) *(v0.10.0 추가)*
+
+마이크로서비스가 아니라 하나의 서비스이므로, 프론트와 백엔드를 따로 배포하지 않고 jar 하나로 묶습니다.
+
+```bash
+# 두 저장소가 나란히 있을 때 (RenovaNDelve/, renova-delve-front/)
+./gradlew bootJar -PwithFrontend
+# 프론트 저장소가 다른 곳에 있으면
+./gradlew bootJar -PwithFrontend -PfrontendDir=/path/to/renova-delve-front
+
+java -jar build/libs/RenovaNDelve-<버전>.jar --spring.profiles.active=prod
+```
+
+- 프론트를 `npm ci` → `npm run build`로 빌드하고, 결과(`dist/`)를 jar의 `static/`에 넣습니다. 옵션 없이 빌드하면 예전처럼 백엔드만 들어갑니다.
+- 화면과 API가 같은 주소라 CORS 설정이 필요 없고, RefreshToken 쿠키(`path=/api/auth`)도 그대로 동작합니다. 개발 환경(Vite 프록시)과 같은 구조입니다.
+- `/api` 밖의 경로는 정적 파일을 찾고, 없으면 `index.html`을 돌려줍니다. 그래서 `/game`, `/chronicle` 같은 화면 경로를 새로고침해도 404가 나지 않습니다. `/api` 아래는 지금처럼 토큰을 검사합니다.
+- **`VITE_`로 시작하는 값(`VITE_OPERATOR_NAME`, `VITE_OPERATOR_CONTACT`)은 빌드할 때 화면 코드에 박힙니다.** 값을 바꾸려면 다시 빌드해야 합니다. 서버 환경변수가 아니라 빌드하는 셸의 환경변수로 넘깁니다.
+- 메일 링크가 가리킬 주소 `APP_BASE_URL`은 이제 이 서버 주소와 같습니다.
+
 ## 시스템 아키텍처
 
 ```mermaid

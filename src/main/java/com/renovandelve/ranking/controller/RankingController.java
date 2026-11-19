@@ -1,5 +1,6 @@
 package com.renovandelve.ranking.controller;
 
+import com.renovandelve.ranking.mapper.RankingMapper;
 import com.renovandelve.game.domain.gamestateentity.Difficulty;
 import com.renovandelve.ranking.dto.response.RankingViewDTO;
 import com.renovandelve.ranking.repository.RankingRepository;
@@ -19,6 +20,7 @@ import java.util.List;
 @RequestMapping("/api/ranking")
 public class RankingController {
     private final RankingRepository rankingRepository;
+    private final RankingMapper rankingMapper;
 
     /**
      * 난이도별 랭킹.
@@ -41,8 +43,7 @@ public class RankingController {
         List<RankingViewDTO> result = new ArrayList<>();
         int rank = 1;
         for (var entity : rankingRepository.findTop10ByDifficultyOrderByBestScoreDesc(parsed)) {
-            result.add(new RankingViewDTO(rank++, entity.getMember().displayName(), entity.getDifficulty(),
-                    entity.getBestScore(), entity.getClearTime(), entity.getAchievedAt()));
+            result.add(rankingMapper.toViewDTO(entity, rank++));
         }
         return ResponseEntity.ok(result);
     }

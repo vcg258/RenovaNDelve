@@ -1,5 +1,7 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.ranking.mapper.RankingMapper;
+import com.renovandelve.collection.mapper.CollectionMapper;
 import com.renovandelve.collection.domain.CollectionArmorEntity;
 import com.renovandelve.collection.domain.CollectionConsumableEntity;
 import com.renovandelve.collection.domain.CollectionHelmetEntity;
@@ -12,29 +14,15 @@ import com.renovandelve.game.domain.GameRelicInventoryEntity;
 import com.renovandelve.game.domain.GameSkillSlotEntity;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.ranking.domain.RankingEntity;
-import com.renovandelve.catalog.domain.armorentity.ArmorEntity;
-import com.renovandelve.catalog.domain.consumableentity.ConsumableEntity;
 import com.renovandelve.game.domain.gamestateentity.Difficulty;
 import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
-import com.renovandelve.catalog.domain.helmetentity.HelmetEntity;
-import com.renovandelve.catalog.domain.relicentity.RelicEntity;
-import com.renovandelve.catalog.domain.skillentity.SkillEntity;
-import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
-import com.renovandelve.catalog.dto.ArmorDTO;
 import com.renovandelve.collection.dto.CollectionArmorDTO;
 import com.renovandelve.collection.dto.CollectionConsumableDTO;
 import com.renovandelve.collection.dto.CollectionHelmetDTO;
 import com.renovandelve.collection.dto.CollectionRelicDTO;
 import com.renovandelve.collection.dto.CollectionSkillDTO;
 import com.renovandelve.collection.dto.CollectionWeaponDTO;
-import com.renovandelve.catalog.dto.ConsumableDTO;
-import com.renovandelve.game.dto.GameStateDTO;
-import com.renovandelve.catalog.dto.HelmetDTO;
-import com.renovandelve.member.dto.MemberDTO;
 import com.renovandelve.ranking.dto.RankingDTO;
-import com.renovandelve.catalog.dto.RelicDTO;
-import com.renovandelve.catalog.dto.SkillDTO;
-import com.renovandelve.catalog.dto.WeaponDTO;
 import com.renovandelve.collection.dto.response.IllustratedEncyclopediaDTO;
 import com.renovandelve.collection.repository.CollectionArmorRepository;
 import com.renovandelve.collection.repository.CollectionConsumableRepository;
@@ -68,6 +56,8 @@ public class BattleResultServiceImpl implements BattleResultService {
     private final CollectionConsumableRepository collectionConsumableRepository;
     private final RankingRepository rankingRepository;
     private final GameStateRepository gameStateRepository;
+    private final CollectionMapper collectionMapper;
+    private final RankingMapper rankingMapper;
 
     /**
      * 이번 판에 손에 넣은 스킬·유물·소모품·장비를 회원 도감에 등록한다. 이미 등록된 것은 건너뛴다.
@@ -88,7 +78,7 @@ public class BattleResultServiceImpl implements BattleResultService {
                 .map(skill -> {
                     CollectionSkillEntity saved = collectionSkillRepository.save(
                             CollectionSkillEntity.builder().member(member).skill(skill).build());
-                    return new CollectionSkillDTO(saved.getCollectionId(), saved.getAcquiredAt(), toMemberDTO(member), toSkillDTO(skill));
+                    return collectionMapper.toDTO(saved);
                 }).toList();
 
         // 소모품 도감 등록
@@ -100,7 +90,7 @@ public class BattleResultServiceImpl implements BattleResultService {
                 .map(consumable -> {
                     CollectionConsumableEntity saved = collectionConsumableRepository.save(
                             CollectionConsumableEntity.builder().member(member).consumable(consumable).build());
-                    return new CollectionConsumableDTO(saved.getCollectionId(), saved.getAcquiredAt(), toMemberDTO(member), toConsumableDTO(consumable));
+                    return collectionMapper.toDTO(saved);
                 }).toList();
 
         // 장비 도감 등록
@@ -113,17 +103,17 @@ public class BattleResultServiceImpl implements BattleResultService {
             if (equipment.getWeapon() != null && !collectionWeaponRepository.existsByMemberAndWeapon(member, equipment.getWeapon())) {
                 CollectionWeaponEntity saved = collectionWeaponRepository.save(
                         CollectionWeaponEntity.builder().member(member).weapon(equipment.getWeapon()).build());
-                weaponList.add(new CollectionWeaponDTO(saved.getCollectionId(), saved.getAcquiredAt(), toMemberDTO(member), toWeaponDTO(equipment.getWeapon())));
+                weaponList.add(collectionMapper.toDTO(saved));
             }
             if (equipment.getArmor() != null && !collectionArmorRepository.existsByMemberAndArmor(member, equipment.getArmor())) {
                 CollectionArmorEntity saved = collectionArmorRepository.save(
                         CollectionArmorEntity.builder().member(member).armor(equipment.getArmor()).build());
-                armorList.add(new CollectionArmorDTO(saved.getCollectionId(), saved.getAcquiredAt(), toMemberDTO(member), toArmorDTO(equipment.getArmor())));
+                armorList.add(collectionMapper.toDTO(saved));
             }
             if (equipment.getHelmet() != null && !collectionHelmetRepository.existsByMemberAndHelmet(member, equipment.getHelmet())) {
                 CollectionHelmetEntity saved = collectionHelmetRepository.save(
                         CollectionHelmetEntity.builder().member(member).helmet(equipment.getHelmet()).build());
-                helmetList.add(new CollectionHelmetDTO(saved.getCollectionId(), saved.getAcquiredAt(), toMemberDTO(member), toHelmetDTO(equipment.getHelmet())));
+                helmetList.add(collectionMapper.toDTO(saved));
             }
         }
 
@@ -136,7 +126,7 @@ public class BattleResultServiceImpl implements BattleResultService {
                 .map(relic -> {
                     CollectionRelicEntity saved = collectionRelicRepository.save(
                             CollectionRelicEntity.builder().member(member).relic(relic).build());
-                    return new CollectionRelicDTO(saved.getCollectionId(), saved.getAcquiredAt(), toMemberDTO(member), toRelicDTO(relic));
+                    return collectionMapper.toDTO(saved);
                 }).toList();
 
         log.info("[도감 등록] skills={} consumables={} weapons={} armors={} helmets={} relics={}",
@@ -190,8 +180,7 @@ public class BattleResultServiceImpl implements BattleResultService {
         RankingEntity saved = rankingRepository.save(ranking);
         log.info("랭킹 갱신 rankId={} score={}", saved.getRankingId(), saved.getBestScore());
 
-        return new RankingDTO(saved.getRankingId(), saved.getDifficulty(), saved.getBestScore(),
-                saved.getClearTime(), saved.getAchievedAt(), toMemberDTO(member), toGameStateDTO(gameState));
+        return rankingMapper.toDTO(saved);
     }
 
     /**
@@ -217,100 +206,5 @@ public class BattleResultServiceImpl implements BattleResultService {
         log.info("게임 세션 종료 gameStateId={} cleared={}", gameState.getGameStateId(), cleared);
 
         return encyclopedia;
-    }
-
-    /* HELPER METHODS */
-
-    /**
-     * 회원을 도감 응답용 DTO로 옮긴다 (아이디 대신 표시 이름).
-     *
-     * @param m 회원
-     * @return DTO
-     */
-    private MemberDTO toMemberDTO(MemberEntity m) {
-        return MemberDTO.builder().memberId(m.getMemberId()).loginId(m.displayName()).build();
-    }
-
-    /**
-     * 스킬 엔티티를 도감 응답용 DTO로 옮긴다.
-     *
-     * @param s 스킬
-     * @return DTO
-     */
-    private SkillDTO toSkillDTO(SkillEntity s) {
-        return new SkillDTO(s.getName(), s.getTarget(), s.getAttackCount(), s.getCoefficient(), s.getCost(),
-                s.getCooldown(), s.getStatusEffect(), s.getEffectStack(), s.getDescription());
-    }
-
-    /**
-     * 유물 엔티티를 도감 응답용 DTO로 옮긴다.
-     *
-     * @param r 유물
-     * @return DTO
-     */
-    private RelicDTO toRelicDTO(RelicEntity r) {
-        return new RelicDTO(r.getRelicId(), r.getName(), r.getEffectDesc(), r.getRarity(), r.getScoreCost());
-    }
-
-    /**
-     * 소모품 엔티티를 도감 응답용 DTO로 옮긴다.
-     *
-     * @param c 소모품
-     * @return DTO
-     */
-    private ConsumableDTO toConsumableDTO(ConsumableEntity c) {
-        return new ConsumableDTO(c.getConsumableId(), c.getName(), c.getEffectType(), c.getEffectValue(), c.getScoreCost(), c.getDescription());
-    }
-
-    /**
-     * 무기 엔티티를 도감 응답용 DTO로 옮긴다.
-     *
-     * @param w 무기
-     * @return DTO
-     */
-    private WeaponDTO toWeaponDTO(WeaponEntity w) {
-        return new WeaponDTO(w.getWeaponId(), w.getName(), w.getType(), w.getAtkBonus(), w.getSpecialEffect(), w.getScoreCost(), w.getDescription());
-    }
-
-    /**
-     * 갑옷 엔티티를 도감 응답용 DTO로 옮긴다.
-     *
-     * @param a 갑옷
-     * @return DTO
-     */
-    private ArmorDTO toArmorDTO(ArmorEntity a) {
-        return new ArmorDTO(a.getArmorId(), a.getName(), a.getType(), a.getDefBonus(), a.getSpecialEffect(), a.getScoreCost(), a.getDescription());
-    }
-
-    /**
-     * 투구 엔티티를 도감 응답용 DTO로 옮긴다.
-     *
-     * @param h 투구
-     * @return DTO
-     */
-    private HelmetDTO toHelmetDTO(HelmetEntity h) {
-        return new HelmetDTO(h.getHelmetId(), h.getName(), h.getType(), h.getHpBonus(), h.getSpecialEffect(), h.getScoreCost(), h.getDescription());
-    }
-
-    /**
-     * 게임 엔티티를 도감 응답용 DTO로 옮긴다.
-     *
-     * @param g 게임
-     * @return DTO
-     */
-    private GameStateDTO toGameStateDTO(GameStateEntity g) {
-        return GameStateDTO.builder()
-                .gameStateId(g.getGameStateId())
-                .difficulty(g.getDifficulty())
-                .isActive(g.getIsActive())
-                .currentStage(g.getCurrentStage())
-                .currentNodeId(g.getCurrentNodeId())
-                .score(g.getScore())
-                .gold(g.getGold())
-                .startingPoints(g.getStartingPoints())
-                .hasPhoenix(g.getHasPhoenix())
-                .createdAt(g.getCreatedAt())
-                .updatedAt(g.getUpdatedAt())
-                .build();
     }
 }

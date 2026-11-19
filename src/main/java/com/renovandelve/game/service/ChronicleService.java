@@ -1,5 +1,6 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.game.mapper.GameMapper;
 import com.renovandelve.ai.dto.response.RunReviewDTO;
 import com.renovandelve.game.domain.ChronicleChapterEntity;
 import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
@@ -31,6 +32,7 @@ public class ChronicleService {
     private static final int PREVIOUS_BODY_LIMIT = 160;
 
     private final ChronicleChapterRepository chronicleChapterRepository;
+    private final GameMapper gameMapper;
 
     /**
      * 다음 장을 쓰기 위한 앞 이야기. 최근 3장을 오래된 것부터.
@@ -92,7 +94,7 @@ public class ChronicleService {
     @Transactional(readOnly = true)
     public List<ChronicleChapterDTO> chapters(Long memberId) {
         return chronicleChapterRepository.findByMemberIdOrderByChapterNoAsc(memberId).stream()
-                .map(ChronicleChapterDTO::from)
+                .map(gameMapper::toChronicleChapterDTO)
                 .toList();
     }
 

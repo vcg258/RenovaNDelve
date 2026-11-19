@@ -8,7 +8,7 @@ ext {
 }
 
 group = 'com'
-version = '0.9.0'
+version = '0.10.0'
 description = 'RenovaNDelve'
 
 java {
@@ -41,11 +41,16 @@ dependencies {
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'org.postgresql:postgresql'
     annotationProcessor 'org.projectlombok:lombok'
+    // 엔티티 -> DTO 변환 (컴파일 시점에 변환 코드를 만든다. Lombok 다음에 돌도록 binding을 함께 둔다)
+    implementation 'org.mapstruct:mapstruct:1.6.3'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
+    annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'io.projectreactor:reactor-test'
     testCompileOnly 'org.projectlombok:lombok'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testAnnotationProcessor 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
     // 테스트용 가짜 SMTP 서버 (메일이 실제 SMTP 프로토콜로 나가는지 확인)
     testImplementation 'com.icegreen:greenmail-junit5:2.1.2'
     implementation 'org.springframework.ai:spring-ai-rag'
@@ -72,4 +77,38 @@ dependencyManagement {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+// ===== 프론트와 함께 배포 =====
+// ./gradlew bootJar -PwithFrontend                     -> 프론트(../renova-delve-front)를 빌드해 jar의 static/ 에 넣는다
+// ./gradlew bootJar -PwithFrontend -PfrontendDir=경로  -> 프론트 저장소가 다른 곳에 있을 때
+// 옵션 없이 빌드하면 예전처럼 백엔드만 (개발할 때는 Vite 개발 서버가 /api 를 8080으로 넘긴다)
+def frontendDir = file(findProperty('frontendDir') ?: '../renova-delve-front')
+def npmCommand = System.getProperty('os.name').toLowerCase().contains('windows') ? 'npm.cmd' : 'npm'
+
+tasks.register('npmCi', Exec) {
+    group = 'frontend'
+    description = '프론트 의존성 설치 (package-lock.json 기준)'
+    workingDir frontendDir
+    commandLine npmCommand, 'ci'
+    inputs.file(new File(frontendDir, 'package-lock.json'))
+    outputs.dir(new File(frontendDir, 'node_modules'))
+}
+
+tasks.register('buildFrontend', Exec) {
+    group = 'frontend'
+    description = '프론트 빌드 (dist/). VITE_ 로 시작하는 환경변수는 이때 값이 박힌다'
+    dependsOn 'npmCi'
+    workingDir frontendDir
+    commandLine npmCommand, 'run', 'build'
+    inputs.dir(new File(frontendDir, 'src'))
+    inputs.files(new File(frontendDir, 'index.html'), new File(frontendDir, 'package.json'), new File(frontendDir, 'vite.config.ts'))
+    outputs.dir(new File(frontendDir, 'dist'))
+}
+
+if (project.hasProperty('withFrontend')) {
+    tasks.named('processResources') {
+        dependsOn 'buildFrontend'
+        from(new File(frontendDir, 'dist')) { into 'static' }
+    }
 }
