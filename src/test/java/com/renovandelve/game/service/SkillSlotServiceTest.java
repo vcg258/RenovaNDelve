@@ -131,7 +131,7 @@ class SkillSlotServiceTest {
     private GameStateEntity gameWithBasicAnd(int others) {
         List<GameSkillSlotEntity> slots = new ArrayList<>();
         slots.add(GameSkillSlotEntity.builder().slotId(1L).slotIndex(0)
-                .skill(SkillEntity.builder().skillId(1L).name("기본 공격").cost(0).build()).build());
+                .skill(SkillEntity.builder().skillId(1L).name("기본 공격").cost(0).basic(true).build()).build());
         for (int i = 0; i < others; i++) {
             slots.add(GameSkillSlotEntity.builder().slotId((long) i + 2).slotIndex(i + 1)
                     .skill(SkillEntity.builder().skillId((long) i + 2).name("스킬" + i).cost(100).build()).build());

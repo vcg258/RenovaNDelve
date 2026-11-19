@@ -97,6 +97,7 @@ public class StatusAssembler {
                 .relicSynergies(relicSynergies)
                 .skillSynergies(skillSynergies)
                 .maxSkillSlots(SkillSlotService.MAX_SLOTS)
+                .minSlotsToDropBasic(SkillSlotService.MIN_SLOTS_TO_DROP_BASIC)
                 .pacts(Pact.titles(Pact.parse(gameState.getPacts())))
                 .alignment(AlignmentDTO.from(gameState.alignment()))
                 .contract(ContractDTO.of(gameState.demonContract(), gameState.getHeavenAffinity(), gameState.getGold(),
