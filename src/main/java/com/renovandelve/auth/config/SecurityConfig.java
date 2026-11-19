@@ -90,20 +90,20 @@ public class SecurityConfig {
                                 .failureHandler((request, response, exception) -> {
                                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                                     response.setContentType("application/json;charset=UTF-8");
-                                    response.getWriter().println("{\"error\": \"OAuth2 로그인 실패\"}");
+                                    response.getWriter().println("{\"code\": \"OAUTH2_LOGIN_FAILED\", \"error\": \"OAuth2 로그인 실패\"}");
                                 }))
                 .exceptionHandling(exception -> exception
                         // 미인증 401
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                             response.setContentType("application/json;charset=UTF-8");
-                            response.getWriter().println("{\"error\": \"인증이 필요합니다\"}");
+                            response.getWriter().println("{\"code\": \"AUTHENTICATION_REQUIRED\", \"error\": \"인증이 필요합니다.\"}");
                         })
                         // 권한 부족 403 (일반 회원이 관리자 API 호출 등)
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                             response.setContentType("application/json;charset=UTF-8");
-                            response.getWriter().println("{\"error\": \"접근 권한이 없습니다\"}");
+                            response.getWriter().println("{\"code\": \"ACCESS_DENIED\", \"error\": \"접근 권한이 없습니다.\"}");
                         })
                 )
                 // 같은 기준 필터 앞에 등록하면 등록 순서대로 실행된다.

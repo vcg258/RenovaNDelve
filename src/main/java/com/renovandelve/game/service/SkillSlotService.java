@@ -1,5 +1,7 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import com.renovandelve.member.domain.MemberEntity;
 
 import com.renovandelve.game.domain.GameSkillSlotEntity;
@@ -24,10 +26,7 @@ import java.util.NoSuchElementException;
 @RequiredArgsConstructor
 public class SkillSlotService {
     public static final int MAX_SLOTS = GameStateEntity.MAX_SKILL_SLOTS;
-    public static final String FULL_MESSAGE = GameStateEntity.SKILL_FULL_MESSAGE;
     public static final int MIN_SLOTS_TO_DROP_BASIC = GameStateEntity.MIN_SLOTS_TO_DROP_BASIC;
-    public static final String BASIC_LOCKED_MESSAGE = GameStateEntity.BASIC_LOCKED_MESSAGE;
-    public static final String LAST_SKILL_MESSAGE = GameStateEntity.LAST_SKILL_MESSAGE;
 
     private final CollectionService collectionService;
     private final GameSkillSlotRepository gameSkillSlotRepository;
@@ -55,10 +54,10 @@ public class SkillSlotService {
      */
     public SkillEntity learn(GameStateEntity gameState, Long skillId, Long replaceSlotId) {
         if (gameState.hasSkill(skillId)) {
-            throw new IllegalStateException("이미 보유 중인 스킬입니다.");
+            throw new BusinessException(ErrorCode.SKILL_ALREADY_OWNED);
         }
         SkillEntity skill = skillRepository.findById(skillId)
-                .orElseThrow(() -> new NoSuchElementException("스킬을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND, "스킬을 찾을 수 없습니다."));
 
         // 배우는 순간 도감에 남긴다. 원정 끝에만 등록하면 도중에 교체한 스킬이 빠진다
         registerInCollection(gameState, skill);

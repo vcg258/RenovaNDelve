@@ -1,5 +1,7 @@
 package com.renovandelve.member.service;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
@@ -7,7 +9,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
-import java.util.NoSuchElementException;
 
 /**
  * SecurityContext(JWT 클레임의 loginId)로부터 현재 회원 엔티티를 해석한다.
@@ -27,9 +28,9 @@ public class CurrentMemberService {
     public MemberEntity getCurrentMember() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication.getName() == null) {
-            throw new NoSuchElementException("인증 정보가 없습니다.");
+            throw new BusinessException(ErrorCode.AUTHENTICATION_REQUIRED);
         }
         return memberRepository.findByLoginId(authentication.getName())
-                .orElseThrow(() -> new NoSuchElementException("회원을 찾을 수 없습니다: " + authentication.getName()));
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
     }
 }

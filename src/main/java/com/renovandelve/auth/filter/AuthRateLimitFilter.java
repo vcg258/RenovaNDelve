@@ -43,7 +43,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
                 response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfter));
                 response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                 response.setCharacterEncoding("UTF-8");
-                response.getWriter().println("{\"error\": \"요청이 너무 많습니다. 잠시 후 다시 시도해주세요.\"}");
+                response.getWriter().println("{\"code\": \"TOO_MANY_REQUESTS\", \"error\": \"요청이 너무 많습니다. 잠시 후 다시 시도해주세요.\"}");
                 return;
             }
         }

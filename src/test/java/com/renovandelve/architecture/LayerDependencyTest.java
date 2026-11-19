@@ -51,4 +51,9 @@ class LayerDependencyTest {
             .should().callMethodWhere(target(HasName.Predicates.name("builder"))
                     .and(target(HasOwner.Predicates.With.owner(CanBeAnnotated.Predicates.annotatedWith(Entity.class)))))
             .because("엔티티 생성 규칙은 엔티티의 정적 팩토리가 갖는다");
+
+    /** 컨트롤러는 저장소를 직접 쓰지 않고 서비스를 거친다 (트랜잭션 경계는 서비스에 둔다) */
+    @ArchTest
+    static final ArchRule controllersDoNotUseRepositories = noClasses().that().resideInAPackage("..controller..")
+            .should().dependOnClassesThat().resideInAPackage("..repository..");
 }

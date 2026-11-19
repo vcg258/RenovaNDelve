@@ -1,5 +1,7 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import com.renovandelve.game.domain.GameSkillSlotEntity;
 import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.catalog.domain.skillentity.SkillEntity;
@@ -80,7 +82,7 @@ class SkillSlotServiceTest {
         GameStateEntity game = gameWithSkills(8);
 
         assertThatThrownBy(() -> skillSlotService.learn(game, NEW_SKILL_ID, null))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("버릴 스킬");
         assertThat(game.getGameSkillSlot()).hasSize(8);
         verify(gameSkillSlotRepository, never()).save(any());
@@ -111,7 +113,7 @@ class SkillSlotServiceTest {
         GameStateEntity game = gameWithSkills(8);
 
         assertThatThrownBy(() -> skillSlotService.learn(game, NEW_SKILL_ID, 999L))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class);
         verify(gameSkillSlotRepository, never()).save(any());
     }
 
@@ -121,7 +123,7 @@ class SkillSlotServiceTest {
         GameStateEntity game = gameWithSkills(8);
 
         assertThatThrownBy(() -> skillSlotService.learn(game, 3L, 5L))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("이미 보유");
     }
 
@@ -158,8 +160,8 @@ class SkillSlotServiceTest {
         GameStateEntity game = gameWithBasicAnd(1);
 
         assertThatThrownBy(() -> skillSlotService.discard(game, 1L))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage(SkillSlotService.BASIC_LOCKED_MESSAGE);
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BASIC_SKILL_LOCKED);
         assertThat(game.getGameSkillSlot()).hasSize(2);
         verify(gameSkillSlotRepository, never()).delete(any(GameSkillSlotEntity.class));
     }
@@ -180,8 +182,8 @@ class SkillSlotServiceTest {
         GameStateEntity game = gameWithBasicAnd(0);
 
         assertThatThrownBy(() -> skillSlotService.discard(game, 1L))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage(SkillSlotService.LAST_SKILL_MESSAGE);
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.LAST_SKILL);
     }
 
     @Test
@@ -190,7 +192,7 @@ class SkillSlotServiceTest {
         GameStateEntity game = gameWithBasicAnd(3);
 
         assertThatThrownBy(() -> skillSlotService.discard(game, 999L))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -199,8 +201,8 @@ class SkillSlotServiceTest {
         GameStateEntity game = gameWithBasicAnd(1);
 
         assertThatThrownBy(() -> skillSlotService.learn(game, NEW_SKILL_ID, 1L))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage(SkillSlotService.BASIC_LOCKED_MESSAGE);
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.BASIC_SKILL_LOCKED);
         assertThat(game.getGameSkillSlot().get(0).getSkill().getName()).isEqualTo("기본 공격");
     }
 

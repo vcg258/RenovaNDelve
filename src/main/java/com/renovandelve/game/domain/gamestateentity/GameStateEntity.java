@@ -1,5 +1,7 @@
 package com.renovandelve.game.domain.gamestateentity;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import com.renovandelve.game.domain.GameCharacterEntity;
 import com.renovandelve.game.domain.GameConsumableInventoryEntity;
 import com.renovandelve.game.domain.GameEquipmentEntity;
@@ -51,11 +53,6 @@ public class GameStateEntity { //제외
     public static final int MAX_SKILL_SLOTS = 8;
     /** 기본 공격은 스킬을 이만큼(기본 공격 포함) 가졌을 때만 버리거나 바꿀 수 있다 */
     public static final int MIN_SLOTS_TO_DROP_BASIC = 3;
-    public static final String SKILL_FULL_MESSAGE =
-            "스킬 슬롯이 가득 찼습니다. 버릴 스킬을 골라주세요. (최대 " + MAX_SKILL_SLOTS + "개)";
-    public static final String BASIC_LOCKED_MESSAGE =
-            "기본 공격은 스킬이 " + MIN_SLOTS_TO_DROP_BASIC + "개 이상일 때만 버릴 수 있습니다.";
-    public static final String LAST_SKILL_MESSAGE = "마지막 남은 스킬은 버릴 수 없습니다.";
     /** 원정을 시작할 때의 골드 */
     public static final int STARTING_GOLD = 100;
     @PositiveOrZero
@@ -135,7 +132,7 @@ public class GameStateEntity { //제외
      */
     public void deductGold(int amount) {
         if (this.gold < amount) {
-            throw new IllegalArgumentException("골드가 부족합니다. 보유: " + this.gold + ", 필요: " + amount);
+            throw new BusinessException(ErrorCode.NOT_ENOUGH_GOLD, this.gold, amount);
         }
         this.gold -= amount;
     }
@@ -268,10 +265,9 @@ public class GameStateEntity { //제외
      * @throws IllegalStateException 걸린 계약이 없거나 천상의 성향이 모자라면
      */
     public void breakContract() {
-        if (demonContract() == null) throw new IllegalStateException("걸린 계약이 없습니다.");
+        if (demonContract() == null) throw new BusinessException(ErrorCode.NO_CONTRACT);
         if (heavenAffinity < DemonContract.BREAK_HEAVEN_AFFINITY) {
-            throw new IllegalStateException("천상의 성향이 %d 이상이어야 계약을 파기할 수 있습니다."
-                    .formatted(DemonContract.BREAK_HEAVEN_AFFINITY));
+            throw new BusinessException(ErrorCode.CONTRACT_BREAK_LOCKED, DemonContract.BREAK_HEAVEN_AFFINITY);
         }
         deductGold(contractBreakCost());
         bindContract(null);
@@ -396,7 +392,7 @@ public class GameStateEntity { //제외
         return gameSkillSlot.stream()
                 .filter(slot -> slotId.equals(slot.getSlotId()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("보유하지 않은 스킬 슬롯입니다. slotId=" + slotId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.SKILL_SLOT_NOT_OWNED, slotId));
     }
 
     /**
@@ -409,7 +405,7 @@ public class GameStateEntity { //제외
     public GameSkillSlotEntity learnSkill(SkillEntity skill) {
         requireNotOwned(skill);
         if (gameSkillSlot.size() >= MAX_SKILL_SLOTS) {
-            throw new IllegalStateException(SKILL_FULL_MESSAGE);
+            throw new BusinessException(ErrorCode.SKILL_SLOT_FULL, MAX_SKILL_SLOTS);
         }
         int nextIndex = 0;
         while (slotIndexUsed(nextIndex)) nextIndex++;
@@ -445,7 +441,7 @@ public class GameStateEntity { //제외
     public SkillEntity forgetSkill(Long slotId) {
         GameSkillSlotEntity slot = findSkillSlot(slotId);
         if (gameSkillSlot.size() <= 1) {
-            throw new IllegalStateException(LAST_SKILL_MESSAGE);
+            throw new BusinessException(ErrorCode.LAST_SKILL);
         }
         requireDroppable(slot);
         gameSkillSlot.remove(slot);
@@ -471,7 +467,7 @@ public class GameStateEntity { //제외
     /** 기본 공격은 쿨타임이 없는 유일한 스킬이라, 스킬이 적을 때 버리면 매 턴 쓸 스킬이 없어진다 */
     private void requireDroppable(GameSkillSlotEntity slot) {
         if (slot.getSkill() != null && slot.getSkill().isBasic() && gameSkillSlot.size() < MIN_SLOTS_TO_DROP_BASIC) {
-            throw new IllegalStateException(BASIC_LOCKED_MESSAGE);
+            throw new BusinessException(ErrorCode.BASIC_SKILL_LOCKED, MIN_SLOTS_TO_DROP_BASIC);
         }
     }
 
@@ -483,7 +479,7 @@ public class GameStateEntity { //제외
      */
     private void requireNotOwned(SkillEntity skill) {
         if (hasSkill(skill.getSkillId())) {
-            throw new IllegalStateException("이미 보유 중인 스킬입니다.");
+            throw new BusinessException(ErrorCode.SKILL_ALREADY_OWNED);
         }
     }
 
@@ -518,7 +514,7 @@ public class GameStateEntity { //제외
      */
     public GameRelicInventoryEntity addRelic(RelicEntity relic) {
         if (ownsRelic(relic.getRelicId())) {
-            throw new IllegalStateException("이미 보유 중인 유물입니다.");
+            throw new BusinessException(ErrorCode.RELIC_ALREADY_OWNED);
         }
         GameRelicInventoryEntity inventory = GameRelicInventoryEntity.of(this, relic);
         gameRelicInventory.add(inventory);
@@ -550,7 +546,7 @@ public class GameStateEntity { //제외
         return gameConsumableInventory.stream()
                 .filter(inventory -> inventory.getSlotId().equals(slotId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("보유하지 않은 소모품입니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.CONSUMABLE_NOT_OWNED));
     }
 
     /**
@@ -574,7 +570,7 @@ public class GameStateEntity { //제외
      */
     public void consume(GameConsumableInventoryEntity inventory) {
         if (!gameConsumableInventory.remove(inventory)) {
-            throw new NoSuchElementException("보유하지 않은 소모품입니다.");
+            throw new BusinessException(ErrorCode.CONSUMABLE_NOT_OWNED);
         }
     }
 

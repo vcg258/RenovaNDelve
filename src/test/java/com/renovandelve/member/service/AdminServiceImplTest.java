@@ -1,5 +1,6 @@
 package com.renovandelve.member.service;
 
+import com.renovandelve.global.exception.BusinessException;
 import org.mockito.Spy;
 import com.renovandelve.catalog.mapper.CatalogMapperImpl;
 import com.renovandelve.game.mapper.GameMapperImpl;
@@ -72,7 +73,7 @@ class AdminServiceImplTest {
         MemberEntity admin = member(1L, Role.ADMIN);
 
         assertThatThrownBy(() -> adminService.changeRole(1L, new RoleChangeRequest("USER"), admin))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("자기 자신");
         verify(admin, never()).changeRole(any());
         verify(tokenRevocationService, never()).revoke(any());
@@ -84,7 +85,7 @@ class AdminServiceImplTest {
         MemberEntity admin = member(1L, Role.ADMIN);
 
         assertThatThrownBy(() -> adminService.changeStatus(1L, new MemberStatusChangeRequest("SUSPENDED", "x"), admin))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("자기 자신");
         verify(admin, never()).suspend(any());
     }
@@ -97,7 +98,7 @@ class AdminServiceImplTest {
         when(memberRepository.countByRole(Role.ADMIN)).thenReturn(1L);
 
         assertThatThrownBy(() -> adminService.changeRole(2L, new RoleChangeRequest("USER"), actor))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("마지막 관리자");
         verify(target, never()).changeRole(any());
     }

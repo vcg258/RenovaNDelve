@@ -1,5 +1,7 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import com.renovandelve.catalog.mapper.CatalogMapper;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.catalog.domain.armorentity.ArmorEntity;
@@ -135,7 +137,7 @@ public class GameStateServiceImpl implements GameStateService {
                 + relics.stream().mapToInt(RelicEntity::getScoreCost).sum();
         int budget = STARTING_BUDGET + bonusBudget(member);
         if (cost > budget) {
-            throw new IllegalArgumentException("스타팅 포인트 예산 초과: 사용 " + cost + " / 예산 " + budget);
+            throw new BusinessException(ErrorCode.BUDGET_EXCEEDED, cost, budget);
         }
 
         // 게임 하나만 저장하면 장비·캐릭터·스킬 슬롯·유물은 cascade로 함께 저장된다
@@ -151,16 +153,6 @@ public class GameStateServiceImpl implements GameStateService {
         return gameState;
     }
 
-    /**
-     * 진행 중인 원정.
-     *
-     * @param member 회원
-     * @return 진행 중인 게임
-     */
-    @Override
-    public Optional<GameStateEntity> findActiveGame(MemberEntity member) {
-        return gameStateRepository.findByMember_MemberIdAndIsActiveTrue(member.getMemberId());
-    }
 
     /**
      * 진행 중인 원정을 포기하고 Redis 세션을 지운다. 없으면 아무것도 하지 않는다.
@@ -220,7 +212,7 @@ public class GameStateServiceImpl implements GameStateService {
         try {
             return Difficulty.valueOf(value.toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("알 수 없는 난이도: " + value);
+            throw new BusinessException(ErrorCode.UNKNOWN_DIFFICULTY, value);
         }
     }
 
@@ -233,7 +225,7 @@ public class GameStateServiceImpl implements GameStateService {
     private WeaponEntity resolveWeapon(Long id) {
         if (id != null) {
             return weaponRepository.findById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 무기입니다. weaponId=" + id));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST, "존재하지 않는 무기입니다. weaponId=" + id));
         }
         return weaponRepository.findAll().stream()
                 .min(Comparator.comparingInt(WeaponEntity::getScoreCost))
@@ -249,7 +241,7 @@ public class GameStateServiceImpl implements GameStateService {
     private ArmorEntity resolveArmor(Long id) {
         if (id != null) {
             return armorRepository.findById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 갑옷입니다. armorId=" + id));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST, "존재하지 않는 갑옷입니다. armorId=" + id));
         }
         return armorRepository.findAll().stream()
                 .min(Comparator.comparingInt(ArmorEntity::getScoreCost))
@@ -265,7 +257,7 @@ public class GameStateServiceImpl implements GameStateService {
     private HelmetEntity resolveHelmet(Long id) {
         if (id != null) {
             return helmetRepository.findById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 투구입니다. helmetId=" + id));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST, "존재하지 않는 투구입니다. helmetId=" + id));
         }
         return helmetRepository.findAll().stream()
                 .min(Comparator.comparingInt(HelmetEntity::getScoreCost))
@@ -291,7 +283,7 @@ public class GameStateServiceImpl implements GameStateService {
             for (Long id : skillIds) {
                 if (selected.size() >= MAX_START_SKILLS) break;
                 SkillEntity skill = skillRepository.findById(id)
-                        .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 스킬입니다. skillId=" + id));
+                        .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST, "존재하지 않는 스킬입니다. skillId=" + id));
                 selected.putIfAbsent(skill.getSkillId(), skill);
             }
         }
@@ -313,7 +305,7 @@ public class GameStateServiceImpl implements GameStateService {
         LinkedHashMap<Long, RelicEntity> selected = new LinkedHashMap<>();
         for (Long id : relicIds) {
             RelicEntity relic = relicRepository.findById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유물입니다. relicId=" + id));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST, "존재하지 않는 유물입니다. relicId=" + id));
             selected.putIfAbsent(relic.getRelicId(), relic);
         }
         return new ArrayList<>(selected.values());

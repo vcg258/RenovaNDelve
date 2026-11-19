@@ -1,5 +1,7 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import java.util.Optional;
 import com.renovandelve.ai.service.AiCallRunner;
 import com.renovandelve.catalog.mapper.CatalogMapper;
@@ -326,10 +328,10 @@ public class GameEngineServiceImpl implements GameEngineService {
         GameSkillSlotEntity slot = slots.stream()
                 .filter(s -> s.getSlotId().equals(request.slotId()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("보유하지 않은 스킬 슬롯입니다. slotId=" + request.slotId()));
+                .orElseThrow(() -> new BusinessException(ErrorCode.SKILL_SLOT_NOT_OWNED, request.slotId()));
 
         if (!slot.isReady()) {
-            throw new IllegalStateException("쿨타임이 남아 있습니다. (" + slot.getCoolTime() + "턴)");
+            throw new BusinessException(ErrorCode.SKILL_ON_COOLDOWN, slot.getCoolTime());
         }
 
         SkillEntity skill = slot.getSkill();
@@ -411,7 +413,7 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         List<GameSkillSlotEntity> slots = gameState.getGameSkillSlot();
         if (gameState.hasReadySkill()) {
-            throw new IllegalStateException("쓸 수 있는 스킬이 남아 있습니다. 숨 고르기는 모든 스킬이 쿨타임일 때만 할 수 있습니다.");
+            throw new BusinessException(ErrorCode.PASS_NOT_ALLOWED);
         }
 
         GameCharacterEntity character = character(gameState);
@@ -440,7 +442,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
         requirePhase(session, GameSession.PHASE_BATTLE, "전투 중이 아닙니다.");
         if ("BOSS".equals(session.getNodeType())) {
-            throw new IllegalStateException("이 구역의 지배자에게서는 달아날 수 없습니다.");
+            throw new BusinessException(ErrorCode.FLEE_NOT_ALLOWED);
         }
 
         GameCharacterEntity character = character(gameState);
@@ -487,7 +489,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
         String phase = session.getPhase();
         if (!SKILL_DISCARD_PHASES.contains(phase)) {
-            throw new IllegalStateException("지금은 스킬을 버릴 수 없습니다. (현재 단계: " + phase + ")");
+            throw new BusinessException(ErrorCode.SKILL_DISCARD_NOT_ALLOWED, phase);
         }
         skillSlotService.discard(gameState, request.slotId());
         return statusAssembler.toStatusDTO(gameState);
@@ -510,7 +512,7 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         boolean inBattle = GameSession.PHASE_BATTLE.equals(session.getPhase());
         if (!inBattle && !GameSession.PHASE_EXPLORE.equals(session.getPhase())) {
-            throw new IllegalStateException("지금은 소모품을 사용할 수 없습니다.");
+            throw new BusinessException(ErrorCode.CONSUMABLE_NOT_ALLOWED);
         }
 
         GameConsumableInventoryEntity inventory = gameState.findConsumable(request.inventorySlotId());
@@ -558,7 +560,7 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         List<EncounterChoice> choices = session.getChoices();
         if (request.choiceIndex() < 0 || request.choiceIndex() >= choices.size()) {
-            throw new IllegalArgumentException("잘못된 선택지입니다.");
+            throw new BusinessException(ErrorCode.INVALID_CHOICE);
         }
 
         EncounterChoice choice = choices.get(request.choiceIndex());
@@ -625,7 +627,7 @@ public class GameEngineServiceImpl implements GameEngineService {
                 addConsumable(gameState, request.itemId());
             }
             case "SKIP" -> { /* 보상 포기 */ }
-            default -> throw new IllegalArgumentException("알 수 없는 보상 타입: " + type);
+            default -> throw new BusinessException(ErrorCode.INVALID_REQUEST, "알 수 없는 보상 타입: " + type);
         }
 
         // 상점 오픈
@@ -677,7 +679,7 @@ public class GameEngineServiceImpl implements GameEngineService {
                         && item.getItemId().equals(request.itemId())
                         && !item.isSold())
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("상점에 없는 아이템이거나 이미 판매된 상품입니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.SHOP_ITEM_UNAVAILABLE));
 
         shopService.applyPurchase(gameState, member, stockItem, request.replaceSlotId());
         stockItem.setSold(true);
@@ -722,7 +724,7 @@ public class GameEngineServiceImpl implements GameEngineService {
     public RunReviewDTO getRunReview(MemberEntity member) {
         GameStateEntity gameState = gameStateRepository
                 .findTopByMember_MemberIdOrderByCreatedAtDesc(member.getMemberId())
-                .orElseThrow(() -> new NoSuchElementException("게임 기록이 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.GAME_RECORD_NOT_FOUND));
 
         // 마지막 전투 정보가 세션에 있어야 회고할 수 있다 (세션 TTL 24시간이 지나면 회고는 제공하지 않는다)
         GameSession session = gameSessionService.get(gameState.getGameStateId());
@@ -813,7 +815,7 @@ public class GameEngineServiceImpl implements GameEngineService {
                         .formatted(faction.label(), gameState.alignment().describe()));
                 invalidatePrefetchedNode(gameState);
             }
-            default -> throw new IllegalArgumentException("알 수 없는 선택입니다: " + choiceValue);
+            default -> throw new BusinessException(ErrorCode.INVALID_REQUEST, "알 수 없는 선택입니다: " + choiceValue);
         }
 
         gameStateRepository.save(gameState);
@@ -836,7 +838,7 @@ public class GameEngineServiceImpl implements GameEngineService {
     public GameSummaryDTO getSummary(MemberEntity member) {
         GameStateEntity gameState = gameStateRepository
                 .findTopByMember_MemberIdOrderByCreatedAtDesc(member.getMemberId())
-                .orElseThrow(() -> new NoSuchElementException("게임 기록이 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.GAME_RECORD_NOT_FOUND));
         GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
         return buildSummary(gameState, session);
     }
@@ -852,7 +854,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      */
     private GameStateEntity activeGame(MemberEntity member) {
         return gameStateRepository.findByMember_MemberIdAndIsActiveTrue(member.getMemberId())
-                .orElseThrow(() -> new NoSuchElementException("진행 중인 게임이 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.GAME_NOT_FOUND));
     }
 
     /**
@@ -944,7 +946,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      */
     private void requirePhase(GameSession session, String expected, String message) {
         if (!expected.equals(session.getPhase())) {
-            throw new IllegalStateException(message + " (현재 단계: " + session.getPhase() + ")");
+            throw new BusinessException(ErrorCode.INVALID_PHASE, message, session.getPhase());
         }
     }
 
@@ -956,7 +958,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @throws IllegalArgumentException 조건이 거짓이면
      */
     private void require(boolean condition, String message) {
-        if (!condition) throw new IllegalArgumentException(message);
+        if (!condition) throw new BusinessException(ErrorCode.INVALID_REQUEST, message);
     }
 
     /**
@@ -1711,9 +1713,9 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @throws IllegalStateException 이미 가진 유물이면
      */
     private void addRelic(GameStateEntity gameState, Long relicId) {
-        if (gameState.ownsRelic(relicId)) throw new IllegalStateException("이미 보유 중인 유물입니다.");
+        if (gameState.ownsRelic(relicId)) throw new BusinessException(ErrorCode.RELIC_ALREADY_OWNED);
         RelicEntity relic = relicRepository.findById(relicId)
-                .orElseThrow(() -> new NoSuchElementException("유물을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND, "유물을 찾을 수 없습니다."));
         // cascade로도 저장되지만, 같은 응답에 담을 칸 ID를 지금 받기 위해 바로 저장한다
         gameRelicInventoryRepository.save(gameState.addRelic(relic));
     }
@@ -1726,7 +1728,7 @@ public class GameEngineServiceImpl implements GameEngineService {
      */
     private void addConsumable(GameStateEntity gameState, Long consumableId) {
         ConsumableEntity consumable = consumableRepository.findById(consumableId)
-                .orElseThrow(() -> new NoSuchElementException("소모품을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND, "소모품을 찾을 수 없습니다."));
         // 소모품 칸 ID는 화면이 "사용" 요청에 실어 보내므로 응답 전에 받아 둬야 한다
         gameConsumableInventoryRepository.save(gameState.addConsumable(consumable));
     }

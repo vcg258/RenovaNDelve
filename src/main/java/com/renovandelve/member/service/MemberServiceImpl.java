@@ -1,5 +1,7 @@
 package com.renovandelve.member.service;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import org.springframework.dao.DataIntegrityViolationException;
 import com.renovandelve.collection.mapper.CollectionMapper;
 import com.renovandelve.member.domain.MemberEntity;
@@ -31,7 +33,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.NoSuchElementException;
 
 @Slf4j
 @Service
@@ -60,12 +61,12 @@ public class MemberServiceImpl implements MemberService {
     @Transactional
     public void signup(SignupRequest request) {
         memberRepository.findByLoginId(request.loginId()).ifPresent(member -> {
-            throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
+            throw new BusinessException(ErrorCode.LOGIN_ID_TAKEN);
         });
         validateNickname(request.nickname());
         String email = EmailNormalizer.normalize(request.email());
         if (memberRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+            throw new BusinessException(ErrorCode.EMAIL_TAKEN);
         }
 
         MemberEntity member;
@@ -76,7 +77,7 @@ public class MemberServiceImpl implements MemberService {
         } catch (DataIntegrityViolationException e) {
             // 위의 확인과 저장 사이에 같은 아이디·이메일·닉네임으로 동시에 가입한 경우. DB 유니크 제약이 막는다.
             // ID 전략이 IDENTITY라 save 시점에 INSERT가 실행되므로 예외가 여기서 잡힌다
-            throw new IllegalArgumentException("이미 사용 중인 아이디, 이메일 또는 닉네임입니다.");
+            throw new BusinessException(ErrorCode.SIGNUP_CONFLICT);
         }
         log.info("회원가입 완료 memberId={} loginId={}", member.getMemberId(), member.getLoginId());
     }
@@ -142,13 +143,13 @@ public class MemberServiceImpl implements MemberService {
         MemberEntity managed = managed(member);
 
         if (managed.getPasswordHash() == null) {
-            throw new IllegalStateException("소셜 로그인 계정은 비밀번호를 변경할 수 없습니다.");
+            throw new BusinessException(ErrorCode.SOCIAL_PASSWORD_UNSUPPORTED);
         }
         if (!passwordEncoder.matches(request.currentPassword(), managed.getPasswordHash())) {
-            throw new IllegalArgumentException("현재 비밀번호가 일치하지 않습니다.");
+            throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
         }
         if (passwordEncoder.matches(request.newPassword(), managed.getPasswordHash())) {
-            throw new IllegalArgumentException("현재 비밀번호와 다른 비밀번호를 사용해주세요.");
+            throw new BusinessException(ErrorCode.PASSWORD_UNCHANGED);
         }
 
         managed.changePassword(passwordEncoder.encode(request.newPassword()));
@@ -171,7 +172,7 @@ public class MemberServiceImpl implements MemberService {
     public void changeNickname(MemberEntity member, NicknameChangeRequest request) {
         MemberEntity managed = managed(member);
         if (request.nickname().equals(managed.getNickname())) {
-            throw new IllegalArgumentException("현재 닉네임과 동일합니다.");
+            throw new BusinessException(ErrorCode.NICKNAME_UNCHANGED);
         }
         validateNickname(request.nickname());
 
@@ -196,12 +197,12 @@ public class MemberServiceImpl implements MemberService {
         if (managed.getPasswordHash() != null
                 && (request.currentPassword() == null
                     || !passwordEncoder.matches(request.currentPassword(), managed.getPasswordHash()))) {
-            throw new IllegalArgumentException("현재 비밀번호가 일치하지 않습니다.");
+            throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
         }
 
         String email = EmailNormalizer.normalize(request.email());
         if (!email.equals(managed.getEmail()) && memberRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+            throw new BusinessException(ErrorCode.EMAIL_TAKEN);
         }
 
         managed.changeContact(request.name().trim(), email);
@@ -283,7 +284,7 @@ public class MemberServiceImpl implements MemberService {
     /** Lazy 컬렉션 접근을 위해 영속 상태로 재조회 */
     private MemberEntity managed(MemberEntity member) {
         return memberRepository.findById(member.getMemberId())
-                .orElseThrow(() -> new NoSuchElementException("회원을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
     }
 
     /**
@@ -294,10 +295,10 @@ public class MemberServiceImpl implements MemberService {
      */
     private void validateNickname(String nickname) {
         if (isForbidden(nickname)) {
-            throw new IllegalArgumentException("사용할 수 없는 닉네임입니다.");
+            throw new BusinessException(ErrorCode.NICKNAME_NOT_ALLOWED);
         }
         if (memberRepository.existsByNickname(nickname)) {
-            throw new IllegalArgumentException("이미 사용 중인 닉네임입니다.");
+            throw new BusinessException(ErrorCode.NICKNAME_TAKEN);
         }
     }
 

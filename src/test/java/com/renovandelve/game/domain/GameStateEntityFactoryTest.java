@@ -1,5 +1,6 @@
 package com.renovandelve.game.domain;
 
+import com.renovandelve.global.exception.BusinessException;
 import com.renovandelve.catalog.domain.armorentity.ArmorEntity;
 import com.renovandelve.catalog.domain.helmetentity.HelmetEntity;
 import com.renovandelve.catalog.domain.relicentity.RelicEntity;
@@ -91,7 +92,7 @@ class GameStateEntityFactoryTest {
         GameStateEntity weak = GameStateEntity.builder().gold(500).heavenAffinity(0)
                 .contract(DemonContract.of(DemonContract.Boon.GOLD, DemonContract.Clause.BLOOD_TITHE).serialize()).build();
         assertThat(weak.canBreakContract()).isFalse();
-        assertThatThrownBy(weak::breakContract).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(weak::breakContract).isInstanceOf(BusinessException.class);
 
         GameStateEntity devout = GameStateEntity.builder().gold(500).heavenAffinity(DemonContract.BREAK_HEAVEN_AFFINITY)
                 .contract(DemonContract.of(DemonContract.Boon.GOLD, DemonContract.Clause.BLOOD_TITHE).serialize()).build();
