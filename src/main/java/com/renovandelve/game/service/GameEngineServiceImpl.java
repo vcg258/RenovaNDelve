@@ -1,5 +1,7 @@
 package com.renovandelve.game.service;
 
+import java.util.Optional;
+import com.renovandelve.ai.service.AiCallRunner;
 import com.renovandelve.catalog.mapper.CatalogMapper;
 import com.renovandelve.catalog.service.MonsterService;
 
@@ -77,11 +79,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -113,6 +110,7 @@ public class GameEngineServiceImpl implements GameEngineService {
     private final WraithVoiceService wraithVoiceService;
     private final AsyncPrefetchService asyncPrefetchService;
     private final ChronicleService chronicleService;
+    private final AiCallRunner aiCallRunner;
 
     private final Random random = new Random();
 
@@ -146,10 +144,14 @@ public class GameEngineServiceImpl implements GameEngineService {
     /** 망령 기록에 옮겨 둘 선택 줄 수 */
     private static final int WRAITH_MEMORY_LINES = 3;
     private static final String CHOICE_PREFIX = "[플레이어의 선택]";
+    /**
+     * 스킬을 버릴 수 있는 단계. 전투(쿨타임 회피)와 조우(선택 미루기)는 빠진다.
+     * 허용하는 쪽을 적어 두어, 새 단계가 생기면 기본이 "거부"가 되게 한다.
+     */
+    static final Set<String> SKILL_DISCARD_PHASES = Set.of(
+            GameSession.PHASE_EXPLORE, GameSession.PHASE_REWARD, GameSession.PHASE_SHOP, GameSession.PHASE_REST);
     /** 연대기 장에 넘길 선택 줄 수 */
     private static final int CHRONICLE_CHOICE_LINES = 6;
-    /** LLM 호출은 대기 시간이 대부분인 블로킹 IO -> 가상 스레드 */
-    private final ExecutorService aiExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     /* ==================== 조회 ==================== */
 
@@ -415,9 +417,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         List<String> log = new ArrayList<>();
         log.add("숨을 고르며 다음 기회를 노린다. (모든 스킬 쿨타임 -%d)".formatted(PASS_COOLDOWN_TICKS));
 
-        for (int i = 0; i < PASS_COOLDOWN_TICKS; i++) {
-            battleService.updateCoolTimes(slots, null, effects.getCooldownReduction());
-        }
+        battleService.tickCooldowns(slots, PASS_COOLDOWN_TICKS);
         battleService.applyDotDamage(session.getMonsters(), log);
 
         if (battleService.isAllMonsterDead(session.getMonsters())) {
@@ -446,9 +446,10 @@ public class GameEngineServiceImpl implements GameEngineService {
         List<String> log = new ArrayList<>();
         log.add("등을 돌려 달아난다!");
 
-        TurnResultDTO parting = processMonsterCounterattack(gameState, session, character, effects, 1.0, log);
-        if ("LOSE".equals(parting.result())) {
-            return parting; // 달아나다 쓰러졌다
+        // 등을 보인 순간의 공격만 받는다. 곧 전투가 끝나므로 다음 턴 예고는 굴리지 않고, 세션은 아래에서 한 번만 저장한다
+        TurnResultDTO fallen = receiveMonsterAttack(gameState, session, character, effects, 1.0, log);
+        if (fallen != null) {
+            return fallen; // 달아나다 쓰러졌다
         }
 
         log.add("적을 따돌렸다. 전리품은 없다.");
@@ -484,7 +485,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         GameStateEntity gameState = activeGame(member);
         GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
         String phase = session.getPhase();
-        if (GameSession.PHASE_BATTLE.equals(phase) || GameSession.PHASE_ENCOUNTER.equals(phase)) {
+        if (!SKILL_DISCARD_PHASES.contains(phase)) {
             throw new IllegalStateException("지금은 스킬을 버릴 수 없습니다. (현재 단계: " + phase + ")");
         }
         skillSlotService.discard(gameState, request.slotId());
@@ -1091,25 +1092,20 @@ public class GameEngineServiceImpl implements GameEngineService {
      * AI(RAG) 노드 생성. 실패 시 서버 자체 폴백으로 게임 진행을 보장한다.
      */
     private AsyncStageResponseDTO generateNodeContent(int stage, int node, String conversationId) {
-        Future<AsyncStageResponseDTO> pending = aiExecutor.submit(
-                () -> monsterRagService.chat(stage, node, conversationId));
-        try {
-            return pending.get(aiNodeBudgetSeconds, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            pending.cancel(true); // 시간 초과면 진행 중인 LLM 호출을 끊는다
-            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            log.warn("AI 노드 생성 실패, 폴백 사용. stage={} node={} 원인={}", stage, node,
-                    e instanceof TimeoutException ? aiNodeBudgetSeconds + "초 초과" : e.getMessage());
-            boolean isBoss = node % NODES_PER_STAGE == 0;
-            if (isBoss || random.nextDouble() > 0.3) {
-                List<MonsterDTO> monsters = isBoss
-                        ? monsterService.getRandomMonsterBoss()
-                        : monsterService.getRandomMonsterNormal();
-                return AsyncStageResponseDTO.battle(fallbackStory(stage, true), monsters);
-            }
-            return AsyncStageResponseDTO.encounter(fallbackStory(stage, false),
-                    new Encounter("머리 위에서는 희미한 종소리가, 발밑에서는 낮은 속삭임이 들려온다.", List.of()));
+        Optional<AsyncStageResponseDTO> generated = aiCallRunner.call(
+                () -> monsterRagService.chat(stage, node, conversationId), aiNodeBudgetSeconds,
+                "노드 생성 stage=%d node=%d".formatted(stage, node));
+        if (generated.isPresent()) return generated.get();
+
+        boolean isBoss = node % NODES_PER_STAGE == 0;
+        if (isBoss || random.nextDouble() > 0.3) {
+            List<MonsterDTO> monsters = isBoss
+                    ? monsterService.getRandomMonsterBoss()
+                    : monsterService.getRandomMonsterNormal();
+            return AsyncStageResponseDTO.battle(fallbackStory(stage, true), monsters);
         }
+        return AsyncStageResponseDTO.encounter(fallbackStory(stage, false),
+                new Encounter("머리 위에서는 희미한 종소리가, 발밑에서는 낮은 속삭임이 들려온다.", List.of()));
     }
 
     /**
@@ -1267,6 +1263,25 @@ public class GameEngineServiceImpl implements GameEngineService {
     private TurnResultDTO processMonsterCounterattack(GameStateEntity gameState, GameSession session,
                                                       GameCharacterEntity character, RelicEffects effects,
                                                       double incomingMultiplier, List<String> log) {
+        TurnResultDTO fallen = receiveMonsterAttack(gameState, session, character, effects, incomingMultiplier, log);
+        if (fallen != null) return fallen;
+
+        // 다음 턴 행동 예고 (플레이어는 이것을 보고 공격/방어/대상을 정한다)
+        battleService.rollIntents(session.getMonsters());
+        gameSessionService.save(session);
+        return new TurnResultDTO("CONTINUE", log, toBattleMonsterDTOs(session.getMonsters()),
+                statusAssembler.toStatusDTO(gameState), null, false, session.getPhase());
+    }
+
+    /**
+     * 적의 공격을 받는다. 쓰러지면 부활을 시도하고, 그래도 쓰러지면 패배로 원정을 끝낸다.
+     *
+     * @param incomingMultiplier 플레이어가 받는 피해 배율 (방어 태세면 1.0 미만)
+     * @return 패배했으면 그 결과(세션 저장까지 끝남), 살아 있으면 null
+     */
+    private TurnResultDTO receiveMonsterAttack(GameStateEntity gameState, GameSession session,
+                                               GameCharacterEntity character, RelicEffects effects,
+                                               double incomingMultiplier, List<String> log) {
         // 이번 턴 플레이어의 공격으로 보스 HP가 절반 아래로 떨어졌다면 격노
         battleService.applyEnrage(session.getMonsters(), log);
 
@@ -1278,26 +1293,15 @@ public class GameEngineServiceImpl implements GameEngineService {
         stats(session).recordTurn();
         stats(session).recordDamageTaken(damage);
 
-        // 다음 턴 행동 예고 (플레이어는 이것을 보고 공격/방어/대상을 정한다)
-        battleService.rollIntents(session.getMonsters());
-
-        if (character.getCurrentHp() <= 0) {
-            if (tryRevive(gameState, character, log)) {
-                gameSessionService.save(session);
-                return new TurnResultDTO("CONTINUE", log, toBattleMonsterDTOs(session.getMonsters()),
-                        statusAssembler.toStatusDTO(gameState), null, false, session.getPhase());
-            }
-            // 패배 처리
-            stats(session).recordBattleEnd(session.getMonsters(), false);
-            terminate(gameState, session, false);
-            log.add("당신은 쓰러졌다... 모험이 여기서 끝났다.");
-            gameSessionService.save(session);
-            return new TurnResultDTO("LOSE", log, toBattleMonsterDTOs(session.getMonsters()),
-                    statusAssembler.toStatusDTO(gameState), null, false, session.getPhase());
+        if (character.getCurrentHp() > 0 || tryRevive(gameState, character, log)) {
+            return null;
         }
-
+        // 패배 처리
+        stats(session).recordBattleEnd(session.getMonsters(), false);
+        terminate(gameState, session, false);
+        log.add("당신은 쓰러졌다... 모험이 여기서 끝났다.");
         gameSessionService.save(session);
-        return new TurnResultDTO("CONTINUE", log, toBattleMonsterDTOs(session.getMonsters()),
+        return new TurnResultDTO("LOSE", log, toBattleMonsterDTOs(session.getMonsters()),
                 statusAssembler.toStatusDTO(gameState), null, false, session.getPhase());
     }
 
@@ -1971,15 +1975,9 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @return 장면
      */
     private String wraithAppearance(WraithEntity wraith) {
-        Future<String> pending = aiExecutor.submit(() -> wraithVoiceService.appearance(wraith));
-        try {
-            String text = pending.get(WRAITH_VOICE_BUDGET_SECONDS, TimeUnit.SECONDS);
-            if (text != null && !text.isBlank()) return text;
-        } catch (Exception e) {
-            pending.cancel(true);
-            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            log.warn("망령 장면 생성 시간 초과 또는 실패: {}", e.getMessage());
-        }
+        Optional<String> text = aiCallRunner.call(() -> wraithVoiceService.appearance(wraith),
+                WRAITH_VOICE_BUDGET_SECONDS, "망령 장면");
+        if (text.isPresent() && !text.get().isBlank()) return text.get();
         return "안개 속에서 낯익은 걸음걸이가 다가온다. 지난 원정에서 이곳에 쓰러진 당신이다.";
     }
 

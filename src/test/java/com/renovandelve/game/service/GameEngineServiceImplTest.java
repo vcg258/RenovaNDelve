@@ -1,5 +1,6 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.ai.service.AiCallRunner;
 import org.mockito.Spy;
 import com.renovandelve.catalog.mapper.CatalogMapperImpl;
 import com.renovandelve.catalog.mapper.CatalogMapper;
@@ -101,6 +102,7 @@ class GameEngineServiceImplTest {
     @Mock private GameSessionService gameSessionService;
     @Mock private StatusAssembler statusAssembler;
     @Spy private CatalogMapper catalogMapper = new CatalogMapperImpl();
+    @Spy private AiCallRunner aiCallRunner = new AiCallRunner();
     @Mock private RunReviewService runReviewService;
     @Mock private ChatMemory chatMemory;
     @Mock private StageCacheService stageCacheService;
@@ -599,8 +601,8 @@ class GameEngineServiceImplTest {
 
         assertThat(result.result()).isEqualTo("CONTINUE");
         assertThat(gameState.getGameCharacter().get(0).getCurrentHp()).isEqualTo(43);
-        // 쿨타임 진행을 두 번 맡긴다 (방어 태세는 한 번)
-        verify(battleService, times(2)).updateCoolTimes(any(), any(), anyInt());
+        // 쿨타임을 두 턴 진행시킨다 (방어 태세는 한 턴)
+        verify(battleService).tickCooldowns(any(), eq(2));
         verify(battleService).monsterAttackDamage(any(), anyInt(), anyInt(), eq(1.0), any());
     }
 
