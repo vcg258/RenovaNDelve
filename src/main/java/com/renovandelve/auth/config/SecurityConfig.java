@@ -80,6 +80,8 @@ public class SecurityConfig {
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         // 관리자 전용 (ETL, 회원 관리, 통계)
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // /api 밖은 함께 배포한 프론트 화면과 정적 파일 (화면은 공개, 데이터는 /api가 지킨다)
+                        .requestMatchers(request -> !request.getRequestURI().startsWith("/api/")).permitAll()
                         // 나머지는 로그인 필요
                         .anyRequest().authenticated())
                 .oauth2Login(oauth2 ->

@@ -39,11 +39,8 @@ public class TokenCheckFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String path = request.getRequestURI();
 
-        if (path.startsWith("/api/auth/")
-                || path.startsWith("/swagger-ui")
-                || path.startsWith("/v3/api-docs")
-                || path.startsWith("/oauth2")
-                || path.startsWith("/login/oauth2")) {
+        // 토큰을 보는 곳은 /api 아래뿐이다. 그 밖(Swagger, OAuth2, 함께 배포한 프론트 화면과 정적 파일)은 그냥 넘긴다
+        if (!path.startsWith("/api/") || path.startsWith("/api/auth/")) {
             filterChain.doFilter(request, response);
             return;
         }
