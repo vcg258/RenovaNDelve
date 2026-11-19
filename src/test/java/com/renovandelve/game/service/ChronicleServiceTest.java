@@ -1,5 +1,9 @@
 package com.renovandelve.game.service;
 
+import org.mockito.Spy;
+import com.renovandelve.catalog.mapper.CatalogMapperImpl;
+import com.renovandelve.game.mapper.GameMapperImpl;
+import com.renovandelve.game.mapper.GameMapper;
 import com.renovandelve.ai.dto.response.RunReviewDTO;
 import com.renovandelve.ai.service.RunReviewService;
 import com.renovandelve.game.domain.ChronicleChapterEntity;
@@ -36,6 +40,7 @@ import static org.mockito.Mockito.when;
 class ChronicleServiceTest {
 
     @Mock private ChronicleChapterRepository repository;
+    @Spy private GameMapper gameMapper = new GameMapperImpl(new CatalogMapperImpl());
     @InjectMocks private ChronicleService chronicleService;
 
     private GameStateEntity game;

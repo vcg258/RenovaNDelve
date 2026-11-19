@@ -1,6 +1,6 @@
 package com.renovandelve.catalog.service;
 
-import com.renovandelve.global.config.RecordMapper;
+import com.renovandelve.catalog.mapper.CatalogMapper;
 import com.renovandelve.catalog.domain.MonsterEntity;
 import com.renovandelve.catalog.dto.MonsterDTO;
 import com.renovandelve.catalog.repository.MonsterRepository;
@@ -17,6 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MonsterServiceImpl implements MonsterService{
     private final MonsterRepository monsterRepository;
+    private final CatalogMapper catalogMapper;
 
     /**
      * 몬스터 이름으로 일반 몬스터 조회(LLM이 스토리와 테마에 알맞은 몬스터를 출현시키기 떄문)
@@ -26,7 +27,7 @@ public class MonsterServiceImpl implements MonsterService{
     @Override
     public List<MonsterDTO> getMonsterByNameNormal(List<String> name) {
         List<MonsterEntity> monsterList = monsterRepository.findByNameNormal(name);
-        return monsterList.stream().map(monsterEntity -> RecordMapper.map(monsterEntity, MonsterDTO.class)).toList();
+        return catalogMapper.toMonsterDTOs(monsterList);
     }
 
     /**
@@ -37,7 +38,7 @@ public class MonsterServiceImpl implements MonsterService{
     @Override
     public List<MonsterDTO> getMonsterByNameBoss(List<String> name) {
         List<MonsterEntity> monsterList = monsterRepository.findByNameBoss(name);
-        return monsterList.stream().map(monsterEntity -> RecordMapper.map(monsterEntity, MonsterDTO.class)).toList();
+        return catalogMapper.toMonsterDTOs(monsterList);
     }
 
     /**
@@ -49,7 +50,7 @@ public class MonsterServiceImpl implements MonsterService{
         int count = (int) ((Math.random() * 3) + 1);
         Pageable pageable = PageRequest.of(0, count);
         List<MonsterEntity> randomMonster = monsterRepository.findRandomMonsterNormal(pageable);
-        return randomMonster.stream().map(monsterEntity -> RecordMapper.map(monsterEntity, MonsterDTO.class)).toList();
+        return catalogMapper.toMonsterDTOs(randomMonster);
     }
 
     /**
@@ -60,6 +61,6 @@ public class MonsterServiceImpl implements MonsterService{
     public List<MonsterDTO> getRandomMonsterBoss() {
         Pageable pageable = PageRequest.of(0, 1);
         List<MonsterEntity> randomMonster = monsterRepository.findRandomMonsterBoss(pageable);
-        return randomMonster.stream().map(monsterEntity -> RecordMapper.map(monsterEntity, MonsterDTO.class)).toList();
+        return catalogMapper.toMonsterDTOs(randomMonster);
     }
 }

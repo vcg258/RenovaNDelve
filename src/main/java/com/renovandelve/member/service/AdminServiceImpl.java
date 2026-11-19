@@ -1,5 +1,6 @@
 package com.renovandelve.member.service;
 
+import com.renovandelve.ranking.mapper.RankingMapper;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.ranking.domain.RankingEntity;
 import com.renovandelve.game.domain.gamestateentity.Difficulty;
@@ -40,6 +41,7 @@ public class AdminServiceImpl implements AdminService {
     private final GameSessionService gameSessionService;
     private final SecurityTokenService securityTokenService;
     private final TokenRevocationService tokenRevocationService;
+    private final RankingMapper rankingMapper;
 
     /**
      * 회원 목록을 최근 가입 순으로 검색한다. 페이지 크기는 1~100으로 제한한다.
@@ -205,8 +207,7 @@ public class AdminServiceImpl implements AdminService {
         List<RankingViewDTO> topRankings = new ArrayList<>();
         int rank = 1;
         for (RankingEntity entity : rankingRepository.findTop10ByDifficultyOrderByBestScoreDesc(Difficulty.NORMAL)) {
-            topRankings.add(new RankingViewDTO(rank++, entity.getMember().displayName(), entity.getDifficulty(),
-                    entity.getBestScore(), entity.getClearTime(), entity.getAchievedAt()));
+            topRankings.add(rankingMapper.toViewDTO(entity, rank++));
         }
 
         return new AdminStatsDTO(total, active, suspended, withdrawn, recent,

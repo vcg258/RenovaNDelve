@@ -1,5 +1,8 @@
 package com.renovandelve.game.service;
 
+import org.mockito.Spy;
+import com.renovandelve.catalog.mapper.CatalogMapperImpl;
+import com.renovandelve.catalog.mapper.CatalogMapper;
 import com.renovandelve.catalog.service.MonsterService;
 
 import static org.mockito.Mockito.times;
@@ -97,6 +100,7 @@ class GameEngineServiceImplTest {
     @Mock private ShopService shopService;
     @Mock private GameSessionService gameSessionService;
     @Mock private StatusAssembler statusAssembler;
+    @Spy private CatalogMapper catalogMapper = new CatalogMapperImpl();
     @Mock private RunReviewService runReviewService;
     @Mock private ChatMemory chatMemory;
     @Mock private StageCacheService stageCacheService;

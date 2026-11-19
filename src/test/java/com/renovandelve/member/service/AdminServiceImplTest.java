@@ -1,5 +1,11 @@
 package com.renovandelve.member.service;
 
+import org.mockito.Spy;
+import com.renovandelve.catalog.mapper.CatalogMapperImpl;
+import com.renovandelve.game.mapper.GameMapperImpl;
+import com.renovandelve.member.mapper.MemberMapperImpl;
+import com.renovandelve.ranking.mapper.RankingMapperImpl;
+import com.renovandelve.ranking.mapper.RankingMapper;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.member.domain.memberentity.MemberStatus;
 import com.renovandelve.member.domain.memberentity.Role;
@@ -43,6 +49,8 @@ class AdminServiceImplTest {
     @Mock private GameSessionService gameSessionService;
     @Mock private SecurityTokenService securityTokenService;
     @Mock private TokenRevocationService tokenRevocationService;
+    @Spy private RankingMapper rankingMapper =
+            new RankingMapperImpl(new MemberMapperImpl(), new GameMapperImpl(new CatalogMapperImpl()));
     @InjectMocks private AdminServiceImpl adminService;
 
     private MemberEntity member(long id, Role role) {

@@ -1,6 +1,5 @@
 package com.renovandelve.game.dto;
 
-import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.catalog.domain.skillentity.Target;
 
 import java.math.BigDecimal;
@@ -20,15 +19,4 @@ public record SkillInfoDTO(
         int effectStack,
         String description
 ) {
-    /**
-     * 스킬 엔티티를 화면용 정보로 옮긴다.
-     *
-     * @param s 스킬
-     * @return 스킬 정보
-     */
-    public static SkillInfoDTO from(SkillEntity s) {
-        return new SkillInfoDTO(s.getSkillId(), s.getName(), s.getTarget(), s.getAttackCount(),
-                s.getCoefficient(), s.getCost(), s.getCooldown(), s.getStatusEffect(),
-                s.getEffectStack(), s.getDescription());
-    }
 }

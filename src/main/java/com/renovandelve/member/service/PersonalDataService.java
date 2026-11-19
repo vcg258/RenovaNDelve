@@ -1,5 +1,6 @@
 package com.renovandelve.member.service;
 
+import com.renovandelve.game.mapper.GameMapper;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.ranking.domain.RankingEntity;
 import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
@@ -8,7 +9,6 @@ import com.renovandelve.game.repository.GameStateRepository;
 import com.renovandelve.game.domain.WraithEntity;
 import com.renovandelve.game.repository.WraithRepository;
 import com.renovandelve.game.repository.ChronicleChapterRepository;
-import com.renovandelve.game.dto.response.ChronicleChapterDTO;
 import com.renovandelve.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +48,7 @@ public class PersonalDataService {
     private final JdbcTemplate jdbcTemplate;
     private final WraithRepository wraithRepository;
     private final ChronicleChapterRepository chronicleChapterRepository;
+    private final GameMapper gameMapper;
 
     @Value("${renovaNDelve.privacy.chat-retention-days:30}")
     private int chatRetentionDays;
@@ -155,7 +156,7 @@ public class PersonalDataService {
                 .map(this::toWraithMap)
                 .toList());
         result.put("chronicle", chronicleChapterRepository.findByMemberIdOrderByChapterNoAsc(managed.getMemberId()).stream()
-                .map(ChronicleChapterDTO::from)
+                .map(gameMapper::toChronicleChapterDTO)
                 .toList());
         result.put("notice", "AI 대화 기록은 마지막 이용 후 %d일 뒤 자동 삭제되며, 내 정보 화면에서 즉시 삭제할 수 있습니다."
                 .formatted(chatRetentionDays));

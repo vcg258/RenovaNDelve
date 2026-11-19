@@ -41,11 +41,16 @@ dependencies {
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'org.postgresql:postgresql'
     annotationProcessor 'org.projectlombok:lombok'
+    // 엔티티 -> DTO 변환 (컴파일 시점에 변환 코드를 만든다. Lombok 다음에 돌도록 binding을 함께 둔다)
+    implementation 'org.mapstruct:mapstruct:1.6.3'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
+    annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'io.projectreactor:reactor-test'
     testCompileOnly 'org.projectlombok:lombok'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testAnnotationProcessor 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
     // 테스트용 가짜 SMTP 서버 (메일이 실제 SMTP 프로토콜로 나가는지 확인)
     testImplementation 'com.icegreen:greenmail-junit5:2.1.2'
     implementation 'org.springframework.ai:spring-ai-rag'

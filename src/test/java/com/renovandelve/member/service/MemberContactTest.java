@@ -1,5 +1,6 @@
 package com.renovandelve.member.service;
 
+import com.renovandelve.collection.mapper.CollectionMapper;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.member.dto.request.ContactChangeRequest;
 import com.renovandelve.member.dto.request.SignupRequest;
@@ -43,7 +44,8 @@ class MemberContactTest {
         memberRepository = mock(MemberRepository.class);
         memberService = new MemberServiceImpl(memberRepository, mock(RankingRepository.class),
                 mock(GameStateRepository.class), mock(GameSessionService.class), mock(SecurityTokenService.class),
-                mock(TokenRevocationService.class), passwordEncoder, mock(PersonalDataService.class));
+                mock(TokenRevocationService.class), passwordEncoder, mock(PersonalDataService.class),
+                mock(CollectionMapper.class));
         when(memberRepository.save(any(MemberEntity.class))).thenAnswer(call -> call.getArgument(0));
     }
 

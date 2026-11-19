@@ -1,6 +1,5 @@
 package com.renovandelve.game.dto.response;
 
-import com.renovandelve.game.domain.ChronicleChapterEntity;
 
 import java.time.LocalDateTime;
 
@@ -19,16 +18,4 @@ import java.time.LocalDateTime;
  */
 public record ChronicleChapterDTO(int chapterNo, String title, String body, boolean cleared, int stage, int node,
                                   String faction, String difficulty, LocalDateTime createdAt) {
-
-    /**
-     * 엔티티를 화면용으로 옮긴다.
-     *
-     * @param chapter 장
-     * @return DTO
-     */
-    public static ChronicleChapterDTO from(ChronicleChapterEntity chapter) {
-        return new ChronicleChapterDTO(chapter.getChapterNo(), chapter.getTitle(), chapter.getBody(), chapter.isCleared(),
-                chapter.getStage(), chapter.getNode(), chapter.getFaction(), chapter.getDifficulty(),
-                chapter.getCreatedAt());
-    }
 }

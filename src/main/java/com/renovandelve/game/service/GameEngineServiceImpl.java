@@ -1,8 +1,8 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.catalog.mapper.CatalogMapper;
 import com.renovandelve.catalog.service.MonsterService;
 
-import com.renovandelve.global.config.RecordMapper;
 import com.renovandelve.game.domain.GameCharacterEntity;
 import com.renovandelve.game.domain.GameConsumableInventoryEntity;
 import com.renovandelve.game.domain.GameEquipmentEntity;
@@ -104,6 +104,7 @@ public class GameEngineServiceImpl implements GameEngineService {
     private final ShopService shopService;
     private final GameSessionService gameSessionService;
     private final StatusAssembler statusAssembler;
+    private final CatalogMapper catalogMapper;
     private final RunReviewService runReviewService;
     private final ChatMemory chatMemory;
     private final StageCacheService stageCacheService;
@@ -2097,12 +2098,9 @@ public class GameEngineServiceImpl implements GameEngineService {
      */
     private RewardViewDTO toRewardView(RewardOptions options) {
         if (options == null) return null;
-        List<SkillInfoDTO> skills = skillRepository.findAllById(options.getSkillIds()).stream()
-                .map(SkillInfoDTO::from).toList();
-        List<RelicDTO> relics = relicRepository.findAllById(options.getRelicIds()).stream()
-                .map(r -> RecordMapper.map(r, RelicDTO.class)).toList();
-        List<ConsumableDTO> consumables = consumableRepository.findAllById(options.getConsumableIds()).stream()
-                .map(c -> RecordMapper.map(c, ConsumableDTO.class)).toList();
+        List<SkillInfoDTO> skills = catalogMapper.toSkillInfoDTOs(skillRepository.findAllById(options.getSkillIds()));
+        List<RelicDTO> relics = catalogMapper.toRelicDTOs(relicRepository.findAllById(options.getRelicIds()));
+        List<ConsumableDTO> consumables = catalogMapper.toConsumableDTOs(consumableRepository.findAllById(options.getConsumableIds()));
         return new RewardViewDTO(options.getExp(), options.getGold(), skills, relics, consumables);
     }
 
