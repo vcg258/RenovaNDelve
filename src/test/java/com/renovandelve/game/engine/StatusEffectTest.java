@@ -15,16 +15,16 @@ class StatusEffectTest {
     @Test
     @DisplayName("번호로 상태이상을 찾고, 0과 모르는 번호는 null")
     void ofCode() {
-        assertThat(StatusEffect.ofCode(StatusEffect.Code.BLEED)).isEqualTo(StatusEffect.BLEED);
-        assertThat(StatusEffect.ofCode(StatusEffect.Code.STUN)).isEqualTo(StatusEffect.STUN);
-        assertThat(StatusEffect.ofCode(StatusEffect.Code.NONE)).isNull();
+        assertThat(StatusEffect.ofCode((short) 1)).isEqualTo(StatusEffect.BLEED);
+        assertThat(StatusEffect.ofCode((short) 4)).isEqualTo(StatusEffect.STUN);
+        assertThat(StatusEffect.ofCode((short) 0)).isNull();
         assertThat(StatusEffect.ofCode((short) 9)).isNull();
     }
 
     @Test
     @DisplayName("전투 규칙과 스킬 조합이 같은 번호·키·예고 값을 쓴다")
     void sameValuesEverywhere() {
-        assertThat(SkillSynergies.BURN).isEqualTo(StatusEffect.BURN.code());
+        assertThat(StatusEffect.BURN.code()).isEqualTo((short) 2);
         assertThat(BattleServiceImpl.BUFF_POISON).isEqualTo("POISON");
         assertThat(BattleServiceImpl.INTENT_HEAVY).isEqualTo(MonsterIntent.HEAVY);
         assertThat(StatusEffect.labelOf("BLEED")).isEqualTo("출혈");

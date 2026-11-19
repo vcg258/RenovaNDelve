@@ -146,7 +146,7 @@ public class BattleServiceImpl implements BattleService {
      */
     @Override
     public void applyStatusEffect(SkillEntity skill, int extraStacks, List<SessionMonster> targets, List<String> log) {
-        if (skill.getStatusEffect() == 0) return;
+        if (StatusEffect.ofCode(skill.getStatusEffect()) == null) return;
 
         String buffName = resolveBuffName(skill.getStatusEffect());
         int stack = Math.max(1, skill.getEffectStack()) + Math.max(0, extraStacks);

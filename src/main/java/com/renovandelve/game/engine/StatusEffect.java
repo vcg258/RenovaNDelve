@@ -2,31 +2,20 @@ package com.renovandelve.game.engine;
 
 /**
  * 스킬이 거는 상태이상. 스킬 테이블의 {@code status_effect} 번호와 세션 몬스터의 버프 키를 한곳에서 정한다.
- * 버프 키는 enum 이름과 같다({@code "BLEED"} 등). 피해 수치와 설명은 규칙이 있는 {@code BattleServiceImpl}이 갖는다.
+ * 버프 키는 enum 이름과 같다({@code "BLEED"} 등). 상태이상이 없는 스킬은 번호 0이고 enum 값이 없다.
+ * 번호로 분기할 때는 {@link #ofCode(short)}로 enum을 얻어 enum으로 switch한다. 피해 수치와 설명은 규칙이 있는 {@code BattleServiceImpl}이 갖는다.
  */
 public enum StatusEffect {
-    BLEED(Code.BLEED, "출혈"),
-    BURN(Code.BURN, "화상"),
-    POISON(Code.POISON, "독"),
-    STUN(Code.STUN, "기절");
-
-    /** 스킬 테이블의 상태이상 번호. switch의 case에 쓸 수 있도록 상수로 둔다 */
-    public static final class Code {
-        public static final short NONE = 0;
-        public static final short BLEED = 1;
-        public static final short BURN = 2;
-        public static final short POISON = 3;
-        public static final short STUN = 4;
-
-        private Code() {
-        }
-    }
+    BLEED(1, "출혈"),
+    BURN(2, "화상"),
+    POISON(3, "독"),
+    STUN(4, "기절");
 
     private final short code;
     private final String label;
 
-    StatusEffect(short code, String label) {
-        this.code = code;
+    StatusEffect(int code, String label) {
+        this.code = (short) code;
         this.label = label;
     }
 
