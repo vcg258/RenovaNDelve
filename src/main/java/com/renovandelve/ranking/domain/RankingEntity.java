@@ -14,8 +14,8 @@ import java.time.LocalDateTime;
 @Entity
 @Builder
 @ToString
-@NoArgsConstructor
-@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "ranking",
         uniqueConstraints = @UniqueConstraint(columnNames = {"member_id", "difficulty"}), // TODO 같은 회원 동일 난이도 중복 삽입 방지로 넣음 의논 필요
         indexes = {
@@ -39,7 +39,7 @@ public class RankingEntity {
     @PositiveOrZero
     private Integer clearTime; // 클리어 시간 (초 단위) 클리어 실패 NULL
 
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false)
     private LocalDateTime achievedAt; // 기록 달성 일시
 
     // 생명주기 도메인 메서드 (INSERT 직전에 값을 기록하고 넣어주는 역할)
@@ -49,6 +49,39 @@ public class RankingEntity {
     @PrePersist
     private void onCreate() {
         this.achievedAt = LocalDateTime.now();
+    }
+
+    /**
+     * 끝난 원정으로 이 난이도의 첫 기록을 만든다.
+     *
+     * @param gameState 끝난 게임 (회원·난이도·점수를 여기서 읽는다)
+     * @param clearTime 클리어까지 걸린 초, 클리어하지 못했으면 null
+     * @return 새 기록
+     */
+    public static RankingEntity first(GameStateEntity gameState, Integer clearTime) {
+        return RankingEntity.builder()
+                .member(gameState.getMember())
+                .difficulty(gameState.getDifficulty())
+                .bestScore(gameState.getScore())
+                .clearTime(clearTime)
+                .gameState(gameState)
+                .build();
+    }
+
+    /**
+     * 기존 기록보다 높을 때만 이 원정으로 바꾼다. 달성 일시도 새 기록의 시각으로 바꾼다.
+     *
+     * @param gameState 끝난 게임
+     * @param clearTime 클리어까지 걸린 초, 클리어하지 못했으면 null
+     * @return 바꿨으면 true
+     */
+    public boolean renewIfBetter(GameStateEntity gameState, Integer clearTime) {
+        if (gameState.getScore() <= this.bestScore) return false;
+        this.bestScore = gameState.getScore();
+        this.clearTime = clearTime;
+        this.gameState = gameState;
+        this.achievedAt = LocalDateTime.now();
+        return true;
     }
 
     /* FK (자식) */

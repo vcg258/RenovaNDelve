@@ -13,8 +13,8 @@ import java.time.LocalDateTime;
 @Entity
 @Builder
 @ToString
-@NoArgsConstructor
-@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "collection_consumable",
         uniqueConstraints = @UniqueConstraint(columnNames = {"member_id", "consumable_id"}))
 public class CollectionConsumableEntity {
@@ -29,6 +29,17 @@ public class CollectionConsumableEntity {
     /**
      * 처음 저장될 때 획득 일시를 기록한다 (JPA 생명주기 콜백).
      */
+    /**
+     * 회원 도감에 소모품를 처음 등록한다.
+     *
+     * @param member 회원
+     * @param consumable 손에 넣은 소모품
+     * @return 새 도감 항목
+     */
+    public static CollectionConsumableEntity of(MemberEntity member, ConsumableEntity consumable) {
+        return CollectionConsumableEntity.builder().member(member).consumable(consumable).build();
+    }
+
     @PrePersist
     private void onCreate() {
         this.acquiredAt = LocalDateTime.now();

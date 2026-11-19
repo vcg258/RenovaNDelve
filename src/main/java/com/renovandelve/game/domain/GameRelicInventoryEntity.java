@@ -11,7 +11,7 @@ import lombok.*;
 @Builder
 @ToString
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "game_relic_inventory", indexes = {
         @Index(name = "idx_game_relic_inventory_game_state_game_state_id", columnList = "game_state_id"),
         @Index(name = "idx_game_relic_inventory_relic_relic_id", columnList = "relic_id")

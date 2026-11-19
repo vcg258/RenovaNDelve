@@ -1,5 +1,7 @@
 package com.renovandelve.game.domain;
 
+import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
+import com.renovandelve.game.engine.Faction;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -98,6 +100,36 @@ public class WraithEntity {
         this.status = Status.ACTIVE;
     }
 
+    /**
+     * 원정이 쓰러진 자리에 망령을 남긴다. 회원·원정·스테이지·세력은 원정에서 읽고,
+     * 나타날 노드는 쓰러진 노드에서 정한다({@link #appearNode(int)}).
+     *
+     * @param gameState  쓰러진 원정
+     * @param killerName 쓰러뜨린 몬스터
+     * @param level      쓰러질 때의 레벨
+     * @param skills     망령이 쓸 기술 이름
+     * @param relicIds   망령을 쓰러뜨리면 돌아올 유물 ID
+     * @param memories   선택 기록 문장
+     * @return 나타날 차례를 기다리는(ACTIVE) 망령
+     */
+    public static WraithEntity fromDeath(GameStateEntity gameState, String killerName, int level,
+                                         List<String> skills, List<Long> relicIds, List<String> memories) {
+        int deathNode = gameState.getCurrentNodeId() == null ? 1 : gameState.getCurrentNodeId().intValue();
+        Faction dominant = gameState.alignment().dominant();
+        return WraithEntity.builder()
+                .memberId(gameState.getMember().getMemberId())
+                .sourceGameStateId(gameState.getGameStateId())
+                .stage(gameState.getCurrentStage())
+                .node(appearNode(deathNode))
+                .level(level)
+                .killerName(killerName)
+                .skills(skills)
+                .relicIds(relicIds)
+                .faction(dominant == null ? null : dominant.name())
+                .memories(memories)
+                .build();
+    }
+
     @PrePersist
     private void onCreate() {
         this.createdAt = LocalDateTime.now();
@@ -140,6 +172,11 @@ public class WraithEntity {
             return true;
         }
         return false;
+    }
+
+    /** @return 앞으로 더 달아날 수 있는 횟수 (다 쓰면 흩어진다) */
+    public int escapesLeft() {
+        return Math.max(0, MAX_ESCAPES - escapes);
     }
 
     /** @return 주력 스킬 이름 목록 */

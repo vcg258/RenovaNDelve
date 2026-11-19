@@ -1,7 +1,5 @@
 package com.renovandelve.game.service;
 
-import com.renovandelve.collection.domain.CollectionSkillEntity;
-import com.renovandelve.collection.repository.CollectionSkillRepository;
 import com.renovandelve.member.domain.MemberEntity;
 
 import com.renovandelve.game.domain.GameSkillSlotEntity;
@@ -9,6 +7,7 @@ import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.game.repository.GameSkillSlotRepository;
 import com.renovandelve.catalog.repository.SkillRepository;
+import com.renovandelve.collection.service.CollectionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -30,9 +29,9 @@ public class SkillSlotService {
     public static final String BASIC_LOCKED_MESSAGE = GameStateEntity.BASIC_LOCKED_MESSAGE;
     public static final String LAST_SKILL_MESSAGE = GameStateEntity.LAST_SKILL_MESSAGE;
 
+    private final CollectionService collectionService;
     private final GameSkillSlotRepository gameSkillSlotRepository;
     private final SkillRepository skillRepository;
-    private final CollectionSkillRepository collectionSkillRepository;
 
     /**
      * 기본 공격인지 판정한다.
@@ -81,9 +80,7 @@ public class SkillSlotService {
      * @param skill     배운 스킬
      */
     private void registerInCollection(GameStateEntity gameState, SkillEntity skill) {
-        MemberEntity member = gameState.getMember();
-        if (member == null || collectionSkillRepository.existsByMemberAndSkill(member, skill)) return;
-        collectionSkillRepository.save(CollectionSkillEntity.builder().member(member).skill(skill).build());
+        collectionService.registerSkill(gameState.getMember(), skill);
     }
 
     /**

@@ -37,7 +37,7 @@ class SkillSlotServiceTest {
 
     @Mock private GameSkillSlotRepository gameSkillSlotRepository;
     @Mock private SkillRepository skillRepository;
-    @org.mockito.Mock private com.renovandelve.collection.repository.CollectionSkillRepository collectionSkillRepository;
+    @Mock private com.renovandelve.collection.service.CollectionService collectionService;
     @InjectMocks private SkillSlotService skillSlotService;
 
     private SkillEntity newSkill;
@@ -131,7 +131,7 @@ class SkillSlotServiceTest {
     private GameStateEntity gameWithBasicAnd(int others) {
         List<GameSkillSlotEntity> slots = new ArrayList<>();
         slots.add(GameSkillSlotEntity.builder().slotId(1L).slotIndex(0)
-                .skill(SkillEntity.builder().skillId(1L).name("기본 공격").cost(0).build()).build());
+                .skill(SkillEntity.builder().skillId(1L).name("기본 공격").cost(0).basic(true).build()).build());
         for (int i = 0; i < others; i++) {
             slots.add(GameSkillSlotEntity.builder().slotId((long) i + 2).slotIndex(i + 1)
                     .skill(SkillEntity.builder().skillId((long) i + 2).name("스킬" + i).cost(100).build()).build());
@@ -205,19 +205,14 @@ class SkillSlotServiceTest {
     }
 
     @Test
-    @DisplayName("스킬을 배우는 순간 도감에 등록한다 (원정 도중 교체한 스킬도 남는다). 이미 있으면 다시 넣지 않는다")
+    @DisplayName("스킬을 배우는 순간 도감 등록을 맡긴다 (원정 도중 교체한 스킬도 남는다). 중복 판단은 CollectionService가 한다")
     void learningRegistersInCollection() {
         com.renovandelve.member.domain.MemberEntity member = org.mockito.Mockito.mock(com.renovandelve.member.domain.MemberEntity.class);
         GameStateEntity game = GameStateEntity.builder().gameStateId(7L).member(member)
                 .gameSkillSlot(new ArrayList<>(gameWithSkills(2).getGameSkillSlot())).build();
-        when(collectionSkillRepository.existsByMemberAndSkill(member, newSkill)).thenReturn(false, true);
 
         skillSlotService.learn(game, NEW_SKILL_ID, null);
-        verify(collectionSkillRepository).save(org.mockito.ArgumentMatchers.any());
 
-        GameStateEntity nextRun = GameStateEntity.builder().gameStateId(8L).member(member)
-                .gameSkillSlot(new ArrayList<>(gameWithSkills(2).getGameSkillSlot())).build();
-        skillSlotService.learn(nextRun, NEW_SKILL_ID, null); // 다음 원정에서 같은 스킬을 다시 배운다
-        verify(collectionSkillRepository, org.mockito.Mockito.times(1)).save(org.mockito.ArgumentMatchers.any());
+        verify(collectionService).registerSkill(member, newSkill);
     }
 }

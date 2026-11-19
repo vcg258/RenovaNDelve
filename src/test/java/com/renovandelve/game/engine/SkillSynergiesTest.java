@@ -40,7 +40,7 @@ class SkillSynergiesTest {
 
         assertThat(synergies.getActiveSynergies()).isEmpty();
         assertThat(synergies.getBleedMultiplierBonus()).isZero();
-        assertThat(synergies.extraStacks(SkillSynergies.BURN)).isZero();
+        assertThat(synergies.extraStacks(StatusEffect.BURN)).isZero();
         assertThat(synergies.targetDamageMultiplier(monster("HEAVY"))).isEqualTo(1.0);
         assertThat(SkillSynergies.of(null).getActiveSynergies()).isEmpty();
     }
@@ -60,8 +60,8 @@ class SkillSynergiesTest {
         SkillEntity fireball = burn("화염구");
         SkillSynergies synergies = SkillSynergies.of(List.of(fireball, burn("헬파이어")));
 
-        assertThat(synergies.extraStacks(SkillSynergies.BURN)).isEqualTo(1);
-        assertThat(synergies.extraStacks(SkillSynergies.POISON)).isZero();
+        assertThat(synergies.extraStacks(StatusEffect.BURN)).isEqualTo(1);
+        assertThat(synergies.extraStacks(StatusEffect.POISON)).isZero();
         assertThat(synergies.skillDamageMultiplier(fireball)).isCloseTo(1.10, within(1e-9));
         assertThat(synergies.skillDamageMultiplier(bleed("단일 대상"))).isEqualTo(1.0); // 단일 대상 스킬에는 붙지 않는다
         assertThat(synergies.getActiveSynergies()).hasSize(2);
@@ -72,8 +72,8 @@ class SkillSynergiesTest {
     void poisonedWound() {
         SkillSynergies synergies = SkillSynergies.of(List.of(poison("맹독 단검"), bleed("출혈 베기")));
 
-        assertThat(synergies.extraStacks(SkillSynergies.POISON)).isEqualTo(1);
-        assertThat(synergies.extraStacks(SkillSynergies.BLEED)).isZero();
+        assertThat(synergies.extraStacks(StatusEffect.POISON)).isEqualTo(1);
+        assertThat(synergies.extraStacks(StatusEffect.BLEED)).isZero();
     }
 
     @Test

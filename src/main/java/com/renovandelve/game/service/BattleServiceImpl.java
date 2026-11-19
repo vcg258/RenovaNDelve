@@ -1,5 +1,8 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.game.dto.response.BattleKeywordDTO;
+import com.renovandelve.game.engine.MonsterIntent;
+import com.renovandelve.game.engine.StatusEffect;
 import com.renovandelve.game.domain.GameSkillSlotEntity;
 import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.game.engine.SessionMonster;
@@ -19,21 +22,18 @@ import java.util.Random;
 @RequiredArgsConstructor
 public class BattleServiceImpl implements BattleService {
 
-    // 상태이상 코드 (skill.statusEffect)
-    private static final short BLEED = 1;  // 출혈: 피격마다 추가 피해
-    private static final short BURN = 2;   // 화상: 턴 종료 시 최대HP 1% (30% 확률 스택 해제)
-    private static final short POISON = 3; // 독: 턴 종료 시 스택만큼 피해 (영구)
-    private static final short STUN = 4;   // 기절: 스택 턴 동안 행동 불가
+    // 상태이상 버프 키 (SessionMonster.buffs). 번호와 이름은 StatusEffect 한곳에서 정한다
+    public static final String BUFF_BLEED = StatusEffect.BLEED.buffKey(); // 출혈: 피격마다 추가 피해
+    public static final String BUFF_BURN = StatusEffect.BURN.buffKey();   // 화상: 턴 종료 시 최대HP 1% (30% 확률 스택 해제)
+    public static final String BUFF_POISON = StatusEffect.POISON.buffKey(); // 독: 턴 종료 시 스택만큼 피해 (영구)
+    public static final String BUFF_STUN = StatusEffect.STUN.buffKey();   // 기절: 스택 턴 동안 행동 불가
+    /** 보스 격노 (버프가 아니라 SessionMonster.enraged). 화면 설명용 키 */
+    public static final String KEYWORD_ENRAGED = "ENRAGED";
 
-    public static final String BUFF_BLEED = "BLEED";
-    public static final String BUFF_BURN = "BURN";
-    public static final String BUFF_POISON = "POISON";
-    public static final String BUFF_STUN = "STUN";
-
-    // 몬스터 행동 예고 (SessionMonster.intent)
-    public static final String INTENT_ATTACK = "ATTACK"; // 일반 공격
-    public static final String INTENT_HEAVY = "HEAVY";   // 강공: 피해 1.6배. 미리 보이므로 방어/기절로 대응할 수 있다
-    public static final String INTENT_GUARD = "GUARD";   // 방어 태세: 이번 턴 받는 타격 피해 절반, 공격하지 않음
+    // 몬스터 행동 예고 (SessionMonster.intent). 값은 MonsterIntent 한곳에서 정한다
+    public static final String INTENT_ATTACK = MonsterIntent.ATTACK;
+    public static final String INTENT_HEAVY = MonsterIntent.HEAVY;
+    public static final String INTENT_GUARD = MonsterIntent.GUARD;
 
     private static final double HEAVY_MULTIPLIER = 1.6;
     private static final double GUARD_DAMAGE_TAKEN = 0.5;
@@ -146,7 +146,7 @@ public class BattleServiceImpl implements BattleService {
      */
     @Override
     public void applyStatusEffect(SkillEntity skill, int extraStacks, List<SessionMonster> targets, List<String> log) {
-        if (skill.getStatusEffect() == 0) return;
+        if (StatusEffect.ofCode(skill.getStatusEffect()) == null) return;
 
         String buffName = resolveBuffName(skill.getStatusEffect());
         int stack = Math.max(1, skill.getEffectStack()) + Math.max(0, extraStacks);
@@ -322,6 +322,37 @@ public class BattleServiceImpl implements BattleService {
      * @param cooldownReduction 유물로 줄어드는 쿨타임
      */
     @Override
+    public void tickCooldowns(List<GameSkillSlotEntity> slots, int turns) {
+        for (int i = 0; i < turns; i++) {
+            for (GameSkillSlotEntity slot : slots) {
+                slot.tickCooldown();
+            }
+        }
+    }
+
+    /**
+     * 전투 키워드(상태이상, 격노) 설명. 수치는 이 클래스의 규칙 상수에서 만들어 화면 설명과 실제 규칙이 어긋나지 않게 한다.
+     *
+     * @return 키워드 목록
+     */
+    @Override
+    public List<BattleKeywordDTO> keywords() {
+        return List.of(
+                new BattleKeywordDTO(BUFF_BLEED, StatusEffect.BLEED.label(),
+                        "공격을 받을 때마다 스택만큼 추가 피해를 입는다."),
+                new BattleKeywordDTO(BUFF_BURN, StatusEffect.BURN.label(),
+                        "턴이 끝날 때 최대 HP의 1%% × 스택만큼 피해(방어 무시). %d%% 확률로 1스택씩 꺼진다."
+                                .formatted(Math.round(BURN_AUTO_CLEAR_CHANCE * 100))),
+                new BattleKeywordDTO(BUFF_POISON, StatusEffect.POISON.label(),
+                        "턴이 끝날 때 스택만큼 피해(방어 무시). 사라지지 않는다."),
+                new BattleKeywordDTO(BUFF_STUN, StatusEffect.STUN.label(),
+                        "이번 턴 행동하지 못한다. 한 턴 쉴 때마다 1스택씩 줄어든다."),
+                new BattleKeywordDTO(KEYWORD_ENRAGED, "격노",
+                        "보스의 HP가 절반 아래로 떨어져 공격력이 %d%% 올랐다."
+                                .formatted(Math.round((ENRAGE_ATK_MULTIPLIER - 1) * 100))));
+    }
+
+    @Override
     public void updateCoolTimes(List<GameSkillSlotEntity> slots, Long usedSlotId, int cooldownReduction) {
         for (GameSkillSlotEntity slot : slots) {
             if (slot.getSlotId().equals(usedSlotId)) {
@@ -341,13 +372,9 @@ public class BattleServiceImpl implements BattleService {
      * @return 버프 키
      */
     private String resolveBuffName(short statusEffect) {
-        return switch (statusEffect) {
-            case BLEED -> BUFF_BLEED;
-            case BURN -> BUFF_BURN;
-            case POISON -> BUFF_POISON;
-            case STUN -> BUFF_STUN;
-            default -> throw new IllegalArgumentException("알 수 없는 상태이상 코드: " + statusEffect);
-        };
+        StatusEffect effect = StatusEffect.ofCode(statusEffect);
+        if (effect == null) throw new IllegalArgumentException("알 수 없는 상태이상 코드: " + statusEffect);
+        return effect.buffKey();
     }
 
     /**
@@ -357,12 +384,6 @@ public class BattleServiceImpl implements BattleService {
      * @return 한국어 이름
      */
     private String koreanBuffName(String buff) {
-        return switch (buff) {
-            case BUFF_BLEED -> "출혈";
-            case BUFF_BURN -> "화상";
-            case BUFF_POISON -> "독";
-            case BUFF_STUN -> "기절";
-            default -> buff;
-        };
+        return StatusEffect.labelOf(buff);
     }
 }

@@ -17,6 +17,7 @@ public record SkillInfoDTO(
         int cooldown,
         short statusEffect,
         int effectStack,
-        String description
+        String description,
+        boolean basic
 ) {
 }

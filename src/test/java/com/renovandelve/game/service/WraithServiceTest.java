@@ -43,7 +43,7 @@ class WraithServiceTest {
     }
 
     private SkillEntity skill(String name, int cost, String coefficient) {
-        return SkillEntity.builder().name(name).cost(cost).coefficient(new BigDecimal(coefficient)).build();
+        return SkillEntity.builder().name(name).cost(cost).basic("기본 공격".equals(name)).coefficient(new BigDecimal(coefficient)).build();
     }
 
     @Test

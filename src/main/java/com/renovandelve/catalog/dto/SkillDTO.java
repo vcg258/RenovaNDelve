@@ -15,5 +15,6 @@ public record SkillDTO (
     int cooldown, // 쿨타임 (턴 수)
     short statusEffect, // 부여 상태이상 (출혈/화상/독/기절)
     int effectStack, // 상태이상 스택 수
-    String description // 기술 설명
+    String description, // 기술 설명
+    boolean basic // 기본 공격 (스킬이 적으면 버릴 수 없다)
 ) {}

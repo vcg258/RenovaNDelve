@@ -7,7 +7,7 @@ import lombok.Getter;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -21,12 +21,6 @@ import java.util.Set;
  */
 @Getter
 public class SkillSynergies {
-    // 상태이상 코드 (skill.statusEffect) - BattleServiceImpl과 같은 값
-    public static final short BLEED = 1;
-    public static final short BURN = 2;
-    public static final short POISON = 3;
-    public static final short STUN = 4;
-
     private static final BigDecimal HEAVY_HIT_COEFFICIENT = BigDecimal.valueOf(1.5);
 
     /** 조합이 하나도 없는 상태 */
@@ -51,17 +45,19 @@ public class SkillSynergies {
         if (skills == null) return synergies;
 
         int bleed = 0, burn = 0, poison = 0, stun = 0, area = 0, heavy = 0;
-        Set<Short> statusKinds = new HashSet<>();
+        Set<StatusEffect> statusKinds = EnumSet.noneOf(StatusEffect.class);
         for (SkillEntity skill : skills) {
             if (skill == null) continue;
-            switch (skill.getStatusEffect()) {
-                case BLEED -> bleed++;
-                case BURN -> burn++;
-                case POISON -> poison++;
-                case STUN -> stun++;
-                default -> { /* 상태이상 없음 */ }
+            StatusEffect effect = StatusEffect.ofCode(skill.getStatusEffect());
+            if (effect != null) {
+                statusKinds.add(effect);
+                switch (effect) {
+                    case BLEED -> bleed++;
+                    case BURN -> burn++;
+                    case POISON -> poison++;
+                    case STUN -> stun++;
+                }
             }
-            if (skill.getStatusEffect() > 0) statusKinds.add(skill.getStatusEffect());
             if (skill.getTarget() == Target.EnemyAll) area++;
             if (skill.getCoefficient() != null && skill.getCoefficient().compareTo(HEAVY_HIT_COEFFICIENT) >= 0) heavy++;
         }
@@ -101,7 +97,7 @@ public class SkillSynergies {
     /** 대상의 상태에 따라 달라지는 피해 배율 */
     public double targetDamageMultiplier(SessionMonster target) {
         double multiplier = 1.0;
-        if (heavyIntentMultiplier != 1.0 && "HEAVY".equals(target.getIntent())) {
+        if (heavyIntentMultiplier != 1.0 && MonsterIntent.HEAVY.equals(target.getIntent())) {
             multiplier *= heavyIntentMultiplier;
         }
         if (afflictedMultiplier != 1.0 && isAfflicted(target.getBuffs())) {
@@ -110,9 +106,15 @@ public class SkillSynergies {
         return multiplier;
     }
 
-    /** 상태이상을 걸 때 추가로 얹는 스택 */
-    public int extraStacks(short statusEffect) {
-        return switch (statusEffect) {
+    /**
+     * 상태이상을 걸 때 추가로 얹는 스택.
+     *
+     * @param effect 상태이상 (null이면 상태이상 없는 스킬)
+     * @return 추가 스택
+     */
+    public int extraStacks(StatusEffect effect) {
+        if (effect == null) return 0;
+        return switch (effect) {
             case BURN -> extraBurnStacks;
             case POISON -> extraPoisonStacks;
             default -> 0;

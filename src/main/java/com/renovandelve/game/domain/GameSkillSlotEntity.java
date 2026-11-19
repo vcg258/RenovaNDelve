@@ -11,7 +11,7 @@ import lombok.*;
 @Builder
 @ToString
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "game_skill_slot",
         uniqueConstraints = @UniqueConstraint(columnNames = {"game_state_id", "slot_index"}), // TODO 동일슬롯이 동일 슬롯을 못덮게 함 스킬이나 그런 것이 바뀐다면 INSERT X UPDATE O 의논
         indexes = {

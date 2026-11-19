@@ -1,5 +1,6 @@
 package com.renovandelve.global.handler;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -54,6 +55,18 @@ public class GlobalExceptionHandler {
     }
 
     /** 대상 없음 */
+    /**
+     * DB 유니크 제약 위반 -> 409. 확인과 저장 사이에 같은 요청이 겹친 경우라 데이터는 지켜졌고, 다시 조회하면 된다.
+     *
+     * @param e 예외
+     * @return 409와 안내 문구
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, String>> handleDataIntegrity(DataIntegrityViolationException e) {
+        log.warn("DB 제약 위반: {}", e.getMostSpecificCause().getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "이미 처리된 요청입니다. 화면을 새로 고쳐 주세요."));
+    }
+
     @ExceptionHandler(NoSuchElementException.class)
     public ResponseEntity<Map<String, String>> handleNoSuchElement(NoSuchElementException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));

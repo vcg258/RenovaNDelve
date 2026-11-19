@@ -1,8 +1,6 @@
 package com.renovandelve.game.service;
 
 import com.renovandelve.catalog.mapper.CatalogMapper;
-import com.renovandelve.game.domain.GameCharacterEntity;
-import com.renovandelve.game.domain.GameEquipmentEntity;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.catalog.domain.armorentity.ArmorEntity;
 import com.renovandelve.game.domain.gamestateentity.Difficulty;
@@ -12,7 +10,6 @@ import com.renovandelve.catalog.domain.relicentity.RelicEntity;
 import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
 import com.renovandelve.game.dto.request.NewGameRequest;
-import com.renovandelve.game.dto.response.PactDTO;
 import com.renovandelve.game.dto.response.SetupOptionsDTO;
 import com.renovandelve.game.engine.Pact;
 import com.renovandelve.catalog.repository.ArmorRepository;
@@ -22,8 +19,6 @@ import com.renovandelve.collection.repository.CollectionHelmetRepository;
 import com.renovandelve.collection.repository.CollectionRelicRepository;
 import com.renovandelve.collection.repository.CollectionSkillRepository;
 import com.renovandelve.collection.repository.CollectionWeaponRepository;
-import com.renovandelve.game.repository.GameCharacterRepository;
-import com.renovandelve.game.repository.GameEquipmentRepository;
 import com.renovandelve.game.repository.GameRelicInventoryRepository;
 import com.renovandelve.game.repository.GameSkillSlotRepository;
 import com.renovandelve.game.repository.GameStateRepository;
@@ -33,6 +28,7 @@ import com.renovandelve.catalog.repository.SkillRepository;
 import com.renovandelve.catalog.repository.WeaponRepository;
 import com.renovandelve.game.service.redis.GameSessionService;
 import org.springframework.transaction.annotation.Transactional;
+import com.renovandelve.game.mapper.GameMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -51,8 +47,6 @@ public class GameStateServiceImpl implements GameStateService {
     private final HelmetRepository helmetRepository;
     private final SkillRepository skillRepository;
     private final RelicRepository relicRepository;
-    private final GameCharacterRepository gameCharacterRepository;
-    private final GameEquipmentRepository gameEquipmentRepository;
     private final GameSkillSlotRepository gameSkillSlotRepository;
     private final GameRelicInventoryRepository gameRelicInventoryRepository;
     private final GameSessionService gameSessionService;
@@ -63,14 +57,12 @@ public class GameStateServiceImpl implements GameStateService {
     private final CollectionRelicRepository collectionRelicRepository;
     private final CollectionConsumableRepository collectionConsumableRepository;
     private final CatalogMapper catalogMapper;
+    private final GameMapper gameMapper;
 
     public static final int STARTING_BUDGET = 800;   // 스타팅 포인트 기본 예산
     // 메타 진행: 도감에 등록한 항목 1종마다 다음 판의 예산이 늘어난다 (죽어도 남는 성장)
     public static final int BUDGET_PER_COLLECTION = 5;
     public static final int MAX_BONUS_BUDGET = 200;
-    private static final int BASE_MAX_HP = 100;
-    private static final int BASE_ATTACK = 10;
-    private static final int BASE_DEFENSE = 5;
     private static final int MAX_START_SKILLS = 4;
     private static final String DEFAULT_SKILL_NAME = "기본 공격";
 
@@ -91,7 +83,7 @@ public class GameStateServiceImpl implements GameStateService {
                 catalogMapper.toHelmetDTOs(helmetRepository.findAll()),
                 catalogMapper.toSkillInfoDTOs(skillRepository.findAll()),
                 catalogMapper.toRelicDTOs(relicRepository.findAll()),
-                Arrays.stream(Pact.values()).map(PactDTO::from).toList()
+                Arrays.stream(Pact.values()).map(gameMapper::toPactDTO).toList()
         );
     }
 
@@ -146,33 +138,10 @@ public class GameStateServiceImpl implements GameStateService {
             throw new IllegalArgumentException("스타팅 포인트 예산 초과: 사용 " + cost + " / 예산 " + budget);
         }
 
-        // 세션 생성
-        GameStateEntity gameState = gameStateRepository.save(GameStateEntity.builder()
-                .member(member)
-                .difficulty(difficulty)
-                .currentStage(1)
-                .currentNodeId(0L)
-                .gold(100)
-                .startingPoints(cost)
-                .pacts(pacts.isEmpty() ? null : Pact.serialize(pacts))
-                .kingdom(kingdomService.currentState().name()) // 이 원정 동안 바뀌지 않는다
-                .build());
-
-        // 장비 장착
-        gameEquipmentRepository.save(GameEquipmentEntity.builder()
-                .gameState(gameState).weapon(weapon).armor(armor).helmet(helmet).build());
-
-        // 캐릭터 생성
-        int maxHp = BASE_MAX_HP + helmet.getHpBonus();
-        int attack = BASE_ATTACK + weapon.getAtkBonus();
-        int defense = BASE_DEFENSE + armor.getDefBonus();
-        gameCharacterRepository.save(GameCharacterEntity.builder()
-                .gameState(gameState).maxHp(maxHp).currentHp(maxHp)
-                .attack(attack).defense(defense).build());
-
-        // 스킬 슬롯 / 유물 인벤토리: 루트에 넣으면 커밋 때 cascade로 함께 저장된다
-        skills.forEach(gameState::learnSkill);
-        relics.forEach(gameState::addRelic);
+        // 게임 하나만 저장하면 장비·캐릭터·스킬 슬롯·유물은 cascade로 함께 저장된다
+        GameStateEntity gameState = gameStateRepository.save(GameStateEntity.start(
+                member, difficulty, cost, pacts, kingdomService.currentState(),
+                weapon, armor, helmet, skills, relics));
 
         // 노드 세션 초기화 (EXPLORE)
         gameSessionService.delete(gameState.getGameStateId());

@@ -2,6 +2,9 @@
 # application.yaml(로컬 개발 기본값) 위에 덮어쓰는 값만 둔다.
 
 spring:
+  # 운영 DB는 Flyway로 처음부터 만든다. 이력 테이블 없는 DB에 잘못 붙었을 때 조용히 V1로 간주하지 않고 기동을 멈춘다
+  flyway:
+    baseline-on-migrate: false
   # 운영에서는 접속 정보에 기본값을 두지 않는다. 환경변수가 빠지면 기동 단계에서 실패해야
   # 로컬용 기본 계정(postgres/postgres)으로 조용히 붙는 사고가 없다.
   datasource:

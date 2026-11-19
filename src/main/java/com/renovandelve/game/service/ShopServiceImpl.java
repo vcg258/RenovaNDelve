@@ -1,12 +1,5 @@
 package com.renovandelve.game.service;
 
-import com.renovandelve.collection.domain.CollectionArmorEntity;
-import com.renovandelve.collection.domain.CollectionConsumableEntity;
-import com.renovandelve.collection.domain.CollectionHelmetEntity;
-import com.renovandelve.collection.domain.CollectionRelicEntity;
-import com.renovandelve.collection.domain.CollectionSkillEntity;
-import com.renovandelve.collection.domain.CollectionWeaponEntity;
-import com.renovandelve.game.domain.GameCharacterEntity;
 import com.renovandelve.game.domain.GameEquipmentEntity;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.catalog.domain.armorentity.ArmorEntity;
@@ -20,15 +13,8 @@ import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
 import com.renovandelve.game.engine.Pact;
 import com.renovandelve.game.engine.ShopStockItem;
 import com.renovandelve.catalog.repository.ArmorRepository;
-import com.renovandelve.collection.repository.CollectionArmorRepository;
-import com.renovandelve.collection.repository.CollectionConsumableRepository;
-import com.renovandelve.collection.repository.CollectionHelmetRepository;
-import com.renovandelve.collection.repository.CollectionRelicRepository;
-import com.renovandelve.collection.repository.CollectionSkillRepository;
-import com.renovandelve.collection.repository.CollectionWeaponRepository;
 import com.renovandelve.catalog.repository.ConsumableRepository;
 import com.renovandelve.game.repository.GameConsumableInventoryRepository;
-import com.renovandelve.game.repository.GameEquipmentRepository;
 import com.renovandelve.game.repository.GameRelicInventoryRepository;
 import com.renovandelve.game.repository.GameSkillSlotRepository;
 import com.renovandelve.game.repository.GameStateRepository;
@@ -37,6 +23,7 @@ import com.renovandelve.catalog.repository.RelicRepository;
 import com.renovandelve.catalog.repository.SkillRepository;
 import com.renovandelve.catalog.repository.WeaponRepository;
 import org.springframework.transaction.annotation.Transactional;
+import com.renovandelve.collection.service.CollectionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -54,17 +41,11 @@ public class ShopServiceImpl implements ShopService {
     private final RelicRepository relicRepository;
     private final ConsumableRepository consumableRepository;
     private final GameStateRepository gameStateRepository;
-    private final GameEquipmentRepository gameEquipmentRepository;
     private final GameSkillSlotRepository gameSkillSlotRepository;
     private final GameRelicInventoryRepository gameRelicInventoryRepository;
     private final GameConsumableInventoryRepository gameConsumableInventoryRepository;
-    private final CollectionWeaponRepository collectionWeaponRepository;
-    private final CollectionArmorRepository collectionArmorRepository;
-    private final CollectionHelmetRepository collectionHelmetRepository;
-    private final CollectionSkillRepository collectionSkillRepository;
-    private final CollectionRelicRepository collectionRelicRepository;
-    private final CollectionConsumableRepository collectionConsumableRepository;
     private final SkillSlotService skillSlotService;
+    private final CollectionService collectionService;
 
     private final Random random = new Random();
 
@@ -183,21 +164,13 @@ public class ShopServiceImpl implements ShopService {
      * @param weaponId  무기 ID
      */
     private void purchaseWeapon(GameStateEntity gameState, MemberEntity member, Long weaponId) {
-        GameEquipmentEntity equipment = findEquipment(gameState);
         WeaponEntity weapon = weaponRepository.findById(weaponId)
                 .orElseThrow(() -> new NoSuchElementException("무기를 찾을 수 없습니다."));
 
-        // 무기 교체 -> 공격력 재계산
-        GameCharacterEntity character = findCharacter(gameState);
-        int oldBonus = equipment.getWeapon() == null ? 0 : equipment.getWeapon().getAtkBonus();
-        character.applyAttackDelta(weapon.getAtkBonus() - oldBonus);
+        // 장비 교체와 능력치 재계산은 루트가 맡는다. 관리 중인 엔티티라 커밋 때 UPDATE된다
+        gameState.equipWeapon(weapon);
 
-        equipment.equipWeapon(weapon);
-        gameEquipmentRepository.save(equipment);
-
-        if (!collectionWeaponRepository.existsByMemberAndWeapon(member, weapon)) {
-            collectionWeaponRepository.save(CollectionWeaponEntity.builder().member(member).weapon(weapon).build());
-        }
+        collectionService.registerWeapon(member, weapon);
     }
 
     /**
@@ -208,20 +181,13 @@ public class ShopServiceImpl implements ShopService {
      * @param armorId   갑옷 ID
      */
     private void purchaseArmor(GameStateEntity gameState, MemberEntity member, Long armorId) {
-        GameEquipmentEntity equipment = findEquipment(gameState);
         ArmorEntity armor = armorRepository.findById(armorId)
                 .orElseThrow(() -> new NoSuchElementException("갑옷을 찾을 수 없습니다."));
 
-        GameCharacterEntity character = findCharacter(gameState);
-        int oldBonus = equipment.getArmor() == null ? 0 : equipment.getArmor().getDefBonus();
-        character.applyDefenseDelta(armor.getDefBonus() - oldBonus);
+        // 장비 교체와 능력치 재계산은 루트가 맡는다. 관리 중인 엔티티라 커밋 때 UPDATE된다
+        gameState.equipArmor(armor);
 
-        equipment.equipArmor(armor);
-        gameEquipmentRepository.save(equipment);
-
-        if (!collectionArmorRepository.existsByMemberAndArmor(member, armor)) {
-            collectionArmorRepository.save(CollectionArmorEntity.builder().member(member).armor(armor).build());
-        }
+        collectionService.registerArmor(member, armor);
     }
 
     /**
@@ -232,20 +198,13 @@ public class ShopServiceImpl implements ShopService {
      * @param helmetId  투구 ID
      */
     private void purchaseHelmet(GameStateEntity gameState, MemberEntity member, Long helmetId) {
-        GameEquipmentEntity equipment = findEquipment(gameState);
         HelmetEntity helmet = helmetRepository.findById(helmetId)
                 .orElseThrow(() -> new NoSuchElementException("투구를 찾을 수 없습니다."));
 
-        GameCharacterEntity character = findCharacter(gameState);
-        int oldBonus = equipment.getHelmet() == null ? 0 : equipment.getHelmet().getHpBonus();
-        character.applyMaxHpDelta(helmet.getHpBonus() - oldBonus);
+        // 장비 교체와 능력치 재계산은 루트가 맡는다. 관리 중인 엔티티라 커밋 때 UPDATE된다
+        gameState.equipHelmet(helmet);
 
-        equipment.equipHelmet(helmet);
-        gameEquipmentRepository.save(equipment);
-
-        if (!collectionHelmetRepository.existsByMemberAndHelmet(member, helmet)) {
-            collectionHelmetRepository.save(CollectionHelmetEntity.builder().member(member).helmet(helmet).build());
-        }
+        collectionService.registerHelmet(member, helmet);
     }
 
     /**
@@ -259,9 +218,7 @@ public class ShopServiceImpl implements ShopService {
     private void purchaseSkill(GameStateEntity gameState, MemberEntity member, Long skillId, Long replaceSlotId) {
         SkillEntity skill = skillSlotService.learn(gameState, skillId, replaceSlotId);
 
-        if (!collectionSkillRepository.existsByMemberAndSkill(member, skill)) {
-            collectionSkillRepository.save(CollectionSkillEntity.builder().member(member).skill(skill).build());
-        }
+        collectionService.registerSkill(member, skill);
     }
 
     /**
@@ -283,9 +240,7 @@ public class ShopServiceImpl implements ShopService {
         // cascade로도 저장되지만, 구매 응답에 담을 칸 ID를 지금 받기 위해 바로 저장한다
         gameRelicInventoryRepository.save(gameState.addRelic(relic));
 
-        if (!collectionRelicRepository.existsByMemberAndRelic(member, relic)) {
-            collectionRelicRepository.save(CollectionRelicEntity.builder().member(member).relic(relic).build());
-        }
+        collectionService.registerRelic(member, relic);
     }
 
     /**
@@ -301,32 +256,7 @@ public class ShopServiceImpl implements ShopService {
 
         gameConsumableInventoryRepository.save(gameState.addConsumable(consumable));
 
-        if (!collectionConsumableRepository.existsByMemberAndConsumable(member, consumable)) {
-            collectionConsumableRepository.save(CollectionConsumableEntity.builder().member(member).consumable(consumable).build());
-        }
-    }
-
-    /**
-     * 게임의 장비 슬롯.
-     *
-     * @param gameState 게임
-     * @return 장비 슬롯
-     */
-    private GameEquipmentEntity findEquipment(GameStateEntity gameState) {
-        return gameEquipmentRepository.findByGameState_GameStateId(gameState.getGameStateId())
-                .stream().findFirst()
-                .orElseThrow(() -> new NoSuchElementException("장비 슬롯을 찾을 수 없습니다."));
-    }
-
-    /**
-     * 게임의 캐릭터.
-     *
-     * @param gameState 게임
-     * @return 캐릭터
-     */
-    private GameCharacterEntity findCharacter(GameStateEntity gameState) {
-        return gameState.getGameCharacter().stream().findFirst()
-                .orElseThrow(() -> new NoSuchElementException("캐릭터 정보가 없습니다."));
+        collectionService.registerConsumable(member, consumable);
     }
 
     /**

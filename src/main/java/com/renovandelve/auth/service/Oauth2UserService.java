@@ -39,7 +39,7 @@ public class Oauth2UserService extends DefaultOAuth2UserService {
         log.info("OAuth2 로그인 시도");
 
         if (memberRepository.findBySocialId(socialId).isEmpty()) {
-            memberRepository.save(MemberEntity.builder().socialId(socialId).build());
+            memberRepository.save(MemberEntity.social(socialId));
         }
 
         return oAuth2User;

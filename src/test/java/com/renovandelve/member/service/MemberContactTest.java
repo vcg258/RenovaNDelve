@@ -12,6 +12,7 @@ import com.renovandelve.auth.service.redis.SecurityTokenService;
 import com.renovandelve.auth.service.redis.TokenRevocationService;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import com.renovandelve.member.mapper.MemberMapperImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,7 +46,7 @@ class MemberContactTest {
         memberService = new MemberServiceImpl(memberRepository, mock(RankingRepository.class),
                 mock(GameStateRepository.class), mock(GameSessionService.class), mock(SecurityTokenService.class),
                 mock(TokenRevocationService.class), passwordEncoder, mock(PersonalDataService.class),
-                mock(CollectionMapper.class));
+                mock(CollectionMapper.class), new MemberMapperImpl());
         when(memberRepository.save(any(MemberEntity.class))).thenAnswer(call -> call.getArgument(0));
     }
 
@@ -54,6 +55,17 @@ class MemberContactTest {
     }
 
     /* ==================== 가입 ==================== */
+
+    @Test
+    @DisplayName("가입: 확인과 저장 사이에 같은 값으로 먼저 가입돼 DB 제약에 걸리면 400용 예외로 바꾼다")
+    void signupRaceBecomesBadRequest() {
+        when(memberRepository.save(any(MemberEntity.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("uk_member_email"));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> memberService.signup(signup("김용사", "hero@example.com")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("이미 사용 중");
+    }
 
     @Test
     @DisplayName("가입: 이름과 이메일을 저장하고, 이메일은 소문자로 정규화한다")

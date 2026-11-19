@@ -88,6 +88,9 @@ INSERT INTO skill (name, target, attack_count, coefficient, cost, cooldown, stat
 SELECT '기본 공격', 'EnemySingle', 1, 1.00, 0, 0, 0, 0, '적 하나를 공격하는 기본 물리 공격'
 WHERE NOT EXISTS (SELECT 1 FROM skill WHERE name = '기본 공격');
 
+-- 기본 공격 표시 (V7). 버릴 수 있는지, 도감에 세는지를 이 값으로 정한다
+UPDATE skill SET is_basic = (name = '기본 공격') WHERE is_basic <> (name = '기본 공격');
+
 INSERT INTO skill (name, target, attack_count, coefficient, cost, cooldown, status_effect, effect_stack, description)
 SELECT '강타', 'EnemySingle', 1, 1.60, 120, 2, 0, 0, '온 힘을 실은 일격. 공격력의 160% 피해'
 WHERE NOT EXISTS (SELECT 1 FROM skill WHERE name = '강타');

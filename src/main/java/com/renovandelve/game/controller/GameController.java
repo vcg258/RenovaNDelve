@@ -1,5 +1,7 @@
 package com.renovandelve.game.controller;
 
+import com.renovandelve.game.dto.response.BattleKeywordDTO;
+import com.renovandelve.game.service.BattleService;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.game.dto.response.WraithDTO;
 import com.renovandelve.game.dto.response.ChronicleChapterDTO;
@@ -55,6 +57,7 @@ public class GameController {
     private final WraithService wraithService;
     private final ChronicleService chronicleService;
     private final KingdomService kingdomService;
+    private final BattleService battleService;
 
     /**
      * 게임 상태를 바꾸는 요청은 회원당 한 번에 하나만 처리한다.
@@ -98,6 +101,17 @@ public class GameController {
     @GetMapping("/kingdom")
     public ResponseEntity<KingdomDTO> kingdom() {
         return ResponseEntity.ok(kingdomService.current());
+    }
+
+    /**
+     * 전투 키워드(상태이상, 보스 격노) 설명. 화면은 이 설명을 말풍선에 그대로 쓴다.
+     *
+     * @return 키워드 목록
+     */
+    @Operation(summary = "전투 키워드 설명 (상태이상, 격노)")
+    @GetMapping("/keywords")
+    public ResponseEntity<List<BattleKeywordDTO>> keywords() {
+        return ResponseEntity.ok(battleService.keywords());
     }
 
     /**

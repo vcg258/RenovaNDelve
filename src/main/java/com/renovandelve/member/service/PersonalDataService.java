@@ -45,6 +45,7 @@ public class PersonalDataService {
     private final MemberRepository memberRepository;
     private final GameStateRepository gameStateRepository;
     private final ChatMemory chatMemory;
+    /** Spring AI가 관리하는 spring_ai_chat_memory 정리에만 쓴다 (JPA 엔티티가 없는 테이블). 우리 도메인 테이블은 JPA 저장소로 */
     private final JdbcTemplate jdbcTemplate;
     private final WraithRepository wraithRepository;
     private final ChronicleChapterRepository chronicleChapterRepository;
@@ -98,7 +99,7 @@ public class PersonalDataService {
     public List<GameHistoryDTO> getHistory(MemberEntity member) {
         return gameStateRepository.findByMember_MemberIdOrderByCreatedAtDesc(member.getMemberId()).stream()
                 .limit(HISTORY_LIMIT)
-                .map(GameHistoryDTO::from)
+                .map(gameMapper::toHistoryDTO)
                 .toList();
     }
 
@@ -134,7 +135,7 @@ public class PersonalDataService {
 
         List<GameHistoryDTO> games = gameStateRepository
                 .findByMember_MemberIdOrderByCreatedAtDesc(managed.getMemberId()).stream()
-                .map(GameHistoryDTO::from)
+                .map(gameMapper::toHistoryDTO)
                 .toList();
 
         Map<String, Object> collection = new LinkedHashMap<>();
@@ -179,6 +180,14 @@ public class PersonalDataService {
             log.info("[개인정보 파기] 보관 기간({}일) 경과 AI 대화 기록 {}건 삭제", chatRetentionDays, deleted);
         } catch (Exception e) {
             log.error("[개인정보 파기] AI 대화 기록 정리 실패: {}", e.getMessage());
+        }
+        // 망령은 대화 기록의 선택 문장을 옮겨 두므로 같은 보관 기간을 따른다.
+        // 아직 나타날 망령(ACTIVE)은 게임 진행에 필요해 남기고, 끝난 망령(SLAIN / FADED)만 지운다
+        try {
+            int deleted = wraithRepository.deleteFinishedBefore(LocalDateTime.now().minusDays(chatRetentionDays));
+            log.info("[개인정보 파기] 보관 기간({}일) 경과 망령 기록 {}건 삭제", chatRetentionDays, deleted);
+        } catch (Exception e) {
+            log.error("[개인정보 파기] 망령 기록 정리 실패: {}", e.getMessage());
         }
     }
 

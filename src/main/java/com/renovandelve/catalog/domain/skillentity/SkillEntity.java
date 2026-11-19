@@ -14,20 +14,11 @@ import java.util.List;
 @Entity
 @Builder
 @ToString(exclude = {"gameSkillSlot", "collectionSkill"})
-@NoArgsConstructor
-@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "skill")
 public class SkillEntity {
 
-    /**
-     * 기본 공격인지 판정한다.
-     * 스타팅 포인트 비용이 0인 스킬은 기본 공격 하나뿐이며, 원정 준비 화면도 같은 기준으로 구분한다.
-     *
-     * @return 비용이 0이면 true
-     */
-    public boolean isBasic() {
-        return this.cost == 0;
-    }
     @PositiveOrZero // Unsigned 대체자
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Id private Long skillId; // 기술 고유 ID (PK)
@@ -51,6 +42,14 @@ public class SkillEntity {
     @Builder.Default
     @Column(nullable = false)
     private int cost = 0; // 기술 사용 비용 (AP 등)
+
+    /**
+     * 기본 공격인지 (V7). 예전에는 "비용 0"으로 판정했는데, 비용 0짜리 스킬이 생기면 그것도 기본 공격으로 취급되어 컬럼으로 바꿨다.
+     * 기본 공격은 스킬이 적을 때 버릴 수 없고, 도감 집계와 망령의 기술 목록에서 빠진다.
+     */
+    @Builder.Default
+    @Column(name = "is_basic", nullable = false)
+    private boolean basic = false;
 
     @PositiveOrZero
     @Builder.Default

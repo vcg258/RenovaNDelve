@@ -12,8 +12,8 @@ import java.util.List;
 @Entity
 @Builder
 @ToString
-@NoArgsConstructor
-@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "armor")
 public class ArmorEntity {
     @PositiveOrZero

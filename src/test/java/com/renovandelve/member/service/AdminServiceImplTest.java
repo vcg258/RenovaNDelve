@@ -20,6 +20,7 @@ import com.renovandelve.auth.service.redis.TokenRevocationService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import com.renovandelve.member.mapper.MemberMapper;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -51,6 +52,7 @@ class AdminServiceImplTest {
     @Mock private TokenRevocationService tokenRevocationService;
     @Spy private RankingMapper rankingMapper =
             new RankingMapperImpl(new MemberMapperImpl(), new GameMapperImpl(new CatalogMapperImpl()));
+    @Spy private MemberMapper memberMapper = new MemberMapperImpl();
     @InjectMocks private AdminServiceImpl adminService;
 
     private MemberEntity member(long id, Role role) {
