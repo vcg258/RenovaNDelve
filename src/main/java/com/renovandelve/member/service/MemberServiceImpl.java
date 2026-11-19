@@ -1,5 +1,6 @@
 package com.renovandelve.member.service;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import com.renovandelve.collection.mapper.CollectionMapper;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.ranking.domain.RankingEntity;
@@ -66,16 +67,22 @@ public class MemberServiceImpl implements MemberService {
             throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
         }
 
-        MemberEntity member = memberRepository.save(MemberEntity.builder()
-                .loginId(request.loginId())
-                .passwordHash(passwordEncoder.encode(request.password()))
-                .nickname(request.nickname())
-                .name(request.name().trim())
-                .email(email)
-                .termsAgreedAt(LocalDateTime.now())
-                .privacyAgreedAt(LocalDateTime.now())
-                .policyVersion(PersonalDataService.POLICY_VERSION)
-                .build());
+        MemberEntity member;
+        try {
+            member = memberRepository.saveAndFlush(MemberEntity.builder()
+                    .loginId(request.loginId())
+                    .passwordHash(passwordEncoder.encode(request.password()))
+                    .nickname(request.nickname())
+                    .name(request.name().trim())
+                    .email(email)
+                    .termsAgreedAt(LocalDateTime.now())
+                    .privacyAgreedAt(LocalDateTime.now())
+                    .policyVersion(PersonalDataService.POLICY_VERSION)
+                    .build());
+        } catch (DataIntegrityViolationException e) {
+            // 위의 확인과 저장 사이에 같은 아이디·이메일·닉네임으로 동시에 가입한 경우. DB 유니크 제약이 막는다
+            throw new IllegalArgumentException("이미 사용 중인 아이디, 이메일 또는 닉네임입니다.");
+        }
         log.info("회원가입 완료 memberId={} loginId={}", member.getMemberId(), member.getLoginId());
     }
 

@@ -180,6 +180,16 @@ public class PersonalDataService {
         } catch (Exception e) {
             log.error("[개인정보 파기] AI 대화 기록 정리 실패: {}", e.getMessage());
         }
+        // 망령은 대화 기록의 선택 문장을 옮겨 두므로 같은 보관 기간을 따른다.
+        // 아직 나타날 망령(ACTIVE)은 게임 진행에 필요해 남기고, 끝난 망령(SLAIN / FADED)만 지운다
+        try {
+            Timestamp threshold = Timestamp.valueOf(LocalDateTime.now().minusDays(chatRetentionDays));
+            int deleted = jdbcTemplate.update(
+                    "DELETE FROM wraith WHERE status <> 'ACTIVE' AND updated_at < ?", threshold);
+            log.info("[개인정보 파기] 보관 기간({}일) 경과 망령 기록 {}건 삭제", chatRetentionDays, deleted);
+        } catch (Exception e) {
+            log.error("[개인정보 파기] 망령 기록 정리 실패: {}", e.getMessage());
+        }
     }
 
     /**
