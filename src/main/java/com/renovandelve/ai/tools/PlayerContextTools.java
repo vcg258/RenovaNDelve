@@ -7,6 +7,8 @@ import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.game.engine.GameSession;
 import com.renovandelve.game.engine.RelicEffects;
 import com.renovandelve.game.engine.SessionMonster;
+import com.renovandelve.game.engine.ShopStockItem;
+import com.renovandelve.game.service.GameEngineServiceImpl;
 import com.renovandelve.game.repository.GameStateRepository;
 import com.renovandelve.ranking.repository.RankingRepository;
 import com.renovandelve.member.service.CurrentMemberService;
@@ -43,7 +45,7 @@ public class PlayerContextTools {
      *
      * @return 상태 요약, 진행 중인 게임이 없으면 안내 문구
      */
-    @Tool(description = "플레이어의 현재 상태를 조회합니다. 레벨, HP, 공격력, 방어력, 골드, 진행 중인 스테이지/노드, 착용 장비, 보유 스킬과 쿨타임, 보유 유물과 발동 중인 조합 시너지를 모두 포함합니다. '내 상태', '지금 내 스탯', '뭘 들고 있지', '내가 어디까지 왔지' 같은 질문에 반드시 먼저 호출하세요.")
+    @Tool(description = "플레이어의 현재 상태를 조회합니다. 레벨, HP, 공격력, 방어력, 골드, 진행 중인 스테이지/노드와 전체 스테이지 수, 지금 착용 중인 장비와 보너스, 보유 스킬과 쿨타임, 보유 유물과 발동 중인 조합 시너지, 소모품을 모두 포함합니다. 상점에서 사거나 전투를 치르면 값이 바뀌므로, 이전 대화의 답을 쓰지 말고 질문마다 새로 호출하세요. '내 상태', '지금 내 스탯', '뭘 들고 있지', '내 장비', '어떤 장비가 좋아', '뭘 사야 해', '이 장비가 더 나아', '내가 어디까지 왔지' 같은 질문에 반드시 먼저 호출하세요.")
     @Transactional(readOnly = true)
     public String getMyStatus() {
         Optional<GameStateEntity> found = activeGame();
@@ -52,9 +54,10 @@ public class PlayerContextTools {
 
         GameCharacterEntity character = game.getGameCharacter().stream().findFirst().orElse(null);
         StringBuilder sb = new StringBuilder();
-        sb.append("[진행 상황] 난이도 %s / 스테이지 %d / 노드 %d (스테이지당 10노드, 10노드는 보스)\n"
+        sb.append("[진행 상황] 난이도 %s / 스테이지 %d / 노드 %d (전체 %d스테이지, 스테이지당 %d노드, 각 스테이지의 마지막 노드는 보스. 스테이지 %d의 보스를 쓰러뜨리면 클리어)\n"
                 .formatted(game.getDifficulty(), game.getCurrentStage(),
-                        game.getCurrentNodeId() == null ? 0 : game.getCurrentNodeId()));
+                        game.getCurrentNodeId() == null ? 0 : game.getCurrentNodeId(),
+                        GameEngineServiceImpl.FINAL_STAGE, GameEngineServiceImpl.NODES_PER_STAGE, GameEngineServiceImpl.FINAL_STAGE));
         sb.append("[자원] 골드 %d / 누적 점수 %d / 불사조의 깃털(부활) %s\n"
                 .formatted(game.getGold(), game.getScore(),
                         Boolean.TRUE.equals(game.getHasPhoenix()) ? "보유" : "없음"));
@@ -71,13 +74,9 @@ public class PlayerContextTools {
                             Math.max(0, character.getLevel() * 100 - character.getExp())));
         }
 
-        GameEquipmentEntity equipment = game.getGameEquipment();
-        if (equipment != null) {
-            sb.append("[장비] 무기: %s / 갑옷: %s / 투구: %s\n".formatted(
-                    equipment.getWeapon() == null ? "없음" : equipment.getWeapon().getName() + "(공격 +" + equipment.getWeapon().getAtkBonus() + ")",
-                    equipment.getArmor() == null ? "없음" : equipment.getArmor().getName() + "(방어 +" + equipment.getArmor().getDefBonus() + ")",
-                    equipment.getHelmet() == null ? "없음" : equipment.getHelmet().getName() + "(체력 +" + equipment.getHelmet().getHpBonus() + ")"));
-        }
+        String gear = describeEquipment(game.getGameEquipment());
+        sb.append("[지금 착용 중인 장비] ").append(gear).append(" (한 부위에 하나, 사면 바로 교체된다. 위 공격력·방어력·HP에 이미 포함)\n");
+        log.debug("[PlayerContextTools] getMyStatus game={} 장비={}", game.getGameStateId(), gear);
 
         String skills = game.getGameSkillSlot().stream()
                 .filter(s -> s.getSkill() != null)
@@ -246,6 +245,93 @@ public class PlayerContextTools {
     }
 
     /* HELPER METHODS */
+
+    /**
+     * [AI Tool] 지금 열려 있는 상점의 실제 진열품(가격, 판매 여부, 장비는 착용 중인 것과의 비교)을 알려 준다.
+     * 사전 목록(getAll*)은 게임에 존재하는 전체 아이템이고, 상점에는 그중 일부만 나온다.
+     *
+     * @return 진열품 요약, 상점 단계가 아니면 안내 문구
+     */
+    @Tool(description = "지금 상점에 실제로 진열된 품목을 조회합니다. 이름, 종류, 가격, 판매 여부, 장비라면 지금 착용 중인 장비와 비교한 보너스를 알려 줍니다. '상점에 뭐 있어', '여기서 뭘 사', '이거 살 만해' 같은 상점 질문에 호출하세요. getAllWeapons 같은 사전 목록은 게임 전체의 아이템이지 상점 진열품이 아닙니다. 상점 단계가 아니면 그 사실을 알려줍니다.")
+    @Transactional(readOnly = true)
+    public String getShopStock() {
+        Optional<GameStateEntity> found = activeGame();
+        if (found.isEmpty()) return "현재 진행 중인 게임이 없습니다.";
+        GameStateEntity game = found.get();
+
+        GameSession session = gameSessionService.get(game.getGameStateId());
+        if (session == null || !GameSession.PHASE_SHOP.equals(session.getPhase())) {
+            return "지금은 상점에 있지 않습니다. 현재 단계: %s. 상점은 전투 보상을 고른 뒤 가끔 나타납니다."
+                    .formatted(session == null ? "알 수 없음" : phaseKorean(session.getPhase()));
+        }
+        List<ShopStockItem> stock = session.getShop();
+        if (stock == null || stock.isEmpty()) return "상인이 아직 짐을 풀지 않았습니다 (진열품 없음).";
+
+        GameEquipmentEntity equipped = game.getGameEquipment();
+        StringBuilder sb = new StringBuilder("[보유 골드] %d\n[지금 착용 중인 장비] %s\n[진열품]\n"
+                .formatted(game.getGold(), describeEquipment(equipped)));
+        for (ShopStockItem item : stock) {
+            sb.append("- %s %s, 가격 %d%s%s: %s\n".formatted(
+                    shopTypeKorean(item.getItemType()), item.getName(), item.getPrice(),
+                    item.isSold() ? " (판매 완료)" : game.getGold() < item.getPrice() ? " (골드 부족)" : "",
+                    compareWithEquipped(item, equipped),
+                    shorten(item.getDescription())));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 착용 장비를 한 줄로.
+     *
+     * @param equipment 장비 슬롯 (없을 수 있음)
+     * @return "무기: 이름(공격 +n) / 갑옷: ... / 투구: ..."
+     */
+    private String describeEquipment(GameEquipmentEntity equipment) {
+        if (equipment == null) return "없음";
+        return "무기: %s / 갑옷: %s / 투구: %s".formatted(
+                equipment.getWeapon() == null ? "없음" : equipment.getWeapon().getName() + "(공격 +" + equipment.getWeapon().getAtkBonus() + ")",
+                equipment.getArmor() == null ? "없음" : equipment.getArmor().getName() + "(방어 +" + equipment.getArmor().getDefBonus() + ")",
+                equipment.getHelmet() == null ? "없음" : equipment.getHelmet().getName() + "(최대 HP +" + equipment.getHelmet().getHpBonus() + ")");
+    }
+
+    /**
+     * 진열된 장비를 착용 중인 같은 부위 장비와 비교한 문구. 장비가 아니면 빈 문자열.
+     *
+     * @param item     진열품
+     * @param equipped 장비 슬롯
+     * @return 예: ", 공격 +10 (지금 착용 중 +20, 사면 -10)"
+     */
+    String compareWithEquipped(ShopStockItem item, GameEquipmentEntity equipped) {
+        if (item.getBonus() == null) return "";
+        String stat;
+        int current;
+        switch (String.valueOf(item.getItemType())) {
+            case "WEAPON" -> { stat = "공격"; current = equipped == null || equipped.getWeapon() == null ? 0 : equipped.getWeapon().getAtkBonus(); }
+            case "ARMOR" -> { stat = "방어"; current = equipped == null || equipped.getArmor() == null ? 0 : equipped.getArmor().getDefBonus(); }
+            case "HELMET" -> { stat = "최대 HP"; current = equipped == null || equipped.getHelmet() == null ? 0 : equipped.getHelmet().getHpBonus(); }
+            default -> { return ""; }
+        }
+        int diff = item.getBonus() - current;
+        return ", %s +%d (지금 착용 중 +%d, 사면 %s%d)".formatted(stat, item.getBonus(), current, diff >= 0 ? "+" : "", diff);
+    }
+
+    /**
+     * 진열품 종류를 한국어로.
+     *
+     * @param itemType WEAPON / ARMOR / HELMET / SKILL / RELIC / CONSUMABLE
+     * @return 한국어 이름
+     */
+    private String shopTypeKorean(String itemType) {
+        return switch (String.valueOf(itemType)) {
+            case "WEAPON" -> "[무기]";
+            case "ARMOR" -> "[갑옷]";
+            case "HELMET" -> "[투구]";
+            case "SKILL" -> "[스킬]";
+            case "RELIC" -> "[유물]";
+            case "CONSUMABLE" -> "[소모품]";
+            default -> "[" + itemType + "]";
+        };
+    }
 
     /**
      * 로그인한 플레이어의 진행 중인 게임. 조회에 실패하면 빈 값으로 넘겨 Tool 응답이 깨지지 않게 한다.
