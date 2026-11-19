@@ -56,6 +56,7 @@ public class GameDataEtlService {
     private static final String META_HASH = "hash";
 
     private final VectorStore vectorStore;
+    /** Spring AI가 관리하는 vector_store의 메타데이터 조회·삭제에만 쓴다 (JPA 엔티티가 없는 테이블) */
     private final JdbcTemplate jdbcTemplate;
 
     private final MonsterRepository monsterRepository;

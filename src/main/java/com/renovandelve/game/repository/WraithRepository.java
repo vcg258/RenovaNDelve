@@ -5,6 +5,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 
 import java.util.List;
 import java.util.Optional;
@@ -46,4 +49,16 @@ public interface WraithRepository extends JpaRepository<WraithEntity, Long> {
     @Modifying
     @Query("delete from WraithEntity w where w.memberId = :memberId")
     int deleteAllByMemberId(@Param("memberId") Long memberId);
+
+    /**
+     * 보관 기간이 지난 끝난 망령(SLAIN / FADED)을 지운다. 아직 나타날 망령(ACTIVE)은 남긴다.
+     *
+     * @param threshold 이 시각 전에 마지막으로 바뀐 기록을 지운다
+     * @return 지운 행 수
+     */
+    @Transactional
+    @Modifying
+    @Query("delete from WraithEntity w where w.status <> com.renovandelve.game.domain.WraithEntity.Status.ACTIVE "
+            + "and w.updatedAt < :threshold")
+    int deleteFinishedBefore(@Param("threshold") LocalDateTime threshold);
 }
