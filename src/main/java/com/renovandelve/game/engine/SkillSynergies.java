@@ -21,11 +21,11 @@ import java.util.Set;
  */
 @Getter
 public class SkillSynergies {
-    // 상태이상 코드 (skill.statusEffect) - BattleServiceImpl과 같은 값
-    public static final short BLEED = 1;
-    public static final short BURN = 2;
-    public static final short POISON = 3;
-    public static final short STUN = 4;
+    // 상태이상 코드 (skill.statusEffect). 값은 StatusEffect 한곳에서 정한다
+    public static final short BLEED = StatusEffect.Code.BLEED;
+    public static final short BURN = StatusEffect.Code.BURN;
+    public static final short POISON = StatusEffect.Code.POISON;
+    public static final short STUN = StatusEffect.Code.STUN;
 
     private static final BigDecimal HEAVY_HIT_COEFFICIENT = BigDecimal.valueOf(1.5);
 
@@ -101,7 +101,7 @@ public class SkillSynergies {
     /** 대상의 상태에 따라 달라지는 피해 배율 */
     public double targetDamageMultiplier(SessionMonster target) {
         double multiplier = 1.0;
-        if (heavyIntentMultiplier != 1.0 && "HEAVY".equals(target.getIntent())) {
+        if (heavyIntentMultiplier != 1.0 && MonsterIntent.HEAVY.equals(target.getIntent())) {
             multiplier *= heavyIntentMultiplier;
         }
         if (afflictedMultiplier != 1.0 && isAfflicted(target.getBuffs())) {

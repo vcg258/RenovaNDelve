@@ -1,5 +1,7 @@
 package com.renovandelve.ai.tools;
 
+import com.renovandelve.game.engine.StatusEffect;
+import com.renovandelve.game.engine.MonsterIntent;
 import com.renovandelve.game.domain.GameCharacterEntity;
 import com.renovandelve.game.domain.GameEquipmentEntity;
 import com.renovandelve.member.domain.MemberEntity;
@@ -146,8 +148,8 @@ public class PlayerContextTools {
                     switch (monster.getMonsterType()) { case 2 -> "보스"; case 1 -> "엘리트"; default -> "일반"; },
                     monster.getCurrentHp(), monster.getMaxHp(), monster.getAtk(), monster.getDef(), buffs,
                     switch (String.valueOf(monster.getIntent())) {
-                        case "HEAVY" -> "강공(피해 1.6배)";
-                        case "GUARD" -> "방어 태세(타격 피해 절반, 공격 안 함)";
+                        case MonsterIntent.HEAVY -> "강공(피해 1.6배)";
+                        case MonsterIntent.GUARD -> "방어 태세(타격 피해 절반, 공격 안 함)";
                         default -> "일반 공격";
                     },
                     monster.isEnraged() ? " [격노]" : "",
@@ -374,13 +376,7 @@ public class PlayerContextTools {
      * @return 한국어 이름
      */
     private String koreanBuff(String buff) {
-        return switch (buff) {
-            case "BLEED" -> "출혈";
-            case "BURN" -> "화상";
-            case "POISON" -> "독";
-            case "STUN" -> "기절";
-            default -> buff;
-        };
+        return StatusEffect.labelOf(buff);
     }
 
     /**

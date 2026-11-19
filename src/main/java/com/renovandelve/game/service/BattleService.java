@@ -1,5 +1,6 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.game.dto.response.BattleKeywordDTO;
 import com.renovandelve.game.domain.GameSkillSlotEntity;
 import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.game.engine.SessionMonster;
@@ -81,4 +82,19 @@ public interface BattleService {
      * @param cooldownReduction 유물로 인한 쿨타임 감소량
      */
     void updateCoolTimes(List<GameSkillSlotEntity> slots, Long usedSlotId, int cooldownReduction);
+
+    /**
+     * 모든 스킬의 쿨타임을 n턴만큼 줄인다 (숨 고르기). 유물의 쿨타임 감소는 스킬을 쓴 직후에만 작용하므로 여기서는 쓰지 않는다.
+     *
+     * @param slots 스킬 슬롯
+     * @param turns 줄일 턴 수
+     */
+    void tickCooldowns(List<GameSkillSlotEntity> slots, int turns);
+
+    /**
+     * 전투 키워드(상태이상, 격노) 설명. 화면과 AI 도구가 규칙 설명을 따로 적지 않도록 서버가 내려준다.
+     *
+     * @return 키워드 목록
+     */
+    List<BattleKeywordDTO> keywords();
 }
