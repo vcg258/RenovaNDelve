@@ -47,7 +47,7 @@ class MemberContactTest {
                 mock(TokenRevocationService.class), passwordEncoder, mock(PersonalDataService.class),
                 mock(CollectionMapper.class));
         when(memberRepository.save(any(MemberEntity.class))).thenAnswer(call -> call.getArgument(0));
-        when(memberRepository.saveAndFlush(any(MemberEntity.class))).thenAnswer(call -> call.getArgument(0));
+        when(memberRepository.save(any(MemberEntity.class))).thenAnswer(call -> call.getArgument(0));
     }
 
     private SignupRequest signup(String name, String email) {
@@ -59,7 +59,7 @@ class MemberContactTest {
     @Test
     @DisplayName("가입: 확인과 저장 사이에 같은 값으로 먼저 가입돼 DB 제약에 걸리면 400용 예외로 바꾼다")
     void signupRaceBecomesBadRequest() {
-        when(memberRepository.saveAndFlush(any(MemberEntity.class)))
+        when(memberRepository.save(any(MemberEntity.class)))
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("uk_member_email"));
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> memberService.signup(signup("김용사", "hero@example.com")))
@@ -73,7 +73,7 @@ class MemberContactTest {
         memberService.signup(signup(" 김용사 ", "  Hero@Example.COM "));
 
         ArgumentCaptor<MemberEntity> saved = ArgumentCaptor.forClass(MemberEntity.class);
-        verify(memberRepository).saveAndFlush(saved.capture());
+        verify(memberRepository).save(saved.capture());
         assertThat(saved.getValue().getName()).isEqualTo("김용사");
         assertThat(saved.getValue().getEmail()).isEqualTo("hero@example.com");
         assertThat(saved.getValue().getPolicyVersion()).isEqualTo(PersonalDataService.POLICY_VERSION);
