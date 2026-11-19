@@ -1,5 +1,6 @@
 package com.renovandelve.member.service;
 
+import com.renovandelve.global.exception.BusinessException;
 import com.renovandelve.global.mail.MailService;
 
 import com.renovandelve.member.domain.MemberEntity;
@@ -224,7 +225,7 @@ class AccountRecoveryServiceTest {
         String before = member.getPasswordHash();
 
         assertThatThrownBy(() -> service.resetPassword("USED", "newPass456"))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("만료");
 
         assertThat(member.getPasswordHash()).isEqualTo(before);
@@ -240,7 +241,7 @@ class AccountRecoveryServiceTest {
         member.withdraw();
 
         assertThatThrownBy(() -> service.resetPassword("TOKEN123", "newPass456"))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class);
         verify(memberRepository, never()).save(any());
     }
 }

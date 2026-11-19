@@ -1,5 +1,6 @@
 package com.renovandelve.member.service;
 
+import com.renovandelve.global.exception.BusinessException;
 import com.renovandelve.collection.mapper.CollectionMapper;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.member.dto.request.ContactChangeRequest;
@@ -63,7 +64,7 @@ class MemberContactTest {
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("uk_member_email"));
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> memberService.signup(signup("김용사", "hero@example.com")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("이미 사용 중");
     }
 
@@ -85,7 +86,7 @@ class MemberContactTest {
         when(memberRepository.existsByEmail("hero@example.com")).thenReturn(true);
 
         assertThatThrownBy(() -> memberService.signup(signup("김용사", "HERO@example.com")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("이메일");
         verify(memberRepository, never()).save(any());
     }
@@ -128,10 +129,10 @@ class MemberContactTest {
 
         assertThatThrownBy(() -> memberService.changeContact(member,
                 new ContactChangeRequest("김용사", "attacker@example.com", "wrong-password")))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> memberService.changeContact(member,
                 new ContactChangeRequest("김용사", "attacker@example.com", null)))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class);
 
         assertThat(member.getEmail()).isEqualTo("old@example.com");
         verify(memberRepository, never()).save(any());
@@ -146,7 +147,7 @@ class MemberContactTest {
 
         assertThatThrownBy(() -> memberService.changeContact(member,
                 new ContactChangeRequest("김용사", "taken@example.com", "password123")))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("이메일");
 
         memberService.changeContact(member, new ContactChangeRequest("김전사", "hero@example.com", "password123"));

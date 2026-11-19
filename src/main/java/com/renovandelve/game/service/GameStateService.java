@@ -5,7 +5,6 @@ import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.game.dto.request.NewGameRequest;
 import com.renovandelve.game.dto.response.SetupOptionsDTO;
 
-import java.util.Optional;
 
 public interface GameStateService {
 
@@ -20,10 +19,6 @@ public interface GameStateService {
      */
     GameStateEntity createNewGame(NewGameRequest request, MemberEntity member);
 
-    /**
-     * 진행 중인 게임 조회 (이어하기)
-     */
-    Optional<GameStateEntity> findActiveGame(MemberEntity member);
 
     /**
      * 진행 중인 게임 포기 (isActive = false)

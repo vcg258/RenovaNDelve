@@ -1,5 +1,7 @@
 package com.renovandelve.member.service;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import com.renovandelve.game.mapper.GameMapper;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.ranking.domain.RankingEntity;
@@ -24,7 +26,6 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 
 /**
  * 개인정보 생명주기 처리 (열람 / 삭제 / 보관 기간 경과 파기).
@@ -111,7 +112,7 @@ public class PersonalDataService {
     @Transactional(readOnly = true)
     public Map<String, Object> export(MemberEntity member) {
         MemberEntity managed = memberRepository.findById(member.getMemberId())
-                .orElseThrow(() -> new NoSuchElementException("회원을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
 
         Map<String, Object> account = new LinkedHashMap<>();
         account.put("loginId", managed.getLoginId());

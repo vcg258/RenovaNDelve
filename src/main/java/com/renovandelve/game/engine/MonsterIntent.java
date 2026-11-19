@@ -1,7 +1,7 @@
 package com.renovandelve.game.engine;
 
 /**
- * 몬스터의 이번 턴 행동 예고({@link SessionMonster#getIntent()}).
+ * 몬스터의 이번 턴 행동 예고({@code SessionMonster.intent}).
  * 세션(Redis)과 응답에는 문자열로 저장되므로 문자열 상수로 둔다. 전투 규칙({@code BattleServiceImpl})과
  * 스킬 조합({@link SkillSynergies}), AI 도구가 모두 이 값을 쓴다.
  */

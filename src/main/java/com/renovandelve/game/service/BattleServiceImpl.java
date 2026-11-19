@@ -315,11 +315,10 @@ public class BattleServiceImpl implements BattleService {
     }
 
     /**
-     * 한 턴이 지난 쿨타임을 반영한다. 방금 쓴 스킬은 쿨타임을 걸고, 나머지는 1턴씩 줄인다.
+     * 모든 스킬의 쿨타임을 주어진 턴 수만큼 줄인다 (숨 고르기 등).
      *
-     * @param slots             스킬 슬롯
-     * @param usedSlotId        이번 턴에 쓴 슬롯 (없으면 null)
-     * @param cooldownReduction 유물로 줄어드는 쿨타임
+     * @param slots 스킬 슬롯
+     * @param turns 줄일 턴 수
      */
     @Override
     public void tickCooldowns(List<GameSkillSlotEntity> slots, int turns) {

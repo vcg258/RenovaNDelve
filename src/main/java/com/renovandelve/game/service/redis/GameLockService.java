@@ -1,5 +1,7 @@
 package com.renovandelve.game.service.redis;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -51,7 +53,7 @@ public class GameLockService {
 
         Boolean acquired = redisTemplate.opsForValue().setIfAbsent(key, token, LOCK_TTL);
         if (!Boolean.TRUE.equals(acquired)) {
-            throw new IllegalStateException("이전 행동을 처리하는 중입니다. 잠시 후 다시 시도해주세요.");
+            throw new BusinessException(ErrorCode.CONCURRENT_ACTION);
         }
         try {
             return action.get();

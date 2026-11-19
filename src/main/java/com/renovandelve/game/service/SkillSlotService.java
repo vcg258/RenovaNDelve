@@ -1,5 +1,7 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import com.renovandelve.member.domain.MemberEntity;
 
 import com.renovandelve.game.domain.GameSkillSlotEntity;
@@ -24,10 +26,7 @@ import java.util.NoSuchElementException;
 @RequiredArgsConstructor
 public class SkillSlotService {
     public static final int MAX_SLOTS = GameStateEntity.MAX_SKILL_SLOTS;
-    public static final String FULL_MESSAGE = GameStateEntity.SKILL_FULL_MESSAGE;
     public static final int MIN_SLOTS_TO_DROP_BASIC = GameStateEntity.MIN_SLOTS_TO_DROP_BASIC;
-    public static final String BASIC_LOCKED_MESSAGE = GameStateEntity.BASIC_LOCKED_MESSAGE;
-    public static final String LAST_SKILL_MESSAGE = GameStateEntity.LAST_SKILL_MESSAGE;
 
     private final CollectionService collectionService;
     private final GameSkillSlotRepository gameSkillSlotRepository;
@@ -50,26 +49,24 @@ public class SkillSlotService {
      * @param skillId       배울 스킬
      * @param replaceSlotId 버릴 슬롯의 ID. null이면 빈 슬롯에 추가한다
      * @return 새로 배운 스킬
-     * @throws NoSuchElementException 스킬이 없으면
-     * @throws IllegalStateException  이미 가진 스킬, 가득 참, 기본 공격 보호에 걸리면
+     * @throws BusinessException 스킬이 없으면, 이미 가진 스킬, 가득 참, 기본 공격 보호에 걸리면
      */
     public SkillEntity learn(GameStateEntity gameState, Long skillId, Long replaceSlotId) {
         if (gameState.hasSkill(skillId)) {
-            throw new IllegalStateException("이미 보유 중인 스킬입니다.");
+            throw new BusinessException(ErrorCode.SKILL_ALREADY_OWNED);
         }
         SkillEntity skill = skillRepository.findById(skillId)
-                .orElseThrow(() -> new NoSuchElementException("스킬을 찾을 수 없습니다."));
-
-        // 배우는 순간 도감에 남긴다. 원정 끝에만 등록하면 도중에 교체한 스킬이 빠진다
-        registerInCollection(gameState, skill);
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND, "스킬을 찾을 수 없습니다."));
 
         if (replaceSlotId != null) {
             gameState.replaceSkill(replaceSlotId, skill);
-            return skill;
+        } else {
+            GameSkillSlotEntity slot = gameState.learnSkill(skill);
+            // cascade로도 저장되지만 커밋 시점이라, 같은 응답에 담을 슬롯 ID를 지금 받기 위해 바로 저장한다
+            gameSkillSlotRepository.save(slot);
         }
-        GameSkillSlotEntity slot = gameState.learnSkill(skill);
-        // cascade로도 저장되지만 커밋 시점이라, 같은 응답에 담을 슬롯 ID를 지금 받기 위해 바로 저장한다
-        gameSkillSlotRepository.save(slot);
+        // 배운 뒤에 도감에 남긴다. 원정 끝에만 등록하면 도중에 교체한 스킬이 빠진다
+        registerInCollection(gameState, skill);
         return skill;
     }
 
@@ -89,7 +86,7 @@ public class SkillSlotService {
      * @param gameState 스킬을 버릴 게임
      * @param slotId    버릴 스킬이 든 슬롯
      * @return 버린 스킬
-     * @throws IllegalStateException 마지막 한 개이거나 기본 공격 보호에 걸리면
+     * @throws BusinessException 마지막 한 개이거나 기본 공격 보호에 걸리면
      */
     public SkillEntity discard(GameStateEntity gameState, Long slotId) {
         return gameState.forgetSkill(slotId);

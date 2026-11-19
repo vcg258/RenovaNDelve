@@ -1,5 +1,7 @@
 package com.renovandelve.game.engine;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -67,7 +69,7 @@ public enum Pact {
             try {
                 result.add(valueOf(code.trim().toUpperCase()));
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("알 수 없는 서약: " + code);
+                throw new BusinessException(ErrorCode.UNKNOWN_PACT, code);
             }
         }
         return result;

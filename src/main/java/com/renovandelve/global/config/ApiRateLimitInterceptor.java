@@ -56,7 +56,7 @@ public class ApiRateLimitInterceptor implements HandlerInterceptor {
                 response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfter));
                 response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                 response.setCharacterEncoding("UTF-8");
-                response.getWriter().println("{\"error\": \"" + rule.message() + "\"}");
+                response.getWriter().println("{\"code\": \"TOO_MANY_REQUESTS\", \"error\": \"" + rule.message() + "\"}");
                 return false;
             }
         }

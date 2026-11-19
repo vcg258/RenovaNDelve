@@ -1,5 +1,7 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import com.renovandelve.ai.service.AiCallRunner;
 import org.mockito.Spy;
 import com.renovandelve.catalog.mapper.CatalogMapperImpl;
@@ -236,7 +238,7 @@ class GameEngineServiceImplTest {
         session.setPhase(GameSession.PHASE_REWARD);
 
         assertThatThrownBy(() -> engine.nextNode(member, "SAFE"))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(BusinessException.class);
         verify(monsterRagService, never()).chat(anyInt(), anyInt(), anyString());
     }
 
@@ -311,7 +313,7 @@ class GameEngineServiceImplTest {
         session.setChoices(new ArrayList<>(List.of(choice("HEAVEN", "NOTHING"))));
 
         assertThatThrownBy(() -> engine.chooseEncounter(member, new EncounterChoiceRequest(5)))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test
@@ -533,10 +535,10 @@ class GameEngineServiceImplTest {
         options.setSkillIds(new ArrayList<>(List.of(42L)));
         session.setReward(options);
         when(skillSlotService.learn(gameState, 42L, null))
-                .thenThrow(new IllegalStateException(SkillSlotService.FULL_MESSAGE));
+                .thenThrow(new BusinessException(ErrorCode.SKILL_SLOT_FULL, SkillSlotService.MAX_SLOTS));
 
         assertThatThrownBy(() -> engine.selectReward(member, new RewardSelectRequest("SKILL", 42L, null)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(BusinessException.class);
 
         assertThat(session.getPhase()).isEqualTo(GameSession.PHASE_REWARD);
         assertThat(session.getReward()).isNotNull();
@@ -550,7 +552,7 @@ class GameEngineServiceImplTest {
         session.setReward(new RewardOptions());
 
         assertThatThrownBy(() -> engine.selectReward(member, new RewardSelectRequest("SKILL", 42L, 5L)))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BusinessException.class);
         verify(skillSlotService, never()).learn(any(), any(), any());
     }
 
@@ -590,7 +592,7 @@ class GameEngineServiceImplTest {
     void passIsRejectedWhileASkillIsReady() {
         battleGame("BATTLE", 2, 0, 1);
 
-        assertThatThrownBy(() -> engine.passTurn(member)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> engine.passTurn(member)).isInstanceOf(BusinessException.class);
         verify(battleService, never()).monsterAttackDamage(any(), anyInt(), anyInt(), anyDouble(), any());
     }
 
@@ -614,7 +616,7 @@ class GameEngineServiceImplTest {
     void cannotFleeFromBoss() {
         battleGame("BOSS", 0);
 
-        assertThatThrownBy(() -> engine.flee(member)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> engine.flee(member)).isInstanceOf(BusinessException.class);
         assertThat(session.getPhase()).isEqualTo(GameSession.PHASE_BATTLE);
     }
 
@@ -654,7 +656,7 @@ class GameEngineServiceImplTest {
         battleGame("BATTLE", 0, 0, 0);
 
         assertThatThrownBy(() -> engine.discardSkill(member, new SkillDiscardRequest(2L)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(BusinessException.class);
         verify(skillSlotService, never()).discard(any(), any());
     }
 
@@ -971,7 +973,7 @@ class GameEngineServiceImplTest {
         gameState.gainGold(500);
         session.setPhase(GameSession.PHASE_EXPLORE);
 
-        assertThatThrownBy(() -> engine.breakContract(member)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> engine.breakContract(member)).isInstanceOf(BusinessException.class);
 
         for (int i = 0; i < 3; i++) gameState.gainAffinity(com.renovandelve.game.engine.Faction.HEAVEN);
         engine.breakContract(member);

@@ -1,5 +1,7 @@
 package com.renovandelve.member.service;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import com.renovandelve.global.mail.MailService;
 
 import com.renovandelve.member.domain.MemberEntity;
@@ -132,7 +134,7 @@ public class AccountRecoveryService {
 
     /**
      * 비밀번호 재설정 확정. 토큰은 여기서 소비되며, 실패하든 성공하든 다시 쓸 수 없다.
-     * @throws IllegalArgumentException 토큰이 없거나 만료됐거나 이미 쓰인 경우
+     * @throws BusinessException 토큰이 없거나 만료됐거나 이미 쓰인 경우
      */
     @Transactional
     public void resetPassword(String token, String newPassword) {
@@ -141,7 +143,7 @@ public class AccountRecoveryService {
                 .filter(found -> found.getStatus() != MemberStatus.WITHDRAWN)
                 .orElse(null);
         if (member == null) {
-            throw new IllegalArgumentException("재설정 링크가 만료되었거나 이미 사용되었습니다. 비밀번호 찾기를 다시 진행해주세요.");
+            throw new BusinessException(ErrorCode.RESET_TOKEN_INVALID);
         }
 
         member.changePassword(passwordEncoder.encode(newPassword));

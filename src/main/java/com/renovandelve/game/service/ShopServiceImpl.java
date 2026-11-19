@@ -1,5 +1,7 @@
 package com.renovandelve.game.service;
 
+import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.exception.ErrorCode;
 import com.renovandelve.game.domain.GameEquipmentEntity;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.catalog.domain.armorentity.ArmorEntity;
@@ -8,7 +10,6 @@ import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.catalog.domain.helmetentity.HelmetEntity;
 import com.renovandelve.catalog.domain.relicentity.Rarity;
 import com.renovandelve.catalog.domain.relicentity.RelicEntity;
-import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
 import com.renovandelve.game.engine.Pact;
 import com.renovandelve.game.engine.ShopStockItem;
@@ -124,8 +125,7 @@ public class ShopServiceImpl implements ShopService {
      * @param member        회원 (도감 등록용)
      * @param stockItem     산 진열품
      * @param replaceSlotId 버릴 스킬 슬롯 (없으면 null)
-     * @throws IllegalStateException 슬롯이 가득 찼는데 버릴 슬롯이 없으면
-     * @throws IllegalArgumentException 골드가 부족하면
+     * @throws BusinessException 슬롯이 가득 찼는데 버릴 슬롯이 없으면, 골드가 부족하면
      */
     @Override
     @Transactional
@@ -135,7 +135,7 @@ public class ShopServiceImpl implements ShopService {
         if ("SKILL".equals(stockItem.getItemType()) && replaceSlotId == null
                 && gameState.getGameSkillSlot() != null
                 && gameState.getGameSkillSlot().size() >= SkillSlotService.MAX_SLOTS) {
-            throw new IllegalStateException(SkillSlotService.FULL_MESSAGE);
+            throw new BusinessException(ErrorCode.SKILL_SLOT_FULL, SkillSlotService.MAX_SLOTS);
         }
         // 골드 차감 (부족 시 예외)
         gameState.deductGold(stockItem.getPrice());
@@ -165,7 +165,7 @@ public class ShopServiceImpl implements ShopService {
      */
     private void purchaseWeapon(GameStateEntity gameState, MemberEntity member, Long weaponId) {
         WeaponEntity weapon = weaponRepository.findById(weaponId)
-                .orElseThrow(() -> new NoSuchElementException("무기를 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND, "무기를 찾을 수 없습니다."));
 
         // 장비 교체와 능력치 재계산은 루트가 맡는다. 관리 중인 엔티티라 커밋 때 UPDATE된다
         gameState.equipWeapon(weapon);
@@ -182,7 +182,7 @@ public class ShopServiceImpl implements ShopService {
      */
     private void purchaseArmor(GameStateEntity gameState, MemberEntity member, Long armorId) {
         ArmorEntity armor = armorRepository.findById(armorId)
-                .orElseThrow(() -> new NoSuchElementException("갑옷을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND, "갑옷을 찾을 수 없습니다."));
 
         // 장비 교체와 능력치 재계산은 루트가 맡는다. 관리 중인 엔티티라 커밋 때 UPDATE된다
         gameState.equipArmor(armor);
@@ -199,7 +199,7 @@ public class ShopServiceImpl implements ShopService {
      */
     private void purchaseHelmet(GameStateEntity gameState, MemberEntity member, Long helmetId) {
         HelmetEntity helmet = helmetRepository.findById(helmetId)
-                .orElseThrow(() -> new NoSuchElementException("투구를 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND, "투구를 찾을 수 없습니다."));
 
         // 장비 교체와 능력치 재계산은 루트가 맡는다. 관리 중인 엔티티라 커밋 때 UPDATE된다
         gameState.equipHelmet(helmet);
@@ -208,7 +208,7 @@ public class ShopServiceImpl implements ShopService {
     }
 
     /**
-     * 스킬을 배우고 도감에 등록한다.
+     * 스킬을 배운다 (도감 등록 포함).
      *
      * @param gameState     게임
      * @param member        회원
@@ -216,9 +216,8 @@ public class ShopServiceImpl implements ShopService {
      * @param replaceSlotId 버릴 스킬 슬롯 (없으면 null)
      */
     private void purchaseSkill(GameStateEntity gameState, MemberEntity member, Long skillId, Long replaceSlotId) {
-        SkillEntity skill = skillSlotService.learn(gameState, skillId, replaceSlotId);
-
-        collectionService.registerSkill(member, skill);
+        // 도감 등록은 learn이 배우는 순간 한다
+        skillSlotService.learn(gameState, skillId, replaceSlotId);
     }
 
     /**
@@ -227,15 +226,15 @@ public class ShopServiceImpl implements ShopService {
      * @param gameState 게임
      * @param member    회원
      * @param relicId   유물 ID
-     * @throws IllegalStateException 이미 가진 유물이면
+     * @throws BusinessException 이미 가진 유물이면
      */
     private void purchaseRelic(GameStateEntity gameState, MemberEntity member, Long relicId) {
         if (gameState.ownsRelic(relicId)) {
-            throw new IllegalStateException("이미 보유 중인 유물입니다.");
+            throw new BusinessException(ErrorCode.RELIC_ALREADY_OWNED);
         }
 
         RelicEntity relic = relicRepository.findById(relicId)
-                .orElseThrow(() -> new NoSuchElementException("유물을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND, "유물을 찾을 수 없습니다."));
 
         // cascade로도 저장되지만, 구매 응답에 담을 칸 ID를 지금 받기 위해 바로 저장한다
         gameRelicInventoryRepository.save(gameState.addRelic(relic));
@@ -252,7 +251,7 @@ public class ShopServiceImpl implements ShopService {
      */
     private void purchaseConsumable(GameStateEntity gameState, MemberEntity member, Long consumableId) {
         ConsumableEntity consumable = consumableRepository.findById(consumableId)
-                .orElseThrow(() -> new NoSuchElementException("소모품을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ITEM_NOT_FOUND, "소모품을 찾을 수 없습니다."));
 
         gameConsumableInventoryRepository.save(gameState.addConsumable(consumable));
 
