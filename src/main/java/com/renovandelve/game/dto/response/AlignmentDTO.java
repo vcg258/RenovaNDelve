@@ -1,11 +1,6 @@
 package com.renovandelve.game.dto.response;
 
-import com.renovandelve.game.engine.Alignment;
-import com.renovandelve.game.engine.Faction;
-
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.IntStream;
 
 /**
  * 플레이어 성향 (천상 / 마계 / 인간).
@@ -28,26 +23,5 @@ public record AlignmentDTO(
     }
 
     public record TierInfo(int tier, int requiredScore, String description) {
-    }
-
-    private static final List<FactionInfo> FACTIONS = Arrays.stream(Faction.values())
-            .map(faction -> new FactionInfo(faction.name(), faction.label(), faction.tendency(),
-                    IntStream.rangeClosed(1, Alignment.MAX_TIER)
-                            .mapToObj(tier -> new TierInfo(tier, Alignment.TIER_THRESHOLDS[tier - 1],
-                                    Alignment.blessingText(faction, tier)))
-                            .toList()))
-            .toList();
-
-    /**
-     * 가호 계산 결과를 화면용으로 옮긴다. 세 세력의 단계표(말풍선용)를 함께 싣는다.
-     *
-     * @param alignment 성향과 가호
-     * @return 화면용 성향 정보
-     */
-    public static AlignmentDTO from(Alignment alignment) {
-        Faction dominant = alignment.dominant();
-        return new AlignmentDTO(alignment.heaven(), alignment.abyss(), alignment.human(),
-                dominant == null ? null : dominant.name(), alignment.blessing(),
-                alignment.tier(), alignment.nextTierAt(), FACTIONS);
     }
 }

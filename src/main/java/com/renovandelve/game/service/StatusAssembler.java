@@ -9,8 +9,6 @@ import com.renovandelve.game.dto.GameEquipmentDTO;
 import com.renovandelve.game.dto.GameRelicInventoryDTO;
 import com.renovandelve.game.dto.GameSkillSlotDTO;
 import com.renovandelve.game.dto.GameStateDTO;
-import com.renovandelve.game.dto.response.AlignmentDTO;
-import com.renovandelve.game.dto.response.ContractDTO;
 import com.renovandelve.game.dto.response.StatusDTO;
 import com.renovandelve.game.engine.KingdomState;
 import com.renovandelve.game.engine.Pact;
@@ -99,9 +97,10 @@ public class StatusAssembler {
                 .maxSkillSlots(SkillSlotService.MAX_SLOTS)
                 .minSlotsToDropBasic(SkillSlotService.MIN_SLOTS_TO_DROP_BASIC)
                 .pacts(Pact.titles(Pact.parse(gameState.getPacts())))
-                .alignment(AlignmentDTO.from(gameState.alignment()))
-                .contract(ContractDTO.of(gameState.demonContract(), gameState.getHeavenAffinity(), gameState.getGold(),
-                        gameState.getCurrentStage()))
+                .alignment(gameMapper.toAlignmentDTO(gameState.alignment()))
+                .contract(gameState.demonContract() == null ? null
+                        : gameMapper.toContractDTO(gameState.demonContract(), gameState.canBreakContract(),
+                                gameState.contractBreakCost()))
                 .kingdom(activeKingdom(gameState) == null ? null : activeKingdom(gameState).title())
                 .kingdomEffects(activeKingdom(gameState) == null ? List.of() : activeKingdom(gameState).effects())
                 .build();

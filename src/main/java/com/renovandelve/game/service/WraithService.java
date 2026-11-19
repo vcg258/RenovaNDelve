@@ -7,9 +7,9 @@ import com.renovandelve.game.domain.GameSkillSlotEntity;
 import com.renovandelve.game.domain.WraithEntity;
 import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.game.dto.response.WraithDTO;
-import com.renovandelve.game.engine.Faction;
 import com.renovandelve.game.engine.SessionMonster;
 import com.renovandelve.game.repository.WraithRepository;
+import com.renovandelve.game.mapper.GameMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,6 +45,7 @@ public class WraithService {
 
     private final WraithRepository wraithRepository;
     private final Random random = new Random();
+    private final GameMapper gameMapper;
 
     /**
      * 패배한 원정을 망령으로 남긴다. 기다리던 망령이 있으면 흩어진다.
@@ -59,20 +60,8 @@ public class WraithService {
         Long memberId = gameState.getMember().getMemberId();
         wraithRepository.findByMemberIdAndStatus(memberId, WraithEntity.Status.ACTIVE).forEach(WraithEntity::fade);
 
-        int deathNode = gameState.getCurrentNodeId() == null ? 1 : gameState.getCurrentNodeId().intValue();
-        Faction dominant = gameState.alignment().dominant();
-        WraithEntity wraith = WraithEntity.builder()
-                .memberId(memberId)
-                .sourceGameStateId(gameState.getGameStateId())
-                .stage(gameState.getCurrentStage())
-                .node(WraithEntity.appearNode(deathNode))
-                .level(level(gameState))
-                .killerName(killerName)
-                .skills(mainSkills(gameState.getGameSkillSlot()))
-                .relicIds(relicIds(gameState.getGameRelicInventory()))
-                .faction(dominant == null ? null : dominant.name())
-                .memories(memories)
-                .build();
+        WraithEntity wraith = WraithEntity.fromDeath(gameState, killerName, level(gameState),
+                mainSkills(gameState.getGameSkillSlot()), relicIds(gameState.getGameRelicInventory()), memories);
         wraithRepository.save(wraith);
         log.info("망령 기록 memberId={} stage={} node={}", memberId, wraith.getStage(), wraith.getNode());
         return wraith;
@@ -103,7 +92,7 @@ public class WraithService {
     @Transactional(readOnly = true)
     public Optional<WraithDTO> current(Long memberId) {
         return wraithRepository.findFirstByMemberIdAndStatusOrderByCreatedAtDesc(memberId, WraithEntity.Status.ACTIVE)
-                .map(WraithDTO::from);
+                .map(gameMapper::toWraithDTO);
     }
 
     /**

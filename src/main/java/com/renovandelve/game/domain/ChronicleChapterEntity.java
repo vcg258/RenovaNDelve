@@ -1,5 +1,7 @@
 package com.renovandelve.game.domain;
 
+import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
+import com.renovandelve.game.engine.Faction;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -70,6 +72,33 @@ public class ChronicleChapterEntity {
         this.node = (short) node;
         this.faction = faction;
         this.difficulty = difficulty;
+    }
+
+    /**
+     * 끝난 원정으로 연대기의 한 장을 쓴다. 스테이지·노드·세력·난이도는 원정에서 읽는다.
+     *
+     * @param gameState 끝난 원정
+     * @param chapterNo 몇 번째 장인지 (1부터)
+     * @param cleared   클리어했으면 true
+     * @param title     장 제목
+     * @param body      본문
+     * @return 새 장
+     */
+    public static ChronicleChapterEntity write(GameStateEntity gameState, int chapterNo, boolean cleared,
+                                               String title, String body) {
+        Faction faction = gameState.alignment().dominant();
+        return ChronicleChapterEntity.builder()
+                .memberId(gameState.getMember().getMemberId())
+                .gameStateId(gameState.getGameStateId())
+                .chapterNo(chapterNo)
+                .title(title)
+                .body(body)
+                .cleared(cleared)
+                .stage(gameState.getCurrentStage())
+                .node(gameState.getCurrentNodeId() == null ? 0 : gameState.getCurrentNodeId().intValue())
+                .faction(faction == null ? null : faction.name())
+                .difficulty(gameState.getDifficulty().name())
+                .build();
     }
 
     @PrePersist

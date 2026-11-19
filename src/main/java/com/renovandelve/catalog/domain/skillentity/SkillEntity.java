@@ -14,8 +14,8 @@ import java.util.List;
 @Entity
 @Builder
 @ToString(exclude = {"gameSkillSlot", "collectionSkill"})
-@NoArgsConstructor
-@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "skill")
 public class SkillEntity {
 

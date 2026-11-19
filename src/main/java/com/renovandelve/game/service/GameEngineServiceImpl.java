@@ -39,7 +39,6 @@ import com.renovandelve.game.dto.response.GameViewDTO;
 import com.renovandelve.game.dto.response.NodeDTO;
 import com.renovandelve.game.dto.response.RewardViewDTO;
 import com.renovandelve.ai.dto.response.RunReviewDTO;
-import com.renovandelve.game.dto.response.RunStatsDTO;
 import com.renovandelve.game.dto.response.ShopItemDTO;
 import com.renovandelve.game.dto.response.StatusDTO;
 import com.renovandelve.game.dto.response.TurnResultDTO;
@@ -475,7 +474,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         gameSessionService.save(session);
         gameStateRepository.save(gameState);
 
-        return TurnResultDTO.fled(log, statusAssembler.toStatusDTO(gameState), session.getPhase());
+        return fledResult(log, statusAssembler.toStatusDTO(gameState), session.getPhase());
     }
 
     /**
@@ -527,7 +526,7 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         if (!inBattle) {
             gameSessionService.save(session);
-            return TurnResultDTO.ongoing(log, toBattleMonsterDTOs(session.getMonsters()),
+            return ongoingResult(log, toBattleMonsterDTOs(session.getMonsters()),
                     statusAssembler.toStatusDTO(gameState), session.getPhase());
         }
 
@@ -1304,7 +1303,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         // 다음 턴 행동 예고 (플레이어는 이것을 보고 공격/방어/대상을 정한다)
         battleService.rollIntents(session.getMonsters());
         gameSessionService.save(session);
-        return TurnResultDTO.ongoing(log, toBattleMonsterDTOs(session.getMonsters()),
+        return ongoingResult(log, toBattleMonsterDTOs(session.getMonsters()),
                 statusAssembler.toStatusDTO(gameState), session.getPhase());
     }
 
@@ -1336,7 +1335,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         terminate(gameState, session, false);
         log.add("당신은 쓰러졌다... 모험이 여기서 끝났다.");
         gameSessionService.save(session);
-        return TurnResultDTO.lost(log, toBattleMonsterDTOs(session.getMonsters()),
+        return lostResult(log, toBattleMonsterDTOs(session.getMonsters()),
                 statusAssembler.toStatusDTO(gameState), session.getPhase());
     }
 
@@ -1456,7 +1455,7 @@ public class GameEngineServiceImpl implements GameEngineService {
             remember(gameState, "[모험의 결말] 악마화된 왕을 쓰러뜨렸다. " + endingLine(gameState.alignment()));
             gameSessionService.save(session);
             gameStateRepository.save(gameState);
-            return TurnResultDTO.cleared(log, toBattleMonsterDTOs(session.getMonsters()),
+            return clearedResult(log, toBattleMonsterDTOs(session.getMonsters()),
                     statusAssembler.toStatusDTO(gameState), session.getPhase());
         }
 
@@ -1479,7 +1478,7 @@ public class GameEngineServiceImpl implements GameEngineService {
             session.setShopRerolls(0);
             gameSessionService.save(session);
             gameStateRepository.save(gameState);
-            return TurnResultDTO.won(log, toBattleMonsterDTOs(session.getMonsters()),
+            return wonResult(log, toBattleMonsterDTOs(session.getMonsters()),
                     statusAssembler.toStatusDTO(gameState), null, session.getPhase());
         }
 
@@ -1495,7 +1494,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         gameSessionService.save(session);
         gameStateRepository.save(gameState);
 
-        return TurnResultDTO.won(log, toBattleMonsterDTOs(session.getMonsters()),
+        return wonResult(log, toBattleMonsterDTOs(session.getMonsters()),
                 statusAssembler.toStatusDTO(gameState), toRewardView(session.getReward()), session.getPhase());
     }
 
@@ -1812,14 +1811,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         GameStateEntity gameState = activeGame(member);
         GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
         requirePhase(session, GameSession.PHASE_EXPLORE, "탐험 중에만 계약을 파기할 수 있습니다.");
-        DemonContract contract = gameState.demonContract();
-        if (contract == null) throw new IllegalStateException("걸린 계약이 없습니다.");
-        if (gameState.getHeavenAffinity() < DemonContract.BREAK_HEAVEN_AFFINITY) {
-            throw new IllegalStateException("천상의 성향이 %d 이상이어야 계약을 파기할 수 있습니다."
-                    .formatted(DemonContract.BREAK_HEAVEN_AFFINITY));
-        }
-        gameState.deductGold(DemonContract.breakCost(gameState.getCurrentStage()));
-        gameState.bindContract(null);
+        gameState.breakContract();
         gameStateRepository.save(gameState);
         remember(gameState, "[플레이어의 선택] 천상의 빛에 금화를 바쳐 마계와 맺은 계약을 불살랐다.");
         session.setStory("흰 불꽃이 계약서를 삼킨다. 작은 글씨는 끝내 읽히지 않은 채 재가 되었다.");
@@ -2052,7 +2044,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         return new GameSummaryDTO(cleared, gameState.getScore(), gameState.getGold(),
                 gameState.getCurrentStage(),
                 gameState.getCurrentNodeId() == null ? 0 : gameState.getCurrentNodeId(),
-                level, narrative, RunStatsDTO.from(session.getStats()));
+                level, narrative, gameMapper.toRunStatsDTO(session.getStats() == null ? new RunStats() : session.getStats()));
     }
 
     /**
@@ -2079,6 +2071,29 @@ public class GameEngineServiceImpl implements GameEngineService {
         return gameMapper.toBattleMonsterDTOs(monsters);
     }
 
+    /* 전투 한 턴의 응답. 결과 코드와 전리품·클리어 여부의 조합을 여기서만 정한다 */
+
+    private TurnResultDTO ongoingResult(List<String> log, List<BattleMonsterDTO> monsters, StatusDTO status, String phase) {
+        return new TurnResultDTO("CONTINUE", log, monsters, status, null, false, phase);
+    }
+
+    private TurnResultDTO wonResult(List<String> log, List<BattleMonsterDTO> monsters, StatusDTO status,
+                                    RewardViewDTO reward, String phase) {
+        return new TurnResultDTO("WIN", log, monsters, status, reward, false, phase);
+    }
+
+    private TurnResultDTO clearedResult(List<String> log, List<BattleMonsterDTO> monsters, StatusDTO status, String phase) {
+        return new TurnResultDTO("WIN", log, monsters, status, null, true, phase);
+    }
+
+    private TurnResultDTO lostResult(List<String> log, List<BattleMonsterDTO> monsters, StatusDTO status, String phase) {
+        return new TurnResultDTO("LOSE", log, monsters, status, null, false, phase);
+    }
+
+    private TurnResultDTO fledResult(List<String> log, StatusDTO status, String phase) {
+        return new TurnResultDTO("FLED", log, List.of(), status, null, false, phase);
+    }
+
     /**
      * 세션의 전투 노드를 응답으로 만든다 (고른 길과 그 효과 안내 포함).
      *
@@ -2086,16 +2101,16 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @return 노드
      */
     private NodeDTO battleNode(GameSession session) {
-        return NodeDTO.battle(session.getNodeType(), session.getStory(), toBattleMonsterDTOs(session.getMonsters()),
-                session.getPath(), session.getPathNote(), session.getContractNote());
+        return new NodeDTO(session.getNodeType(), session.getStory(), toBattleMonsterDTOs(session.getMonsters()),
+                null, session.getPath(), session.getPathNote(), session.getContractNote());
     }
 
     /** 조우에는 길 효과가 없으므로 path는 비운다. 고른 길이 무시됐다면 그 안내만 싣는다 */
     private NodeDTO encounterNode(GameSession session, String encounterText) {
         String type = "CONTRACT".equals(session.getNodeType()) ? "CONTRACT" : "ENCOUNTER";
-        return NodeDTO.encounter(type, session.getStory(),
+        return new NodeDTO(type, session.getStory(), null,
                 new EncounterDTO(encounterText, choiceLabels(session), choiceFactions(session)),
-                session.getPathNote(), session.getContractNote());
+                null, session.getPathNote(), session.getContractNote());
     }
 
     /**

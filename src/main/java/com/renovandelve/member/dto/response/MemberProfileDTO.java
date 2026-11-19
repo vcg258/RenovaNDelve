@@ -1,7 +1,5 @@
 package com.renovandelve.member.dto.response;
 
-import com.renovandelve.member.domain.MemberEntity;
-
 import java.time.LocalDateTime;
 
 /**
@@ -21,19 +19,4 @@ public record MemberProfileDTO(
         int collectionCount,
         int bestScore
 ) {
-    /**
-     * 회원을 내 정보 화면용으로 옮긴다. 비밀번호 해시는 싣지 않고 "비밀번호가 있는지"만 싣는다.
-     *
-     * @param member          회원
-     * @param collectionCount 도감 수집 수
-     * @param bestScore       최고 점수
-     * @return 프로필
-     */
-    public static MemberProfileDTO of(MemberEntity member, int collectionCount, int bestScore) {
-        return new MemberProfileDTO(
-                member.getMemberId(), member.getLoginId(), member.displayName(),
-                member.getName(), member.getEmail(), member.getPasswordHash() != null,
-                member.getRole().name(), member.getStatus().name(),
-                member.getLastLoginAt(), member.getCreatedAt(), collectionCount, bestScore);
-    }
 }

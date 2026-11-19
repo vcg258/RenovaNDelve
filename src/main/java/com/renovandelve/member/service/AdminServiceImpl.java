@@ -20,6 +20,7 @@ import com.renovandelve.ranking.repository.RankingRepository;
 import com.renovandelve.game.service.redis.GameSessionService;
 import com.renovandelve.auth.service.redis.TokenRevocationService;
 import com.renovandelve.auth.service.redis.SecurityTokenService;
+import com.renovandelve.member.mapper.MemberMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -42,6 +43,7 @@ public class AdminServiceImpl implements AdminService {
     private final SecurityTokenService securityTokenService;
     private final TokenRevocationService tokenRevocationService;
     private final RankingMapper rankingMapper;
+    private final MemberMapper memberMapper;
 
     /**
      * 회원 목록을 최근 가입 순으로 검색한다. 페이지 크기는 1~100으로 제한한다.
@@ -69,7 +71,7 @@ public class AdminServiceImpl implements AdminService {
                 .forEach(game -> playingMemberIds.add(game.getMember().getMemberId()));
 
         return PageResponse.of(result, member ->
-                MemberSummaryDTO.of(member, playingMemberIds.contains(member.getMemberId())));
+                memberMapper.toSummaryDTO(member, playingMemberIds.contains(member.getMemberId())));
     }
 
     /**
@@ -118,7 +120,7 @@ public class AdminServiceImpl implements AdminService {
         }
 
         memberRepository.save(target);
-        return MemberSummaryDTO.of(target, false);
+        return memberMapper.toSummaryDTO(target, false);
     }
 
     /**
@@ -158,7 +160,7 @@ public class AdminServiceImpl implements AdminService {
         tokenRevocationService.revoke(target.getLoginId()); // 발급된 AccessToken도 즉시 무효
         log.info("[ADMIN] 권한 변경 target={} -> {} by={}", target.getLoginId(), newRole, actor.getLoginId());
 
-        return MemberSummaryDTO.of(target, false);
+        return memberMapper.toSummaryDTO(target, false);
     }
 
     /**

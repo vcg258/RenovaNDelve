@@ -79,12 +79,7 @@ public class AdminAccountInitializer {
             }
             String rawPassword = generated ? generatePassword() : adminPassword;
 
-            memberRepository.save(MemberEntity.builder()
-                    .loginId(adminLoginId)
-                    .passwordHash(passwordEncoder.encode(rawPassword))
-                    .nickname("운영자")
-                    .role(Role.ADMIN)
-                    .build());
+            memberRepository.save(MemberEntity.admin(adminLoginId, passwordEncoder.encode(rawPassword)));
 
             if (generated) {
                 log.warn("""

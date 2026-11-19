@@ -13,8 +13,8 @@ import java.time.LocalDateTime;
 @Entity
 @Builder
 @ToString
-@NoArgsConstructor
-@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "collection_helmet",
         uniqueConstraints = @UniqueConstraint(columnNames = {"member_id", "helmet_id"}))
 public class CollectionHelmetEntity {
@@ -29,6 +29,17 @@ public class CollectionHelmetEntity {
     /**
      * 처음 저장될 때 획득 일시를 기록한다 (JPA 생명주기 콜백).
      */
+    /**
+     * 회원 도감에 투구를 처음 등록한다.
+     *
+     * @param member 회원
+     * @param helmet 손에 넣은 투구
+     * @return 새 도감 항목
+     */
+    public static CollectionHelmetEntity of(MemberEntity member, HelmetEntity helmet) {
+        return CollectionHelmetEntity.builder().member(member).helmet(helmet).build();
+    }
+
     @PrePersist
     private void onCreate() {
         this.acquiredAt = LocalDateTime.now();

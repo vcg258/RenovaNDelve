@@ -12,6 +12,7 @@ import com.renovandelve.auth.service.redis.SecurityTokenService;
 import com.renovandelve.auth.service.redis.TokenRevocationService;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import com.renovandelve.member.mapper.MemberMapperImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,8 +46,7 @@ class MemberContactTest {
         memberService = new MemberServiceImpl(memberRepository, mock(RankingRepository.class),
                 mock(GameStateRepository.class), mock(GameSessionService.class), mock(SecurityTokenService.class),
                 mock(TokenRevocationService.class), passwordEncoder, mock(PersonalDataService.class),
-                mock(CollectionMapper.class));
-        when(memberRepository.save(any(MemberEntity.class))).thenAnswer(call -> call.getArgument(0));
+                mock(CollectionMapper.class), new MemberMapperImpl());
         when(memberRepository.save(any(MemberEntity.class))).thenAnswer(call -> call.getArgument(0));
     }
 

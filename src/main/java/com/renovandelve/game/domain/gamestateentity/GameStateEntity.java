@@ -14,6 +14,10 @@ import com.renovandelve.game.engine.Alignment;
 import com.renovandelve.game.engine.DemonContract;
 import com.renovandelve.game.engine.KingdomState;
 import com.renovandelve.game.engine.Faction;
+import com.renovandelve.catalog.domain.armorentity.ArmorEntity;
+import com.renovandelve.catalog.domain.helmetentity.HelmetEntity;
+import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
+import com.renovandelve.game.engine.Pact;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.*;
@@ -23,13 +27,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.Set;
 
 @Getter
 @Entity
 @Builder
 @ToString
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "game_state", indexes = {
         @Index(name = "idx_game_state_member_member_id", columnList = "member_id")
 })
@@ -51,6 +56,8 @@ public class GameStateEntity { //제외
     public static final String BASIC_LOCKED_MESSAGE =
             "기본 공격은 스킬이 " + MIN_SLOTS_TO_DROP_BASIC + "개 이상일 때만 버릴 수 있습니다.";
     public static final String LAST_SKILL_MESSAGE = "마지막 남은 스킬은 버릴 수 없습니다.";
+    /** 원정을 시작할 때의 골드 */
+    public static final int STARTING_GOLD = 100;
     @PositiveOrZero
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Id private Long gameStateId; // 게임 세션 고유 ID (PK)
@@ -241,6 +248,128 @@ public class GameStateEntity { //제외
      */
     public void consumePhoenix() {
         this.hasPhoenix = false;
+    }
+
+    /* ==================== 악마의 계약 ==================== */
+
+    /** @return 지금 스테이지에서 계약을 파기하는 데 드는 골드 */
+    public int contractBreakCost() {
+        return DemonContract.breakCost(currentStage);
+    }
+
+    /** @return 걸린 계약이 있고, 천상의 성향과 골드가 파기 조건을 채우면 true */
+    public boolean canBreakContract() {
+        return contract != null && heavenAffinity >= DemonContract.BREAK_HEAVEN_AFFINITY && gold >= contractBreakCost();
+    }
+
+    /**
+     * 천상의 성향으로 악마의 계약을 파기한다. 파기 비용만큼 골드를 낸다.
+     *
+     * @throws IllegalStateException 걸린 계약이 없거나 천상의 성향이 모자라면
+     */
+    public void breakContract() {
+        if (demonContract() == null) throw new IllegalStateException("걸린 계약이 없습니다.");
+        if (heavenAffinity < DemonContract.BREAK_HEAVEN_AFFINITY) {
+            throw new IllegalStateException("천상의 성향이 %d 이상이어야 계약을 파기할 수 있습니다."
+                    .formatted(DemonContract.BREAK_HEAVEN_AFFINITY));
+        }
+        deductGold(contractBreakCost());
+        bindContract(null);
+    }
+
+    /* ==================== 원정 시작 ==================== */
+
+    /**
+     * 새 원정을 시작한다. 장비 슬롯·캐릭터·스킬 슬롯·유물을 이 게임에 붙여 만들고,
+     * 저장소에 게임 하나만 저장하면 나머지는 cascade로 함께 저장된다.
+     * 예산 검증처럼 다른 데이터(도감 보너스)가 필요한 규칙은 호출하는 서비스가 먼저 확인한다.
+     *
+     * @param member         회원
+     * @param difficulty     난이도
+     * @param startingPoints 사용한 스타팅 포인트
+     * @param pacts          건 서약 (없으면 빈 집합)
+     * @param kingdom        시작 시점의 왕국 정세 (이 원정 동안 바뀌지 않는다)
+     * @param weapon         시작 무기
+     * @param armor          시작 갑옷
+     * @param helmet         시작 투구
+     * @param skills         시작 스킬 (기본 공격 포함)
+     * @param relics         시작 유물
+     * @return 스테이지 1, 노드 0에서 시작하는 게임
+     */
+    public static GameStateEntity start(MemberEntity member, Difficulty difficulty, int startingPoints,
+                                        Set<Pact> pacts, KingdomState kingdom,
+                                        WeaponEntity weapon, ArmorEntity armor, HelmetEntity helmet,
+                                        List<SkillEntity> skills, List<RelicEntity> relics) {
+        GameStateEntity game = GameStateEntity.builder()
+                .member(member)
+                .difficulty(difficulty)
+                .currentStage(1)
+                .currentNodeId(0L)
+                .gold(STARTING_GOLD)
+                .startingPoints(startingPoints)
+                .pacts(pacts.isEmpty() ? null : Pact.serialize(pacts))
+                .kingdom(kingdom.name())
+                .build();
+        game.gameEquipment = GameEquipmentEntity.of(game, weapon, armor, helmet);
+        game.gameCharacter = new ArrayList<>(List.of(GameCharacterEntity.start(game, game.gameEquipment)));
+        skills.forEach(game::learnSkill);
+        relics.forEach(game::addRelic);
+        return game;
+    }
+
+    /* ==================== 장비 ==================== */
+
+    /**
+     * 무기를 바꿔 낀다. 예전 무기의 보너스를 빼고 새 보너스를 더해 공격력을 다시 계산한다.
+     *
+     * @param weapon 새 무기
+     */
+    public void equipWeapon(WeaponEntity weapon) {
+        GameEquipmentEntity equipment = requireEquipment();
+        character().applyAttackDelta(weapon.getAtkBonus() - equipment.weaponBonus());
+        equipment.equipWeapon(weapon);
+    }
+
+    /**
+     * 갑옷을 바꿔 입는다. 예전 갑옷의 보너스를 빼고 새 보너스를 더해 방어력을 다시 계산한다.
+     *
+     * @param armor 새 갑옷
+     */
+    public void equipArmor(ArmorEntity armor) {
+        GameEquipmentEntity equipment = requireEquipment();
+        character().applyDefenseDelta(armor.getDefBonus() - equipment.armorBonus());
+        equipment.equipArmor(armor);
+    }
+
+    /**
+     * 투구를 바꿔 쓴다. 예전 투구의 보너스를 빼고 새 보너스를 더해 최대 HP를 다시 계산한다.
+     *
+     * @param helmet 새 투구
+     */
+    public void equipHelmet(HelmetEntity helmet) {
+        GameEquipmentEntity equipment = requireEquipment();
+        character().applyMaxHpDelta(helmet.getHpBonus() - equipment.helmetBonus());
+        equipment.equipHelmet(helmet);
+    }
+
+    /**
+     * @return 이 게임의 캐릭터
+     * @throws NoSuchElementException 캐릭터가 없으면
+     */
+    public GameCharacterEntity character() {
+        if (gameCharacter == null || gameCharacter.isEmpty()) {
+            throw new NoSuchElementException("캐릭터 정보가 없습니다.");
+        }
+        return gameCharacter.get(0);
+    }
+
+    /**
+     * @return 이 게임의 장비 슬롯
+     * @throws NoSuchElementException 장비 슬롯이 없으면
+     */
+    private GameEquipmentEntity requireEquipment() {
+        if (gameEquipment == null) throw new NoSuchElementException("장비 슬롯을 찾을 수 없습니다.");
+        return gameEquipment;
     }
 
     /* ==================== 스킬 슬롯 ==================== */
@@ -483,7 +612,7 @@ public class GameStateEntity { //제외
     private List<GameCharacterEntity> gameCharacter;
 
     @ToString.Exclude
-    @OneToOne(mappedBy = "gameState")
+    @OneToOne(mappedBy = "gameState", cascade = CascadeType.ALL, orphanRemoval = true)
     private GameEquipmentEntity gameEquipment;
 
     @ToString.Exclude

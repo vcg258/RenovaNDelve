@@ -1,7 +1,5 @@
 package com.renovandelve.game.dto.response;
 
-import com.renovandelve.game.domain.WraithEntity;
-
 import java.util.List;
 
 /**
@@ -15,15 +13,4 @@ import java.util.List;
  * @param escapesLeft 앞으로 몇 번 더 달아나면 흩어지는지
  */
 public record WraithDTO(int stage, int level, String killerName, List<String> skills, String faction, int escapesLeft) {
-
-    /**
-     * 엔티티를 화면용으로 옮긴다.
-     *
-     * @param wraith 망령
-     * @return DTO
-     */
-    public static WraithDTO from(WraithEntity wraith) {
-        return new WraithDTO(wraith.getStage(), wraith.getLevel(), wraith.getKillerName(), wraith.skillNames(),
-                wraith.getFaction(), Math.max(0, WraithEntity.MAX_ESCAPES - wraith.getEscapes()));
-    }
 }

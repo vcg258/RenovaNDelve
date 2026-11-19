@@ -24,12 +24,12 @@ import com.renovandelve.auth.service.redis.TokenRevocationService;
 import com.renovandelve.auth.service.redis.SecurityTokenService;
 import com.renovandelve.member.util.EmailNormalizer;
 import org.springframework.transaction.annotation.Transactional;
+import com.renovandelve.member.mapper.MemberMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -46,6 +46,7 @@ public class MemberServiceImpl implements MemberService {
     private final PasswordEncoder passwordEncoder;
     private final PersonalDataService personalDataService;
     private final CollectionMapper collectionMapper;
+    private final MemberMapper memberMapper;
 
     private static final List<String> FORBIDDEN_NICKNAMES = List.of("관리자", "운영자", "admin", "administrator", "gm");
 
@@ -69,16 +70,9 @@ public class MemberServiceImpl implements MemberService {
 
         MemberEntity member;
         try {
-            member = memberRepository.save(MemberEntity.builder()
-                    .loginId(request.loginId())
-                    .passwordHash(passwordEncoder.encode(request.password()))
-                    .nickname(request.nickname())
-                    .name(request.name().trim())
-                    .email(email)
-                    .termsAgreedAt(LocalDateTime.now())
-                    .privacyAgreedAt(LocalDateTime.now())
-                    .policyVersion(PersonalDataService.POLICY_VERSION)
-                    .build());
+            member = memberRepository.save(MemberEntity.register(request.loginId(),
+                    passwordEncoder.encode(request.password()), request.nickname(), request.name(), email,
+                    PersonalDataService.POLICY_VERSION));
         } catch (DataIntegrityViolationException e) {
             // 위의 확인과 저장 사이에 같은 아이디·이메일·닉네임으로 동시에 가입한 경우. DB 유니크 제약이 막는다.
             // ID 전략이 IDENTITY라 save 시점에 INSERT가 실행되므로 예외가 여기서 잡힌다
@@ -131,7 +125,7 @@ public class MemberServiceImpl implements MemberService {
                 .mapToInt(RankingEntity::getBestScore)
                 .max().orElse(0);
 
-        return MemberProfileDTO.of(managed, collectionCount, bestScore);
+        return memberMapper.toProfileDTO(managed, collectionCount, bestScore);
     }
 
     /**

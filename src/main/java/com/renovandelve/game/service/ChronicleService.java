@@ -68,18 +68,9 @@ public class ChronicleService {
         Faction faction = gameState.alignment().dominant();
 
         boolean written = review != null && notBlank(review.chapterTitle()) && notBlank(review.chapter());
-        ChronicleChapterEntity chapter = ChronicleChapterEntity.builder()
-                .memberId(memberId)
-                .gameStateId(gameState.getGameStateId())
-                .chapterNo(chapterNo)
-                .title(written ? cut(review.chapterTitle(), 40) : fallbackTitle(cleared, stage))
-                .body(written ? review.chapter().trim() : fallbackBody(cleared, stage, node, faction))
-                .cleared(cleared)
-                .stage(stage)
-                .node(node)
-                .faction(faction == null ? null : faction.name())
-                .difficulty(gameState.getDifficulty().name())
-                .build();
+        ChronicleChapterEntity chapter = ChronicleChapterEntity.write(gameState, chapterNo, cleared,
+                written ? cut(review.chapterTitle(), 40) : fallbackTitle(cleared, stage),
+                written ? review.chapter().trim() : fallbackBody(cleared, stage, node, faction));
         chronicleChapterRepository.save(chapter);
         log.info("연대기 기록 memberId={} 제{}장 aiWritten={}", memberId, chapterNo, written);
         return chapter;

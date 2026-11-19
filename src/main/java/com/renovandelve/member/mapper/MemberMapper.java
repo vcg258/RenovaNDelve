@@ -3,6 +3,8 @@ package com.renovandelve.member.mapper;
 import com.renovandelve.global.config.MapStructConfig;
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.member.dto.MemberDTO;
+import com.renovandelve.member.dto.response.MemberProfileDTO;
+import com.renovandelve.member.dto.response.MemberSummaryDTO;
 import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -25,4 +27,26 @@ public interface MemberMapper {
     @Mapping(target = "memberId", source = "memberId")
     @Mapping(target = "loginId", expression = "java(member.displayName())")
     MemberDTO toPublicDTO(MemberEntity member);
+
+    /**
+     * 내 정보. 닉네임이 없으면 표시 이름을 쓰고, 비밀번호 해시는 있는지만 보낸다.
+     *
+     * @param member          회원
+     * @param collectionCount 도감 수집 수
+     * @param bestScore       최고 점수
+     * @return 내 정보
+     */
+    @Mapping(target = "nickname", expression = "java(member.displayName())")
+    @Mapping(target = "hasPassword", expression = "java(member.getPasswordHash() != null)")
+    MemberProfileDTO toProfileDTO(MemberEntity member, int collectionCount, int bestScore);
+
+    /**
+     * 관리자 화면의 회원 한 줄.
+     *
+     * @param member  회원
+     * @param playing 지금 원정 중이면 true
+     * @return 회원 요약
+     */
+    @Mapping(target = "nickname", expression = "java(member.displayName())")
+    MemberSummaryDTO toSummaryDTO(MemberEntity member, boolean playing);
 }

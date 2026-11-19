@@ -99,7 +99,7 @@ public class PersonalDataService {
     public List<GameHistoryDTO> getHistory(MemberEntity member) {
         return gameStateRepository.findByMember_MemberIdOrderByCreatedAtDesc(member.getMemberId()).stream()
                 .limit(HISTORY_LIMIT)
-                .map(GameHistoryDTO::from)
+                .map(gameMapper::toHistoryDTO)
                 .toList();
     }
 
@@ -135,7 +135,7 @@ public class PersonalDataService {
 
         List<GameHistoryDTO> games = gameStateRepository
                 .findByMember_MemberIdOrderByCreatedAtDesc(managed.getMemberId()).stream()
-                .map(GameHistoryDTO::from)
+                .map(gameMapper::toHistoryDTO)
                 .toList();
 
         Map<String, Object> collection = new LinkedHashMap<>();

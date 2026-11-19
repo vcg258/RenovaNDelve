@@ -13,8 +13,8 @@ import java.time.LocalDateTime;
 @Entity
 @Builder
 @ToString
-@NoArgsConstructor
-@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "collection_relic",
         uniqueConstraints = @UniqueConstraint(columnNames = {"member_id", "relic_id"}))
 public class CollectionRelicEntity {
@@ -29,6 +29,17 @@ public class CollectionRelicEntity {
     /**
      * 처음 저장될 때 획득 일시를 기록한다 (JPA 생명주기 콜백).
      */
+    /**
+     * 회원 도감에 유물를 처음 등록한다.
+     *
+     * @param member 회원
+     * @param relic 손에 넣은 유물
+     * @return 새 도감 항목
+     */
+    public static CollectionRelicEntity of(MemberEntity member, RelicEntity relic) {
+        return CollectionRelicEntity.builder().member(member).relic(relic).build();
+    }
+
     @PrePersist
     private void onCreate() {
         this.acquiredAt = LocalDateTime.now();

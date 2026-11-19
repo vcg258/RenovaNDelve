@@ -11,6 +11,7 @@ import com.renovandelve.ranking.domain.RankingEntity;
 import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.member.domain.memberentity.MemberStatus;
 import com.renovandelve.member.domain.memberentity.Role;
+import com.renovandelve.member.util.EmailNormalizer;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.*;
@@ -22,8 +23,8 @@ import java.util.List;
 @Entity
 @Builder
 @ToString
-@NoArgsConstructor
-@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "member", indexes = {
         @Index(name = "idx_member_status", columnList = "status"),
         @Index(name = "idx_member_role", columnList = "role")
@@ -83,6 +84,61 @@ public class MemberEntity {
 
     @Column(nullable = false)
     private LocalDateTime updatedAt; // 마지막 수정일시
+
+    /* ===== 생성 ===== */
+
+    /**
+     * 아이디·비밀번호로 가입한 회원. 약관·개인정보 동의 일시와 동의한 버전을 함께 남긴다.
+     * 중복 확인과 비밀번호 암호화는 저장소·인코더가 필요해 서비스가 먼저 한다.
+     *
+     * @param loginId       아이디
+     * @param passwordHash  암호화한 비밀번호
+     * @param nickname      닉네임
+     * @param name          이름 (앞뒤 공백은 지운다)
+     * @param email         이메일 (소문자로 정규화해 저장)
+     * @param policyVersion 동의한 약관·처리방침 버전
+     * @return 일반 권한·정상 상태의 새 회원
+     */
+    public static MemberEntity register(String loginId, String passwordHash, String nickname, String name,
+                                        String email, String policyVersion) {
+        LocalDateTime now = LocalDateTime.now();
+        return MemberEntity.builder()
+                .loginId(loginId)
+                .passwordHash(passwordHash)
+                .nickname(nickname)
+                .name(name == null ? null : name.trim())
+                .email(EmailNormalizer.normalize(email))
+                .termsAgreedAt(now)
+                .privacyAgreedAt(now)
+                .policyVersion(policyVersion)
+                .build();
+    }
+
+    /**
+     * 기동 때 자동으로 만드는 관리자 계정.
+     *
+     * @param loginId      아이디
+     * @param passwordHash 암호화한 비밀번호
+     * @return 관리자 권한의 새 회원
+     */
+    public static MemberEntity admin(String loginId, String passwordHash) {
+        return MemberEntity.builder()
+                .loginId(loginId)
+                .passwordHash(passwordHash)
+                .nickname("운영자")
+                .role(Role.ADMIN)
+                .build();
+    }
+
+    /**
+     * 소셜 로그인으로 처음 들어온 회원.
+     *
+     * @param socialId 소셜 제공자 안의 고유 ID
+     * @return 새 회원
+     */
+    public static MemberEntity social(String socialId) {
+        return MemberEntity.builder().socialId(socialId).build();
+    }
 
     /* ===== 도메인 메서드 ===== */
 

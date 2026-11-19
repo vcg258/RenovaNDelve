@@ -1,10 +1,15 @@
 package com.renovandelve.architecture;
 
+import com.tngtech.archunit.core.domain.properties.CanBeAnnotated;
+import com.tngtech.archunit.core.domain.properties.HasName;
+import com.tngtech.archunit.core.domain.properties.HasOwner;
 import com.tngtech.archunit.core.importer.ImportOption;
+import jakarta.persistence.Entity;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
+import static com.tngtech.archunit.core.domain.JavaCall.Predicates.target;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
@@ -36,4 +41,14 @@ class LayerDependencyTest {
     @ArchTest
     static final ArchRule engineIsPure = noClasses().that().resideInAPackage("com.renovandelve.game.engine..")
             .should().dependOnClassesThat().resideInAnyPackage("..service..", "..repository..", "..controller..");
+
+    /**
+     * 엔티티는 도메인 패키지 밖에서 빌더로 만들지 않는다. 밖에서는 이름 있는 정적 팩토리(register, start, of ...)만 쓴다.
+     * 빌더는 엔티티 자신의 팩토리와 테스트 픽스처용이다 (테스트 코드는 이 검사에서 빠진다).
+     */
+    @ArchTest
+    static final ArchRule entitiesAreCreatedByFactories = noClasses().that().resideOutsideOfPackage("..domain..")
+            .should().callMethodWhere(target(HasName.Predicates.name("builder"))
+                    .and(target(HasOwner.Predicates.With.owner(CanBeAnnotated.Predicates.annotatedWith(Entity.class)))))
+            .because("엔티티 생성 규칙은 엔티티의 정적 팩토리가 갖는다");
 }
