@@ -108,16 +108,21 @@ public class ShopServiceImpl implements ShopService {
                 stock.add(stockItem("RELIC", r.getRelicId(), r.getName(), r.getEffectDesc(),
                         scale(RELIC_PRICE.getOrDefault(r.getRarity(), 250), stageFactor))));
 
-        // 장비 각 1종 (교체 방식)
-        pickRandom(weaponRepository.findAll(), 1).forEach(w ->
-                stock.add(stockItem("WEAPON", w.getWeaponId(), w.getName(), w.getDescription(),
-                        scale(PRICE_WEAPON + w.getScoreCost() / 2, stageFactor))));
-        pickRandom(armorRepository.findAll(), 1).forEach(a ->
-                stock.add(stockItem("ARMOR", a.getArmorId(), a.getName(), a.getDescription(),
-                        scale(PRICE_ARMOR + a.getScoreCost() / 2, stageFactor))));
-        pickRandom(helmetRepository.findAll(), 1).forEach(h ->
-                stock.add(stockItem("HELMET", h.getHelmetId(), h.getName(), h.getDescription(),
-                        scale(PRICE_HELMET + h.getScoreCost() / 2, stageFactor))));
+        // 장비 각 1종 (교체 방식). 지금 착용 중인 장비는 사도 달라지는 게 없으니 진열하지 않는다
+        GameEquipmentEntity equipped = gameState.getGameEquipment();
+        Long wornWeapon = equipped == null || equipped.getWeapon() == null ? null : equipped.getWeapon().getWeaponId();
+        Long wornArmor = equipped == null || equipped.getArmor() == null ? null : equipped.getArmor().getArmorId();
+        Long wornHelmet = equipped == null || equipped.getHelmet() == null ? null : equipped.getHelmet().getHelmetId();
+
+        pickRandom(weaponRepository.findAll().stream().filter(w -> !w.getWeaponId().equals(wornWeapon)).toList(), 1).forEach(w ->
+                stock.add(equipmentItem("WEAPON", w.getWeaponId(), w.getName(), w.getDescription(),
+                        scale(PRICE_WEAPON + w.getScoreCost() / 2, stageFactor), w.getAtkBonus())));
+        pickRandom(armorRepository.findAll().stream().filter(a -> !a.getArmorId().equals(wornArmor)).toList(), 1).forEach(a ->
+                stock.add(equipmentItem("ARMOR", a.getArmorId(), a.getName(), a.getDescription(),
+                        scale(PRICE_ARMOR + a.getScoreCost() / 2, stageFactor), a.getDefBonus())));
+        pickRandom(helmetRepository.findAll().stream().filter(h -> !h.getHelmetId().equals(wornHelmet)).toList(), 1).forEach(h ->
+                stock.add(equipmentItem("HELMET", h.getHelmetId(), h.getName(), h.getDescription(),
+                        scale(PRICE_HELMET + h.getScoreCost() / 2, stageFactor), h.getHpBonus())));
 
         return stock;
     }
@@ -342,6 +347,23 @@ public class ShopServiceImpl implements ShopService {
         item.setDescription(description);
         item.setPrice(price);
         item.setSold(false);
+        return item;
+    }
+
+    /**
+     * 장비 진열품. 착용 중인 장비와 비교해 보여 줄 수 있게 보너스를 함께 담는다.
+     *
+     * @param type        WEAPON / ARMOR / HELMET
+     * @param id          장비 ID
+     * @param name        이름
+     * @param description 설명
+     * @param price       가격
+     * @param bonus       능력치 보너스
+     * @return 진열품
+     */
+    private ShopStockItem equipmentItem(String type, Long id, String name, String description, int price, int bonus) {
+        ShopStockItem item = stockItem(type, id, name, description, price);
+        item.setBonus(bonus);
         return item;
     }
 
