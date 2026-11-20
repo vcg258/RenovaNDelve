@@ -33,9 +33,4 @@ public class MonsterEntity {
     // TEXT 타입 대체자
     @Column(length = Integer.MAX_VALUE)
     private String description; // 몬스터 설명
-
-    /* FK */
-//    @ToString.Exclude
-//    @OneToMany(mappedBy = "monster")
-//    private List<MonsterCharacteristicEntity> monsterCharacteristic;
 }

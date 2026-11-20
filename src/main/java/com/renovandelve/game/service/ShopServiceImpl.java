@@ -8,10 +8,12 @@ import com.renovandelve.catalog.domain.armorentity.ArmorEntity;
 import com.renovandelve.catalog.domain.consumableentity.ConsumableEntity;
 import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.catalog.domain.helmetentity.HelmetEntity;
-import com.renovandelve.catalog.domain.relicentity.Rarity;
+import com.renovandelve.catalog.domain.Rarity;
 import com.renovandelve.catalog.domain.relicentity.RelicEntity;
+import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
 import com.renovandelve.game.engine.Pact;
+import com.renovandelve.game.engine.RarityTable;
 import com.renovandelve.game.engine.ShopStockItem;
 import com.renovandelve.catalog.repository.ArmorRepository;
 import com.renovandelve.catalog.repository.ConsumableRepository;
@@ -78,15 +80,16 @@ public class ShopServiceImpl implements ShopService {
                 stock.add(stockItem("CONSUMABLE", c.getConsumableId(), c.getName(), c.getDescription(),
                         scale(40 + c.getScoreCost(), stageFactor))));
 
+        // 스킬·유물·장비는 스테이지별 등급 확률로 고른다 (깊을수록 희귀·영웅이 잦다)
         // 미보유 스킬 2종
-        pickRandom(skillRepository.findBySkillNotOwner(gameState.getGameStateId()), 2).forEach(s ->
-                stock.add(stockItem("SKILL", s.getSkillId(), s.getName(), s.getDescription(),
-                        scale(PRICE_SKILL + s.getCost() / 2, stageFactor))));
+        RarityTable.pick(skillRepository.findBySkillNotOwner(gameState.getGameStateId()), SkillEntity::getRarity, 2, stage, random)
+                .forEach(sk -> stock.add(withRarity(stockItem("SKILL", sk.getSkillId(), sk.getName(), sk.getDescription(),
+                        scale(PRICE_SKILL + sk.getCost() / 2, stageFactor)), sk.getRarity())));
 
         // 미보유 유물 2종 (희귀도별 가격)
-        pickRandom(relicRepository.findByRelicNotOwner(gameState.getGameStateId()), 2).forEach(r ->
-                stock.add(stockItem("RELIC", r.getRelicId(), r.getName(), r.getEffectDesc(),
-                        scale(RELIC_PRICE.getOrDefault(r.getRarity(), 250), stageFactor))));
+        RarityTable.pick(relicRepository.findByRelicNotOwner(gameState.getGameStateId()), RelicEntity::getRarity, 2, stage, random)
+                .forEach(r -> stock.add(withRarity(stockItem("RELIC", r.getRelicId(), r.getName(), r.getEffectDesc(),
+                        scale(RELIC_PRICE.getOrDefault(r.getRarity(), 250), stageFactor)), r.getRarity())));
 
         // 장비 각 1종 (교체 방식). 지금 착용 중인 장비는 사도 달라지는 게 없으니 진열하지 않는다
         GameEquipmentEntity equipped = gameState.getGameEquipment();
@@ -94,15 +97,18 @@ public class ShopServiceImpl implements ShopService {
         Long wornArmor = equipped == null || equipped.getArmor() == null ? null : equipped.getArmor().getArmorId();
         Long wornHelmet = equipped == null || equipped.getHelmet() == null ? null : equipped.getHelmet().getHelmetId();
 
-        pickRandom(weaponRepository.findAll().stream().filter(w -> !w.getWeaponId().equals(wornWeapon)).toList(), 1).forEach(w ->
-                stock.add(equipmentItem("WEAPON", w.getWeaponId(), w.getName(), w.getDescription(),
-                        scale(PRICE_WEAPON + w.getScoreCost() / 2, stageFactor), w.getAtkBonus())));
-        pickRandom(armorRepository.findAll().stream().filter(a -> !a.getArmorId().equals(wornArmor)).toList(), 1).forEach(a ->
-                stock.add(equipmentItem("ARMOR", a.getArmorId(), a.getName(), a.getDescription(),
-                        scale(PRICE_ARMOR + a.getScoreCost() / 2, stageFactor), a.getDefBonus())));
-        pickRandom(helmetRepository.findAll().stream().filter(h -> !h.getHelmetId().equals(wornHelmet)).toList(), 1).forEach(h ->
-                stock.add(equipmentItem("HELMET", h.getHelmetId(), h.getName(), h.getDescription(),
-                        scale(PRICE_HELMET + h.getScoreCost() / 2, stageFactor), h.getHpBonus())));
+        RarityTable.pick(weaponRepository.findAll().stream().filter(w -> !w.getWeaponId().equals(wornWeapon)).toList(),
+                WeaponEntity::getRarity, 1, stage, random).forEach(w ->
+                stock.add(withRarity(equipmentItem("WEAPON", w.getWeaponId(), w.getName(), w.getDescription(),
+                        scale(PRICE_WEAPON + w.getScoreCost() / 2, stageFactor), w.getAtkBonus()), w.getRarity())));
+        RarityTable.pick(armorRepository.findAll().stream().filter(a -> !a.getArmorId().equals(wornArmor)).toList(),
+                ArmorEntity::getRarity, 1, stage, random).forEach(a ->
+                stock.add(withRarity(equipmentItem("ARMOR", a.getArmorId(), a.getName(), a.getDescription(),
+                        scale(PRICE_ARMOR + a.getScoreCost() / 2, stageFactor), a.getDefBonus()), a.getRarity())));
+        RarityTable.pick(helmetRepository.findAll().stream().filter(h -> !h.getHelmetId().equals(wornHelmet)).toList(),
+                HelmetEntity::getRarity, 1, stage, random).forEach(h ->
+                stock.add(withRarity(equipmentItem("HELMET", h.getHelmetId(), h.getName(), h.getDescription(),
+                        scale(PRICE_HELMET + h.getScoreCost() / 2, stageFactor), h.getHpBonus()), h.getRarity())));
 
         return stock;
     }
@@ -291,6 +297,18 @@ public class ShopServiceImpl implements ShopService {
     private ShopStockItem equipmentItem(String type, Long id, String name, String description, int price, int bonus) {
         ShopStockItem item = stockItem(type, id, name, description, price);
         item.setBonus(bonus);
+        return item;
+    }
+
+    /**
+     * 진열품에 등급을 붙인다.
+     *
+     * @param item   진열품
+     * @param rarity 등급
+     * @return 같은 진열품
+     */
+    private static ShopStockItem withRarity(ShopStockItem item, Rarity rarity) {
+        item.setRarity(rarity);
         return item;
     }
 

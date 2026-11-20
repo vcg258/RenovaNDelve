@@ -1,6 +1,6 @@
 package com.renovandelve.catalog.dto;
 
-import com.renovandelve.catalog.domain.relicentity.Rarity;
+import com.renovandelve.catalog.domain.Rarity;
 
 public record RelicDTO (
     Long relicId, // 유물 고유 ID

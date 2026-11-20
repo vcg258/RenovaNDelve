@@ -1,5 +1,6 @@
 package com.renovandelve.catalog.dto;
 
+import com.renovandelve.catalog.domain.Rarity;
 import com.renovandelve.catalog.domain.weaponentity.Type;
 
 public record WeaponDTO (
@@ -9,6 +10,6 @@ public record WeaponDTO (
     int atkBonus, // 추가 공격력 (단검 : 데미지 - , 둔기 : 데미지 +)
     short specialEffect, // 무기 특수 효과
     int scoreCost, // 스타딩 포인트 비용
-//    int price,      // 가격
-    String description // 무기 설명
+    String description, // 무기 설명
+    Rarity rarity // 등급 (COMMON / RARE / EPIC)
 ) {}
