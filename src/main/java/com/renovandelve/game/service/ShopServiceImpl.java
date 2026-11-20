@@ -146,7 +146,7 @@ public class ShopServiceImpl implements ShopService {
             case "SKILL" -> purchaseSkill(gameState, member, stockItem.getItemId(), replaceSlotId);
             case "RELIC" -> purchaseRelic(gameState, member, stockItem.getItemId());
             case "CONSUMABLE" -> purchaseConsumable(gameState, member, stockItem.getItemId());
-            default -> throw new IllegalArgumentException("알 수 없는 아이템 타입: " + stockItem.getItemType());
+            default -> throw new IllegalStateException("알 수 없는 아이템 타입: " + stockItem.getItemType()); // 진열품은 서버가 만든다
         }
         log.info("구매 완료 gameStateId={} type={} itemId={} price={}",
                 gameState.getGameStateId(), stockItem.getItemType(), stockItem.getItemId(), stockItem.getPrice());

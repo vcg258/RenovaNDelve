@@ -118,6 +118,9 @@ public class GameEngineServiceImpl implements GameEngineService {
 
     private final Random random = new Random();
 
+    /** 망령을 처치한 자리에서 지난 원정의 유물이 보상 후보로 돌아왔다는 안내 */
+    private static final String RECOVERED_RELIC_LINE = "흩어진 자리에 낯익은 유물이 떨어져 있다. (보상 후보)";
+
     /** 마지막 스테이지. 이 스테이지의 보스를 쓰러뜨리면 클리어 (가이드 Tool도 이 값을 쓴다) */
     public static final int FINAL_STAGE = 5;
     /** 스테이지당 노드 수. 마지막 노드가 보스 */
@@ -1438,7 +1441,7 @@ public class GameEngineServiceImpl implements GameEngineService {
                     : gameState.getGameRelicInventory().stream().map(i -> i.getRelic().getRelicId()).toList();
             recoveredRelicId = wraithService.slay(session.getWraithId(), owned).orElse(null);
             log.add("망령이 흩어진다. 지난 원정의 당신은 이제 이 자리에 없다.");
-            if (recoveredRelicId != null) log.add("흩어진 자리에 낯익은 유물이 떨어져 있다. (보상 후보)");
+            if (recoveredRelicId != null) log.add(RECOVERED_RELIC_LINE);
             remember(gameState, "[플레이어의 선택] 스테이지 %d에서 지난 원정에 쓰러진 자신의 망령을 쓰러뜨렸다.".formatted(stage));
             session.setWraithId(null);
         }
@@ -1472,7 +1475,10 @@ public class GameEngineServiceImpl implements GameEngineService {
         DemonContract contract = gameState.demonContract();
         if (contract != null && contract.clause() == DemonContract.Clause.SPOILS_CLAIM) {
             gameState.bindContract(null);
-            log.add("계약서의 작은 글씨가 타오른다: 전리품은 그의 몫이다. 붉은 손이 전리품을 거둬 간다. (계약 종료)");
+            log.remove(RECOVERED_RELIC_LINE); // 보상 후보라고 약속한 줄은 거둔다
+            log.add(recoveredRelicId == null
+                    ? "계약서의 작은 글씨가 타오른다: 전리품은 그의 몫이다. 붉은 손이 전리품을 거둬 간다. (계약 종료)"
+                    : "계약서의 작은 글씨가 타오른다: 전리품은 그의 몫이다. 붉은 손이 낯익은 유물까지 거둬 간다. (계약 종료)");
             session.setPathNote(null);
             session.setReward(null);
             session.setPhase(GameSession.PHASE_SHOP);

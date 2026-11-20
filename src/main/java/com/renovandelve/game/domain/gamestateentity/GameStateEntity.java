@@ -27,7 +27,6 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 
@@ -388,21 +387,21 @@ public class GameStateEntity { //제외
 
     /**
      * @return 이 게임의 캐릭터
-     * @throws NoSuchElementException 캐릭터가 없으면
+     * @throws IllegalStateException 캐릭터가 없으면 (데이터가 깨진 경우)
      */
     public GameCharacterEntity character() {
         if (gameCharacter == null || gameCharacter.isEmpty()) {
-            throw new NoSuchElementException("캐릭터 정보가 없습니다.");
+            throw new IllegalStateException("캐릭터 정보가 없습니다.");
         }
         return gameCharacter.get(0);
     }
 
     /**
      * @return 이 게임의 장비 슬롯
-     * @throws NoSuchElementException 장비 슬롯이 없으면
+     * @throws IllegalStateException 장비 슬롯이 없으면 (데이터가 깨진 경우)
      */
     private GameEquipmentEntity requireEquipment() {
-        if (gameEquipment == null) throw new NoSuchElementException("장비 슬롯을 찾을 수 없습니다.");
+        if (gameEquipment == null) throw new IllegalStateException("장비 슬롯을 찾을 수 없습니다.");
         return gameEquipment;
     }
 
