@@ -115,6 +115,24 @@ class ShopServiceImplTest {
                 .allSatisfy(i -> assertThat(i.getRarity()).isNotNull());
     }
 
+    @Test
+    @DisplayName("상인의 반지를 가지면 진열품 값이 15% 싸진다")
+    void merchantRingDiscount() {
+        when(gameState.getGameEquipment()).thenReturn(null);
+        int before = shopService.generateStock(gameState).stream()
+                .filter(i -> i.getItemType().equals("HELMET")).findFirst().orElseThrow().getPrice();
+
+        com.renovandelve.catalog.domain.relicentity.RelicEntity ring =
+                com.renovandelve.catalog.domain.relicentity.RelicEntity.builder().relicId(9L).name("상인의 반지").build();
+        com.renovandelve.game.domain.GameRelicInventoryEntity slot = mock(com.renovandelve.game.domain.GameRelicInventoryEntity.class);
+        when(slot.getRelic()).thenReturn(ring);
+        when(gameState.getGameRelicInventory()).thenReturn(List.of(slot));
+        int after = shopService.generateStock(gameState).stream()
+                .filter(i -> i.getItemType().equals("HELMET")).findFirst().orElseThrow().getPrice();
+
+        assertThat(after).isEqualTo((int) Math.round(before * 0.85));
+    }
+
     private int countEpicWeapons(int stage) {
         when(gameState.getCurrentStage()).thenReturn(stage);
         int epic = 0;

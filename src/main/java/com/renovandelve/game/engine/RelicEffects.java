@@ -25,8 +25,14 @@ public class RelicEffects {
     private int defenseBonus = 0;               // 심연의 핵
     private int cooldownReduction = 0;          // 고대의 부적
     private double critBonus = 0.0;             // 사냥꾼의 눈
-    private int critBleedStacks = 0;            // [시너지] 치명타 시 출혈 부여
+    private int critBleedStacks = 0;            // [시너지] 치명타 시 출혈 부여, 마왕의 눈
+    private int victoryHeal = 0;                // 순례자의 묵주, 천사의 부적: 전투에서 이길 때 회복하는 HP
+    private double expMultiplier = 1.0;         // 견습 학자의 수정, 왕관의 파편
+    private double shopDiscount = 0.0;          // 상인의 반지: 상점 가격 할인율 (최대 50%)
     private final List<String> activeSynergies = new ArrayList<>();
+
+    /** 상점 할인 상한 */
+    public static final double MAX_SHOP_DISCOUNT = 0.5;
 
     /**
      * 보유 유물 이름으로 효과와 조합 시너지를 계산한다.
@@ -56,6 +62,23 @@ public class RelicEffects {
                 }
                 case "고대의 부적" -> effects.cooldownReduction += 1;
                 case "사냥꾼의 눈" -> effects.critBonus += 0.10;
+                case "순례자의 묵주" -> effects.victoryHeal += 6;
+                case "견습 학자의 수정" -> effects.expMultiplier += 0.20;
+                case "수비대의 문장" -> effects.defenseBonus += 2;
+                case "상인의 반지" -> effects.shopDiscount += 0.15;
+                case "결의의 반지" -> effects.attackMultiplier += 0.08;
+                case "천사의 부적" -> {
+                    effects.victoryHeal += 12;
+                    effects.flatDamageReduction += 1;
+                }
+                case "마왕의 눈" -> {
+                    effects.critBonus += 0.15;
+                    effects.critBleedStacks += 1;
+                }
+                case "왕관의 파편" -> {
+                    effects.goldMultiplier += 0.25;
+                    effects.expMultiplier += 0.25;
+                }
                 default -> { /* 효과 미구현 유물은 점수용 소장품 */ }
             }
         }
@@ -101,6 +124,21 @@ public class RelicEffects {
             effects.goldMultiplier += 0.10;
             effects.activeSynergies.add("황금 사냥 — 골드 획득 추가 +10% (행운의 반지 + 사냥꾼의 눈)");
         }
+        // 순례의 끝: 기도가 닿은 자리마다 상처가 아문다
+        if (owned.contains("순례자의 묵주") && owned.contains("천사의 부적")) {
+            effects.victoryHeal += 6;
+            effects.activeSynergies.add("순례의 끝 — 승리 시 회복 추가 +6 (순례자의 묵주 + 천사의 부적)");
+        }
+        // 흥정의 달인: 반지 두 개를 낀 손님에게 상인은 약하다
+        if (owned.contains("상인의 반지") && owned.contains("행운의 반지")) {
+            effects.shopDiscount += 0.10;
+            effects.activeSynergies.add("흥정의 달인 — 상점 할인 추가 10% (상인의 반지 + 행운의 반지)");
+        }
+        // 피의 군주: 마왕의 눈이 흘린 피를 붉은 반지가 키운다
+        if (owned.contains("마왕의 눈") && owned.contains("핏빛 반지")) {
+            effects.bleedMultiplier += 0.25;
+            effects.activeSynergies.add("피의 군주 — 출혈 피해 추가 +25% (마왕의 눈 + 핏빛 반지)");
+        }
         // 사신의 공명: 4종 이상의 유물이 공명하면 모든 능력이 미약하게 상승
         if (owned.size() >= 4) {
             effects.attackMultiplier += 0.05;
@@ -108,6 +146,7 @@ public class RelicEffects {
             effects.activeSynergies.add("사신의 공명 — 유물 4개 이상: 공격력 +5%, 치명타 +5%");
         }
 
+        effects.shopDiscount = Math.min(MAX_SHOP_DISCOUNT, effects.shopDiscount);
         return effects;
     }
 }

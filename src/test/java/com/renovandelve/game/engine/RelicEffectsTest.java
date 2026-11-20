@@ -117,4 +117,34 @@ class RelicEffectsTest {
         assertThat(effects.getActiveSynergies()).allSatisfy(text ->
                 assertThat(text.codePoints().noneMatch(cp -> cp > 0xFFFF || (cp >= 0x2600 && cp <= 0x27BF))).isTrue());
     }
+
+    @Test
+    @DisplayName("v0.12.0 유물: 승리 회복, 경험치, 상점 할인, 공격·방어·치명타")
+    void newRelics() {
+        RelicEffects effects = RelicEffects.of(List.of("순례자의 묵주", "견습 학자의 수정", "수비대의 문장", "상인의 반지",
+                "결의의 반지", "천사의 부적", "마왕의 눈", "왕관의 파편"));
+        assertThat(effects.getVictoryHeal()).isEqualTo(6 + 12 + 6); // 순례의 끝 시너지 +6
+        assertThat(effects.getExpMultiplier()).isCloseTo(1.45, within(1e-9));
+        assertThat(effects.getShopDiscount()).isCloseTo(0.15, within(1e-9));
+        assertThat(effects.getDefenseBonus()).isEqualTo(2);
+        assertThat(effects.getFlatDamageReduction()).isEqualTo(1);
+        assertThat(effects.getCritBleedStacks()).isEqualTo(1);
+        assertThat(effects.getActiveSynergies()).anyMatch(t -> t.startsWith("순례의 끝 — "));
+    }
+
+    @Test
+    @DisplayName("상점 할인은 시너지를 더해도 50%를 넘지 않는다")
+    void shopDiscountIsCapped() {
+        RelicEffects effects = RelicEffects.of(List.of("상인의 반지", "행운의 반지"));
+        assertThat(effects.getShopDiscount()).isCloseTo(0.25, within(1e-9));
+        assertThat(effects.getActiveSynergies()).anyMatch(t -> t.startsWith("흥정의 달인 — "));
+        assertThat(RelicEffects.MAX_SHOP_DISCOUNT).isEqualTo(0.5);
+    }
+
+    @Test
+    @DisplayName("마왕의 눈 + 핏빛 반지: 피의 군주")
+    void bloodLordSynergy() {
+        RelicEffects effects = RelicEffects.of(List.of("마왕의 눈", "핏빛 반지"));
+        assertThat(effects.getBleedMultiplier()).isCloseTo(1.75, within(1e-9));
+    }
 }
