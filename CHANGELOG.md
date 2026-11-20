@@ -6,7 +6,7 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 - **1.0.0 전까지는 베타입니다.** 밸런스 수치와 API가 바뀔 수 있습니다.
 - 각 버전은 같은 이름의 git 태그(`v0.4.0` 등)로 표시되어 있습니다. 괄호 안의 번호는 그 버전에 들어간 PR입니다.
 
-## [Unreleased] — 리뷰 후속 정리
+## [0.11.0] - 2026-11-20 — 리뷰 후속 정리와 구조 정리
 
 ### 추가
 - `GET /api/game/keywords`: 상태이상·격노 설명을 규칙 상수로 만들어 내려준다. 화면은 이 설명을 쓴다 (백엔드 #20, 프론트 #16)
@@ -25,9 +25,12 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 - 원정 시작은 게임 하나만 저장하고 장비 슬롯·캐릭터·스킬·유물은 cascade로 함께 저장한다 (백엔드 #20)
 - 장비 교체(능력치 재계산), 계약 파기, 랭킹 갱신을 엔티티의 도메인 메서드로 옮겼다. 도감 등록은 `CollectionService` 하나가 맡는다 (백엔드 #20)
 - DTO에는 값만 둔다. DTO의 정적 변환 메서드(`from`, `of`)를 매퍼로 옮겼고, 계약 파기 가능 여부 같은 규칙은 엔티티로 옮겼다 (백엔드 #20)
-
 - 비즈니스 오류는 `BusinessException`과 `ErrorCode`(상태 코드·문구 목록)로 던진다. 오류 응답에 `code`가 추가됐다(`{"code": "NOT_ENOUGH_GOLD", "error": "..."}`). 자바·스프링 예외는 이제 500이고 내부 문구를 내보내지 않는다 (백엔드 #21)
 - 랭킹 조회를 `RankingService`로 옮겼다. 컨트롤러가 저장소를 직접 쓰면 ArchUnit 테스트가 실패한다 (백엔드 #21)
+- 엔티티 코드를 필드 → 생성자 → 정적 팩토리 → 도메인 메서드 → 생명주기 콜백 순서로 정리했다 (백엔드 #22)
+
+### 제거
+- 다른 로직으로 대체되어 쓰지 않던 코드: `GameCharacterRepository`, `GameEquipmentRepository`(원정의 장비·캐릭터는 `GameStateEntity`의 cascade로 저장·조회), 부르는 곳이 없던 저장소 조회 메서드 7개, 주입만 하던 저장소 필드 4개, `MemberEntity.updateSocialToken` (백엔드 #22)
 
 ### 수정
 - 랭킹을 갱신할 때 같은 ID로 새 엔티티를 만들어 덮어써, 응답의 기록 달성 일시가 비고 DB의 달성 일시도 첫 기록 그대로 남던 문제 (백엔드 #20)
@@ -199,6 +202,8 @@ Renova & Delve의 버전별 변경 내역입니다. 백엔드(`RenovaNDelve`)와
 - 게임 엔진은 설계대로 동작하지 않는 미완성 상태
 - 프론트엔드는 구현돼 있었지만 프로젝트가 중단되며 저장소째 폐기되었다. 남은 것은 백엔드 저장소뿐이다
 
+[0.11.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/vcg258/RenovaNDelve/compare/v0.6.0...v0.7.0
