@@ -372,7 +372,7 @@ public class BattleServiceImpl implements BattleService {
      */
     private String resolveBuffName(short statusEffect) {
         StatusEffect effect = StatusEffect.ofCode(statusEffect);
-        if (effect == null) throw new IllegalArgumentException("알 수 없는 상태이상 코드: " + statusEffect);
+        if (effect == null) throw new IllegalStateException("알 수 없는 상태이상 코드: " + statusEffect); // 스킬 데이터가 깨진 경우
         return effect.buffKey();
     }
 
