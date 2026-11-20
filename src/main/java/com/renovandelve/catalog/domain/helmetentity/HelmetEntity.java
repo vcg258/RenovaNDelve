@@ -2,6 +2,7 @@ package com.renovandelve.catalog.domain.helmetentity;
 
 import com.renovandelve.collection.domain.CollectionHelmetEntity;
 import com.renovandelve.game.domain.GameEquipmentEntity;
+import com.renovandelve.catalog.domain.Rarity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.*;
@@ -41,11 +42,15 @@ public class HelmetEntity {
     private int scoreCost = 0; // 스타팅 포인트 비용
 
 //    @Column(length = 10, nullable = false)
-//    private int price;  // 가격
 
     // TEXT 타입 대체자
     @Column(length = Integer.MAX_VALUE)
     private String description; // 투구 설명
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20, nullable = false)
+    private Rarity rarity = Rarity.COMMON; // 등급 (COMMON / RARE / EPIC). 상점·전리품의 등장 확률을 정한다 (V8)
 
     /* FK */
     @ToString.Exclude

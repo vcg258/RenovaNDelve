@@ -1,5 +1,6 @@
 package com.renovandelve.catalog.dto;
 
+import com.renovandelve.catalog.domain.Rarity;
 import com.renovandelve.catalog.domain.skillentity.Target;
 import lombok.Builder;
 
@@ -16,5 +17,6 @@ public record SkillDTO (
     short statusEffect, // 부여 상태이상 (출혈/화상/독/기절)
     int effectStack, // 상태이상 스택 수
     String description, // 기술 설명
-    boolean basic // 기본 공격 (스킬이 적으면 버릴 수 없다)
+    boolean basic, // 기본 공격 (스킬이 적으면 버릴 수 없다)
+    Rarity rarity // 등급 (COMMON / RARE / EPIC)
 ) {}

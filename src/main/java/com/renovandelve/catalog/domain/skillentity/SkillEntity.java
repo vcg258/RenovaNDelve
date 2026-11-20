@@ -3,6 +3,7 @@ package com.renovandelve.catalog.domain.skillentity;
 import com.renovandelve.collection.domain.CollectionSkillEntity;
 import com.renovandelve.game.domain.GameSkillSlotEntity;
 import com.renovandelve.catalog.domain.helmetentity.Type;
+import com.renovandelve.catalog.domain.Rarity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.*;
@@ -60,6 +61,11 @@ public class SkillEntity {
 
     @PositiveOrZero
     private int effectStack; // 상태이상 스택 수
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20, nullable = false)
+    private Rarity rarity = Rarity.COMMON; // 등급 (COMMON / RARE / EPIC). 상점·전리품의 등장 확률을 정한다 (V8)
 
     // TEXT 타입 대체자
     @Column(length = Integer.MAX_VALUE)

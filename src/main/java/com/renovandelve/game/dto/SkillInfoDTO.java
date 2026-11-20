@@ -1,5 +1,6 @@
 package com.renovandelve.game.dto;
 
+import com.renovandelve.catalog.domain.Rarity;
 import com.renovandelve.catalog.domain.skillentity.Target;
 
 import java.math.BigDecimal;
@@ -18,6 +19,7 @@ public record SkillInfoDTO(
         short statusEffect,
         int effectStack,
         String description,
-        boolean basic
+        boolean basic,
+        Rarity rarity // 등급 (COMMON / RARE / EPIC)
 ) {
 }

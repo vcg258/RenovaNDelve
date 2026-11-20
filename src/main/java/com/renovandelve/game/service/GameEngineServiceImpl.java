@@ -53,6 +53,7 @@ import com.renovandelve.game.engine.Faction;
 import com.renovandelve.game.engine.GameSession;
 import com.renovandelve.game.engine.Pact;
 import com.renovandelve.game.engine.PathChoice;
+import com.renovandelve.game.engine.RarityTable;
 import com.renovandelve.game.engine.RelicEffects;
 import com.renovandelve.game.engine.RewardOptions;
 import com.renovandelve.game.engine.RunStats;
@@ -1490,7 +1491,13 @@ public class GameEngineServiceImpl implements GameEngineService {
                     statusAssembler.toStatusDTO(gameState), null, session.getPhase());
         }
 
-        RewardOptions reward = buildRewardOptions(gameState, totalExp, totalGold, relicOptions);
+        // 강한 적의 전리품은 더 깊은 스테이지의 등급 확률을 쓴다 (엘리트·망령 +1, 보스 +2)
+        int rarityTier = stage + switch (String.valueOf(session.getNodeType())) {
+            case "BOSS" -> 2;
+            case "ELITE", "WRAITH" -> 1;
+            default -> 0;
+        };
+        RewardOptions reward = buildRewardOptions(gameState, totalExp, totalGold, relicOptions, rarityTier);
         if (recoveredRelicId != null && !reward.getRelicIds().contains(recoveredRelicId)) {
             List<Long> relicIds = new ArrayList<>(reward.getRelicIds());
             relicIds.add(0, recoveredRelicId);
@@ -1514,23 +1521,24 @@ public class GameEngineServiceImpl implements GameEngineService {
      * @param exp          이미 지급한 경험치 (표시용)
      * @param gold         이미 지급한 골드 (표시용)
      * @param relicOptions 유물 후보 수 (일반 1, 강적 2, 보스 3, 위험한 길 +1)
+     * @param rarityTier   등급 확률 단계 (스테이지 + 강한 적 보정)
      * @return 보상 후보
      */
-    private RewardOptions buildRewardOptions(GameStateEntity gameState, int exp, int gold, int relicOptions) {
+    private RewardOptions buildRewardOptions(GameStateEntity gameState, int exp, int gold, int relicOptions,
+                                             int rarityTier) {
         RewardOptions options = new RewardOptions();
         options.setExp(exp);
         options.setGold(gold);
 
-        List<SkillEntity> skills = new ArrayList<>(skillRepository.findBySkillNotOwner(gameState.getGameStateId()));
-        Collections.shuffle(skills, random);
+        // 스킬·유물 후보는 등급 확률로 고른다. 강한 적의 전리품일수록 깊은 단계의 확률을 쓴다
         // 가호 3단계에 이르면 그 세력이 보상 후보를 하나 더 얹어 준다 (천상: 소모품 / 마계: 유물 / 인간: 스킬)
         Alignment alignment = gameState.alignment();
-        options.setSkillIds(skills.stream().limit(3 + alignment.bonusSkillOptions())
+        options.setSkillIds(RarityTable.pick(skillRepository.findBySkillNotOwner(gameState.getGameStateId()),
+                        SkillEntity::getRarity, 3 + alignment.bonusSkillOptions(), rarityTier, random).stream()
                 .map(SkillEntity::getSkillId).collect(Collectors.toList()));
 
-        List<RelicEntity> relics = new ArrayList<>(relicRepository.findByRelicNotOwner(gameState.getGameStateId()));
-        Collections.shuffle(relics, random);
-        options.setRelicIds(relics.stream().limit(relicOptions + alignment.bonusRelicOptions())
+        options.setRelicIds(RarityTable.pick(relicRepository.findByRelicNotOwner(gameState.getGameStateId()),
+                        RelicEntity::getRarity, relicOptions + alignment.bonusRelicOptions(), rarityTier, random).stream()
                 .map(RelicEntity::getRelicId).collect(Collectors.toList()));
 
         List<ConsumableEntity> consumables = new ArrayList<>(consumableRepository.findAll());

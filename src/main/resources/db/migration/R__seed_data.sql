@@ -204,6 +204,19 @@ INSERT INTO relic (name, effect_desc, rarity, score_cost)
 SELECT '심연의 핵', '공격력 10% / 방어력 +2 증가', 'EPIC', 500 WHERE NOT EXISTS (SELECT 1 FROM relic WHERE name = '심연의 핵');
 
 -- =========================================================
+-- 등급 (V8). 상점·전리품은 스테이지별 확률로 등급을 먼저 정한다 (RarityTable)
+-- 시작 장비(점수 0)와 기본 공격은 흔함. 여기에 적지 않은 항목은 컬럼 기본값(흔함)
+-- =========================================================
+UPDATE weapon SET rarity = 'RARE' WHERE name IN ('암살자의 단검', '전쟁 둔기', '마법사의 지팡이') AND rarity <> 'RARE';
+UPDATE weapon SET rarity = 'EPIC' WHERE name IN ('멸망의 지팡이') AND rarity <> 'EPIC';
+UPDATE armor SET rarity = 'RARE' WHERE name IN ('사슬 갑옷') AND rarity <> 'RARE';
+UPDATE armor SET rarity = 'EPIC' WHERE name IN ('기사단 판금 갑옷') AND rarity <> 'EPIC';
+UPDATE helmet SET rarity = 'RARE' WHERE name IN ('철 투구') AND rarity <> 'RARE';
+UPDATE helmet SET rarity = 'EPIC' WHERE name IN ('악마의 가면') AND rarity <> 'EPIC';
+UPDATE skill SET rarity = 'RARE' WHERE name IN ('회전 베기', '화염구', '맹독 단검', '기절 타격') AND rarity <> 'RARE';
+UPDATE skill SET rarity = 'EPIC' WHERE name IN ('처형', '헬파이어') AND rarity <> 'EPIC';
+
+-- =========================================================
 -- 몬스터 기본 스탯 (필드 강도 시스템: 스테이지 x 난이도)
 -- difficulty: 0=EASY, 1=NORMAL, 2=HARD, 3=HELL
 --

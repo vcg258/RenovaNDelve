@@ -2,6 +2,7 @@ package com.renovandelve.catalog.domain.relicentity;
 
 import com.renovandelve.collection.domain.CollectionRelicEntity;
 import com.renovandelve.game.domain.GameRelicInventoryEntity;
+import com.renovandelve.catalog.domain.Rarity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.*;
@@ -24,10 +25,8 @@ public class RelicEntity {
     private String name; // 유물 명
 
 //    @Column(length = 10, nullable = false)
-//    private int price;  // 가격
 
     // TEXT 타입 대체자
-    //@Lob
     @Column(nullable = false, length = Integer.MAX_VALUE)
     private String effectDesc; // 유물 효과 설명
 

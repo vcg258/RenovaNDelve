@@ -25,7 +25,6 @@ public class ConsumableEntity {
 
 //    @Enumerated(EnumType.STRING)
 //    @Column(length = 15, nullable = false)
-//    private Target target; // 자신, 적 1체, 적 전체
 
     @Enumerated(EnumType.STRING)
     @Column(length = 30, nullable = false)
@@ -42,7 +41,6 @@ public class ConsumableEntity {
     private int scoreCost = 0; // 스타팅 포인트 비용
 
 //    @Column(length = 10, nullable = false)
-//    private int price;  // 가격
 
     // TEXT 타입 대체자
     @Column(length = Integer.MAX_VALUE)

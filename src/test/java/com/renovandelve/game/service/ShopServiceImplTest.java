@@ -12,6 +12,7 @@ import com.renovandelve.catalog.repository.WeaponRepository;
 import com.renovandelve.game.domain.GameEquipmentEntity;
 import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import com.renovandelve.game.engine.ShopStockItem;
+import com.renovandelve.catalog.domain.Rarity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.RepeatedTest;
@@ -94,6 +95,34 @@ class ShopServiceImplTest {
 
         assertThat(stock).extracting(ShopStockItem::getItemType).contains("WEAPON", "ARMOR", "HELMET");
         assertThat(stock).allMatch(i -> i.getBonus() != null);
+    }
+
+    @Test
+    @DisplayName("진열품은 등급을 싣고, 영웅 장비는 스테이지 1보다 스테이지 5에서 훨씬 자주 나온다")
+    void rarityDependsOnStage() {
+        WeaponEntity epic = WeaponEntity.builder().weaponId(10L).name("멸망").atkBonus(20).rarity(Rarity.EPIC).build();
+        List<WeaponEntity> weapons = new java.util.ArrayList<>(List.of(epic));
+        for (long id = 11; id < 14; id++) {
+            weapons.add(WeaponEntity.builder().weaponId(id).name("흔한 검 " + id).atkBonus(3).rarity(Rarity.COMMON).build());
+        }
+        when(weaponRepository.findAll()).thenReturn(weapons);
+        when(gameState.getGameEquipment()).thenReturn(null);
+
+        int early = countEpicWeapons(1), deep = countEpicWeapons(5);
+        assertThat(early).isBetween(20, 90);     // 약 5% (1000번 중)
+        assertThat(deep).isBetween(240, 360);    // 약 30%
+        assertThat(shopService.generateStock(gameState)).filteredOn(i -> i.getItemType().equals("WEAPON"))
+                .allSatisfy(i -> assertThat(i.getRarity()).isNotNull());
+    }
+
+    private int countEpicWeapons(int stage) {
+        when(gameState.getCurrentStage()).thenReturn(stage);
+        int epic = 0;
+        for (int i = 0; i < 1000; i++) {
+            epic += (int) shopService.generateStock(gameState).stream()
+                    .filter(item -> item.getItemType().equals("WEAPON") && item.getRarity() == Rarity.EPIC).count();
+        }
+        return epic;
     }
 
     private static WeaponEntity weapon(long id, int bonus) {

@@ -1,5 +1,6 @@
 package com.renovandelve.catalog.dto;
 
+import com.renovandelve.catalog.domain.Rarity;
 import com.renovandelve.catalog.domain.armorentity.Type;
 
 public record ArmorDTO (
@@ -9,6 +10,6 @@ public record ArmorDTO (
     int defBonus, // 추가 방어력 (단검 -, 둔기 +)
     short specialEffect, // 갑옷 특수 효과
     int scoreCost, // 스타팅 포인트 비용
-//    int price,      // 가격
-    String description // 갑옷 설명
+    String description, // 갑옷 설명
+    Rarity rarity // 등급 (COMMON / RARE / EPIC)
 ) {}
