@@ -18,7 +18,6 @@ import java.util.List;
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Table(name = "skill")
 public class SkillEntity {
-
     @PositiveOrZero // Unsigned 대체자
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Id private Long skillId; // 기술 고유 ID (PK)

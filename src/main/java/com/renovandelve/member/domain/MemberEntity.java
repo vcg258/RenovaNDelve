@@ -85,6 +85,39 @@ public class MemberEntity {
     @Column(nullable = false)
     private LocalDateTime updatedAt; // 마지막 수정일시
 
+    /* FK */
+    @ToString.Exclude
+    @OneToMany(mappedBy = "member")
+    private List<GameStateEntity> gameState;
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "member")
+    private List<RankingEntity> ranking;
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "member")
+    private List<CollectionHelmetEntity> collectionHelmet;
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "member")
+    private List<CollectionRelicEntity> collectionRelic;
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "member")
+    private List<CollectionConsumableEntity> collectionConsumable;
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "member")
+    private List<CollectionArmorEntity> collectionArmor;
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "member")
+    private List<CollectionWeaponEntity> collectionWeapon;
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "member")
+    private List<CollectionSkillEntity> collectionSkill;
+
     /* ===== 생성 ===== */
 
     /**
@@ -157,15 +190,6 @@ public class MemberEntity {
      */
     public MemberStatus getStatus() {
         return status == null ? MemberStatus.ACTIVE : status;
-    }
-
-    /**
-     * 소셜 로그인 토큰을 바꾼다.
-     *
-     * @param socialToken 새 토큰
-     */
-    public void updateSocialToken(String socialToken) {
-        this.socialToken = socialToken;
     }
 
     /**
@@ -273,37 +297,4 @@ public class MemberEntity {
     private void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
-
-    /* FK */
-    @ToString.Exclude
-    @OneToMany(mappedBy = "member")
-    private List<GameStateEntity> gameState;
-
-    @ToString.Exclude
-    @OneToMany(mappedBy = "member")
-    private List<RankingEntity> ranking;
-
-    @ToString.Exclude
-    @OneToMany(mappedBy = "member")
-    private List<CollectionHelmetEntity> collectionHelmet;
-
-    @ToString.Exclude
-    @OneToMany(mappedBy = "member")
-    private List<CollectionRelicEntity> collectionRelic;
-
-    @ToString.Exclude
-    @OneToMany(mappedBy = "member")
-    private List<CollectionConsumableEntity> collectionConsumable;
-
-    @ToString.Exclude
-    @OneToMany(mappedBy = "member")
-    private List<CollectionArmorEntity> collectionArmor;
-
-    @ToString.Exclude
-    @OneToMany(mappedBy = "member")
-    private List<CollectionWeaponEntity> collectionWeapon;
-
-    @ToString.Exclude
-    @OneToMany(mappedBy = "member")
-    private List<CollectionSkillEntity> collectionSkill;
 }
