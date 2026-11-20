@@ -1202,8 +1202,8 @@ public class GameEngineServiceImpl implements GameEngineService {
      */
     private SessionMonster newSessionMonster(int key, Long monsterId, String name, short monsterType,
                                              int scoreReward, String description, BaseStats base) {
-        double hpMult = switch (monsterType) { case 2 -> 3.2; case 1 -> 1.6; default -> 1.0; };
-        double atkMult = switch (monsterType) { case 2 -> 1.7; case 1 -> 1.25; default -> 1.0; };
+        double hpMult = switch (monsterType) { case 2 -> 2.8; case 1 -> 1.6; default -> 1.0; };
+        double atkMult = switch (monsterType) { case 2 -> 1.55; case 1 -> 1.25; default -> 1.0; };
         double defMult = switch (monsterType) { case 2 -> 1.5; case 1 -> 1.2; default -> 1.0; };
         double variance = 0.9 + random.nextDouble() * 0.2; // +-10%
 

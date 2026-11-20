@@ -1,5 +1,7 @@
 package com.renovandelve.sim;
 
+import com.renovandelve.catalog.domain.Rarity;
+
 import com.renovandelve.catalog.domain.consumableentity.Type;
 import com.renovandelve.catalog.domain.skillentity.Target;
 import com.renovandelve.catalog.dto.ArmorDTO;
@@ -45,6 +47,7 @@ class BotRunner {
     private final RunResult result = new RunResult();
     private List<BattleMonsterDTO> monsters = List.of();
     private StatusDTO status;
+    private boolean guardedLastTurn;
 
     BotRunner(GameEngineService engine, GameStateService gameStateService, MemberEntity member,
               BotPolicy policy, String difficulty) {
@@ -156,17 +159,21 @@ class BotRunner {
 
         int incoming = expectedIncoming(alive);
         int hp = status.getCharacterDTO().getCurrentHp();
-        boolean danger = incoming >= hp * policy.guardIfIncomingOver;
+        // 사람처럼 막는다: 위험한 턴에만, 그리고 두 턴 연속으로는 막지 않는다 (막기만 하면 전투가 끝나지 않는다)
+        boolean danger = incoming >= hp * policy.guardIfIncomingOver && !guardedLastTurn;
         GameSkillSlotDTO skill = bestReadySkill(alive.size());
 
         if (danger || skill == null) {
             if (skill == null && allCooling()) {
                 engine.passTurn(member);
+                guardedLastTurn = false;
             } else {
                 engine.guard(member);
+                guardedLastTurn = true;
             }
             return;
         }
+        guardedLastTurn = false;
         BattleMonsterDTO target = alive.stream()
                 .filter(m -> !"GUARD".equals(m.intent()))
                 .min(Comparator.comparingInt(BattleMonsterDTO::currentHp))
@@ -235,7 +242,8 @@ class BotRunner {
             return;
         }
         if (!reward.relics().isEmpty()) {
-            engine.selectReward(member, new RewardSelectRequest("RELIC", reward.relics().get(0).relicId(), null));
+            var relic = reward.relics().stream().max(Comparator.comparingInt(r -> rarityRank(r.rarity()))).orElseThrow();
+            engine.selectReward(member, new RewardSelectRequest("RELIC", relic.relicId(), null));
             return;
         }
         SkillInfoDTO bestSkill = reward.skills().stream().max(Comparator.comparingDouble(BotRunner::skillPower)).orElse(null);
@@ -267,25 +275,62 @@ class BotRunner {
         return true;
     }
 
+    /**
+     * 상점: 사람처럼 쓸모 있는 것부터 산다.
+     * 1) 지금 장비보다 보너스가 큰 장비 (오르는 폭이 큰 것부터) 2) 유물 (등급이 높은 것부터)
+     * 3) 지금 가진 가장 약한 스킬보다 센 스킬 4) 회복 물약 (2개까지). 물약 하나 값은 끝까지 남긴다
+     */
     private void shop() {
-        List<ShopItemDTO> items = engine.getShop(member);
+        List<ShopItemDTO> items = new ArrayList<>(engine.getShop(member));
+        items.sort(Comparator.comparingInt(this::shopPriority));
+        int reserve = items.stream().filter(BotRunner::isPotionName).mapToInt(ShopItemDTO::price).min().orElse(0);
         for (ShopItemDTO item : items) {
             if (item.sold()) continue;
             int gold = status.getStateDTO().getGold();
-            boolean buy = switch (item.itemType()) {
-                case "RELIC" -> item.price() <= gold;
-                case "CONSUMABLE" -> item.price() <= gold && potionCount() < 2 && isPotionName(item);
+            boolean affordable = item.price() <= gold - (isPotionName(item) ? 0 : reserve);
+            boolean buy = affordable && switch (item.itemType()) {
+                case "WEAPON", "ARMOR", "HELMET" -> item.bonus() != null && item.bonus() > nullToZero(item.currentBonus());
+                case "RELIC" -> true;
+                case "CONSUMABLE" -> potionCount() < 2 && isPotionName(item);
                 default -> false;
             };
-            if (buy) {
-                try {
+            try {
+                if ("SKILL".equals(item.itemType()) && affordable) {
+                    SkillInfoDTO skill = skillOf(item);
+                    if (skill != null && tryLearn(skill, "SKILL", true)) status = engine.getView(member).status();
+                } else if (buy) {
                     status = engine.buyItem(member, new PurchaseRequest(item.itemType(), item.itemId(), null));
-                } catch (Exception ignored) {
-                    // 살 수 없었다 (골드 부족 등)
                 }
+            } catch (Exception ignored) {
+                // 살 수 없었다 (골드 부족 등)
             }
         }
         engine.leaveShop(member);
+    }
+
+    private int shopPriority(ShopItemDTO item) {
+        return switch (item.itemType()) {
+            case "WEAPON", "ARMOR", "HELMET" -> -(nullToZero(item.bonus()) - nullToZero(item.currentBonus())) * 10;
+            case "RELIC" -> 1000 - rarityRank(item.rarity()) * 10;
+            case "SKILL" -> 2000;
+            default -> 3000;
+        };
+    }
+
+    /** 상점의 스킬 진열품을 카탈로그 스킬로 (능력 비교용) */
+    private SkillInfoDTO skillOf(ShopItemDTO item) {
+        if (skillCatalog == null) skillCatalog = gameStateService.getSetupOptions(member).skills();
+        return skillCatalog.stream().filter(sk -> sk.skillId().equals(item.itemId())).findFirst().orElse(null);
+    }
+
+    private List<SkillInfoDTO> skillCatalog;
+
+    private static int nullToZero(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private static int rarityRank(Rarity rarity) {
+        return rarity == null ? 0 : rarity.ordinal();
     }
 
     private static boolean isPotionName(ShopItemDTO item) {
