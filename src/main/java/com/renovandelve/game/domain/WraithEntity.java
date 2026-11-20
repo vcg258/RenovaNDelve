@@ -23,7 +23,6 @@ import java.util.List;
 @Table(name = "wraith", indexes = @Index(name = "idx_wraith_member_status", columnList = "member_id, status"))
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class WraithEntity {
-
     /** 망령의 상태 */
     public enum Status {
         /** 다음 원정에서 기다리는 중 */
@@ -130,16 +129,6 @@ public class WraithEntity {
                 .build();
     }
 
-    @PrePersist
-    private void onCreate() {
-        this.createdAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    private void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
-
     /** 쓰러진 노드를 망령이 나타날 노드로 바꾼다. 첫 노드와 보스 노드(10)는 피한다. */
     public static int appearNode(int deathNode) {
         return Math.max(2, Math.min(9, deathNode));
@@ -197,5 +186,23 @@ public class WraithEntity {
     private static List<String> split(String value, String separator) {
         if (value == null || value.isBlank()) return List.of();
         return Arrays.stream(value.split(separator)).map(String::trim).filter(s -> !s.isEmpty()).toList();
+    }
+
+    // 생명주기 도메인 메서드 (INSERT 직전에 값을 기록하고 넣어주는 역할)
+    /**
+     * 처음 저장될 때 기록 일시를 남긴다 (JPA 생명주기 콜백).
+     */
+    @PrePersist
+    private void onCreate() {
+        this.createdAt = LocalDateTime.now();
+    }
+
+    // 생명주기 도메인 메서드 (UPDATE 직전에 값을 기록하고 넣어주는 역할)
+    /**
+     * 수정될 때 수정 일시를 갱신한다 (JPA 생명주기 콜백).
+     */
+    @PreUpdate
+    private void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
     }
 }

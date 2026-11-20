@@ -42,14 +42,16 @@ public class RankingEntity {
     @Column(nullable = false)
     private LocalDateTime achievedAt; // 기록 달성 일시
 
-    // 생명주기 도메인 메서드 (INSERT 직전에 값을 기록하고 넣어주는 역할)
-    /**
-     * 처음 저장될 때 기록 달성 일시를 남긴다 (JPA 생명주기 콜백).
-     */
-    @PrePersist
-    private void onCreate() {
-        this.achievedAt = LocalDateTime.now();
-    }
+    /* FK (자식) */
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "fk_ranking_member_memberId"))
+    private MemberEntity member; // 회원 ID (FK)
+
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "game_state_id", nullable = false, foreignKey = @ForeignKey(name = "fk_ranking_game_state_game_state_id"))
+    private GameStateEntity gameState; // 게임 세션 ID (FK)
 
     /**
      * 끝난 원정으로 이 난이도의 첫 기록을 만든다.
@@ -84,14 +86,12 @@ public class RankingEntity {
         return true;
     }
 
-    /* FK (자식) */
-    @ToString.Exclude
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "fk_ranking_member_memberId"))
-    private MemberEntity member; // 회원 ID (FK)
-
-    @ToString.Exclude
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "game_state_id", nullable = false, foreignKey = @ForeignKey(name = "fk_ranking_game_state_game_state_id"))
-    private GameStateEntity gameState; // 게임 세션 ID (FK)
+    // 생명주기 도메인 메서드 (INSERT 직전에 값을 기록하고 넣어주는 역할)
+    /**
+     * 처음 저장될 때 기록 달성 일시를 남긴다 (JPA 생명주기 콜백).
+     */
+    @PrePersist
+    private void onCreate() {
+        this.achievedAt = LocalDateTime.now();
+    }
 }

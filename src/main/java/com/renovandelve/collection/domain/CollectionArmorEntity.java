@@ -25,10 +25,17 @@ public class CollectionArmorEntity {
     @Column(nullable = false, updatable = false)
     private LocalDateTime acquiredAt; // 최초 흭득 일시
 
-    // 생명주기 도메인 메서드 (INSERT 직전에 값을 기록하고 넣어주는 역할)
-    /**
-     * 처음 저장될 때 획득 일시를 기록한다 (JPA 생명주기 콜백).
-     */
+    /* FK (자식) */
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "fk_collection_armor_member_memberId"))
+    private MemberEntity member; // 회원 ID (FK)
+
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "armor_id", nullable = false, foreignKey = @ForeignKey(name = "fk_collection_armor_armor_armor_id"))
+    private ArmorEntity armor; // 갑옷 고유 ID (FK)
+
     /**
      * 회원 도감에 갑옷를 처음 등록한다.
      *
@@ -40,19 +47,12 @@ public class CollectionArmorEntity {
         return CollectionArmorEntity.builder().member(member).armor(armor).build();
     }
 
+    // 생명주기 도메인 메서드 (INSERT 직전에 값을 기록하고 넣어주는 역할)
+    /**
+     * 처음 저장될 때 획득 일시를 기록한다 (JPA 생명주기 콜백).
+     */
     @PrePersist
     private void onCreate() {
         this.acquiredAt = LocalDateTime.now();
     }
-
-    /* FK (자식) */
-    @ToString.Exclude
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "fk_collection_armor_member_memberId"))
-    private MemberEntity member; // 회원 ID (FK)
-
-    @ToString.Exclude
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "armor_id", nullable = false, foreignKey = @ForeignKey(name = "fk_collection_armor_armor_armor_id"))
-    private ArmorEntity armor; // 갑옷 고유 ID (FK)
 }

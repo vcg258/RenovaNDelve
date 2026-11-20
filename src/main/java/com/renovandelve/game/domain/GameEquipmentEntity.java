@@ -25,6 +25,27 @@ public class GameEquipmentEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Id private Long equipId; // 슬릇 고유 ID
 
+    /* FK 자식 */
+    @ToString.Exclude
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "game_state_id", nullable = false, foreignKey = @ForeignKey(name = "fk_game_equipment_game_state_game_state_id"))
+    private GameStateEntity gameState; // 게임 세션 ID (FK)
+
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "weapon_id", foreignKey = @ForeignKey(name = "fk_game_equipment_weapon_weapon_id"))
+    private WeaponEntity weapon; // 장착 중인 무기 (FK)
+
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "armor_id", foreignKey = @ForeignKey(name = "fk_game_equipment_armor_armor_id"))
+    private ArmorEntity armor; // 장착 중인 갑옷 (FK)
+
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "helmet_id", foreignKey = @ForeignKey(name = "fk_game_equipment_helmet_helmet_id"))
+    private HelmetEntity helmet; // 장착 중인 투구 (FK)
+
     /**
      * 원정을 시작할 때 고른 장비로 슬롯을 만든다.
      *
@@ -73,25 +94,4 @@ public class GameEquipmentEntity {
     public void equipHelmet(HelmetEntity helmet) {
         this.helmet = helmet;
     }
-
-    /* FK 자식 */
-    @ToString.Exclude
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "game_state_id", nullable = false, foreignKey = @ForeignKey(name = "fk_game_equipment_game_state_game_state_id"))
-    private GameStateEntity gameState; // 게임 세션 ID (FK)
-
-    @ToString.Exclude
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "weapon_id", foreignKey = @ForeignKey(name = "fk_game_equipment_weapon_weapon_id"))
-    private WeaponEntity weapon; // 장착 중인 무기 (FK)
-
-    @ToString.Exclude
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "armor_id", foreignKey = @ForeignKey(name = "fk_game_equipment_armor_armor_id"))
-    private ArmorEntity armor; // 장착 중인 갑옷 (FK)
-
-    @ToString.Exclude
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "helmet_id", foreignKey = @ForeignKey(name = "fk_game_equipment_helmet_helmet_id"))
-    private HelmetEntity helmet; // 장착 중인 투구 (FK)
 }

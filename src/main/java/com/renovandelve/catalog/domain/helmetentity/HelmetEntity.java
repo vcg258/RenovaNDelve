@@ -55,6 +55,4 @@ public class HelmetEntity {
     @ToString.Exclude
     @OneToMany(mappedBy = "helmet")
     private List<CollectionHelmetEntity> collectionHelmet;
-
-
 }

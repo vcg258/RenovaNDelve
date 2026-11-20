@@ -3,7 +3,6 @@ package com.renovandelve.catalog.repository;
 import com.renovandelve.catalog.domain.consumableentity.ConsumableEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.List;
 import java.util.Optional;
 
 public interface ConsumableRepository extends JpaRepository<ConsumableEntity, Long> {
@@ -11,5 +10,4 @@ public interface ConsumableRepository extends JpaRepository<ConsumableEntity, Lo
     Optional<ConsumableEntity> findByNameContains(String name);
 
     // 소모품 이름 조회 여러건
-    List<ConsumableEntity> findAllByName(String name);
 }

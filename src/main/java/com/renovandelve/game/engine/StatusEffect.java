@@ -19,11 +19,6 @@ public enum StatusEffect {
         this.label = label;
     }
 
-    /** @return 스킬 테이블의 상태이상 번호 */
-    public short code() {
-        return code;
-    }
-
     /** @return 한국어 이름 */
     public String label() {
         return label;

@@ -41,7 +41,6 @@ import java.util.Set;
         @Index(name = "idx_game_state_member_member_id", columnList = "member_id")
 })
 public class GameStateEntity { //제외
-
     /*
      * 애그리거트 루트.
      * 한 판의 스킬 슬롯·유물·소모품은 이 게임에 딸린 것이므로, 넣고 빼는 일은 모두 이 엔티티의 메서드로만 한다.
@@ -51,10 +50,13 @@ public class GameStateEntity { //제외
 
     /** 스킬 슬롯 최대 개수 */
     public static final int MAX_SKILL_SLOTS = 8;
+
     /** 기본 공격은 스킬을 이만큼(기본 공격 포함) 가졌을 때만 버리거나 바꿀 수 있다 */
     public static final int MIN_SLOTS_TO_DROP_BASIC = 3;
+
     /** 원정을 시작할 때의 골드 */
     public static final int STARTING_GOLD = 100;
+
     @PositiveOrZero
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Id private Long gameStateId; // 게임 세션 고유 ID (PK)
@@ -125,6 +127,82 @@ public class GameStateEntity { //제외
 
     @Column(nullable = false)
     private LocalDateTime updatedAt; // 마지막 저장 일시
+
+    /* FK (부모) */
+    @ToString.Exclude
+    @OneToMany(mappedBy = "gameState")
+    private List<RankingEntity> ranking;
+
+    @ToString.Exclude
+    @Builder.Default
+    @OneToMany(mappedBy = "gameState", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<GameSkillSlotEntity> gameSkillSlot = new ArrayList<>();
+
+    @ToString.Exclude
+    @OneToMany(mappedBy = "gameState", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<GameCharacterEntity> gameCharacter;
+
+    @ToString.Exclude
+    @OneToOne(mappedBy = "gameState", cascade = CascadeType.ALL, orphanRemoval = true)
+    private GameEquipmentEntity gameEquipment;
+
+    @ToString.Exclude
+    @Builder.Default
+    @OneToMany(mappedBy = "gameState", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<GameRelicInventoryEntity> gameRelicInventory = new ArrayList<>();
+
+    @ToString.Exclude
+    @Builder.Default
+    @OneToMany(mappedBy = "gameState", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<GameConsumableInventoryEntity> gameConsumableInventory = new ArrayList<>();
+
+    /* FK (자식) */
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "fk_game_state_member_memberId"))
+    private MemberEntity member; // 회원 ID (FK)
+
+    /* ==================== 원정 시작 ==================== */
+
+    /**
+     * 새 원정을 시작한다. 장비 슬롯·캐릭터·스킬 슬롯·유물을 이 게임에 붙여 만들고,
+     * 저장소에 게임 하나만 저장하면 나머지는 cascade로 함께 저장된다.
+     * 예산 검증처럼 다른 데이터(도감 보너스)가 필요한 규칙은 호출하는 서비스가 먼저 확인한다.
+     *
+     * @param member         회원
+     * @param difficulty     난이도
+     * @param startingPoints 사용한 스타팅 포인트
+     * @param pacts          건 서약 (없으면 빈 집합)
+     * @param kingdom        시작 시점의 왕국 정세 (이 원정 동안 바뀌지 않는다)
+     * @param weapon         시작 무기
+     * @param armor          시작 갑옷
+     * @param helmet         시작 투구
+     * @param skills         시작 스킬 (기본 공격 포함)
+     * @param relics         시작 유물
+     * @return 스테이지 1, 노드 0에서 시작하는 게임
+     */
+    public static GameStateEntity start(MemberEntity member, Difficulty difficulty, int startingPoints,
+                                        Set<Pact> pacts, KingdomState kingdom,
+                                        WeaponEntity weapon, ArmorEntity armor, HelmetEntity helmet,
+                                        List<SkillEntity> skills, List<RelicEntity> relics) {
+        GameStateEntity game = GameStateEntity.builder()
+                .member(member)
+                .difficulty(difficulty)
+                .currentStage(1)
+                .currentNodeId(0L)
+                .gold(STARTING_GOLD)
+                .startingPoints(startingPoints)
+                .pacts(pacts.isEmpty() ? null : Pact.serialize(pacts))
+                .kingdom(kingdom.name())
+                .build();
+        game.gameEquipment = GameEquipmentEntity.of(game, weapon, armor, helmet);
+        game.gameCharacter = new ArrayList<>(List.of(GameCharacterEntity.start(game, game.gameEquipment)));
+        skills.forEach(game::learnSkill);
+        relics.forEach(game::addRelic);
+        return game;
+    }
+
+    /* ==================== 진행 (골드·점수·노드·성향·종료) ==================== */
 
     /**
      * 골드 차감 도메인 메서드
@@ -271,46 +349,6 @@ public class GameStateEntity { //제외
         }
         deductGold(contractBreakCost());
         bindContract(null);
-    }
-
-    /* ==================== 원정 시작 ==================== */
-
-    /**
-     * 새 원정을 시작한다. 장비 슬롯·캐릭터·스킬 슬롯·유물을 이 게임에 붙여 만들고,
-     * 저장소에 게임 하나만 저장하면 나머지는 cascade로 함께 저장된다.
-     * 예산 검증처럼 다른 데이터(도감 보너스)가 필요한 규칙은 호출하는 서비스가 먼저 확인한다.
-     *
-     * @param member         회원
-     * @param difficulty     난이도
-     * @param startingPoints 사용한 스타팅 포인트
-     * @param pacts          건 서약 (없으면 빈 집합)
-     * @param kingdom        시작 시점의 왕국 정세 (이 원정 동안 바뀌지 않는다)
-     * @param weapon         시작 무기
-     * @param armor          시작 갑옷
-     * @param helmet         시작 투구
-     * @param skills         시작 스킬 (기본 공격 포함)
-     * @param relics         시작 유물
-     * @return 스테이지 1, 노드 0에서 시작하는 게임
-     */
-    public static GameStateEntity start(MemberEntity member, Difficulty difficulty, int startingPoints,
-                                        Set<Pact> pacts, KingdomState kingdom,
-                                        WeaponEntity weapon, ArmorEntity armor, HelmetEntity helmet,
-                                        List<SkillEntity> skills, List<RelicEntity> relics) {
-        GameStateEntity game = GameStateEntity.builder()
-                .member(member)
-                .difficulty(difficulty)
-                .currentStage(1)
-                .currentNodeId(0L)
-                .gold(STARTING_GOLD)
-                .startingPoints(startingPoints)
-                .pacts(pacts.isEmpty() ? null : Pact.serialize(pacts))
-                .kingdom(kingdom.name())
-                .build();
-        game.gameEquipment = GameEquipmentEntity.of(game, weapon, armor, helmet);
-        game.gameCharacter = new ArrayList<>(List.of(GameCharacterEntity.start(game, game.gameEquipment)));
-        skills.forEach(game::learnSkill);
-        relics.forEach(game::addRelic);
-        return game;
     }
 
     /* ==================== 장비 ==================== */
@@ -592,38 +630,4 @@ public class GameStateEntity { //제외
     private void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
-
-    /* FK (부모) */
-    @ToString.Exclude
-    @OneToMany(mappedBy = "gameState")
-    private List<RankingEntity> ranking;
-
-    @ToString.Exclude
-    @Builder.Default
-    @OneToMany(mappedBy = "gameState", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<GameSkillSlotEntity> gameSkillSlot = new ArrayList<>();
-
-    @ToString.Exclude
-    @OneToMany(mappedBy = "gameState", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<GameCharacterEntity> gameCharacter;
-
-    @ToString.Exclude
-    @OneToOne(mappedBy = "gameState", cascade = CascadeType.ALL, orphanRemoval = true)
-    private GameEquipmentEntity gameEquipment;
-
-    @ToString.Exclude
-    @Builder.Default
-    @OneToMany(mappedBy = "gameState", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<GameRelicInventoryEntity> gameRelicInventory = new ArrayList<>();
-
-    @ToString.Exclude
-    @Builder.Default
-    @OneToMany(mappedBy = "gameState", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<GameConsumableInventoryEntity> gameConsumableInventory = new ArrayList<>();
-
-    /* FK (자식) */
-    @ToString.Exclude
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "member_id", nullable = false, foreignKey = @ForeignKey(name = "fk_game_state_member_memberId"))
-    private MemberEntity member; // 회원 ID (FK)
 }

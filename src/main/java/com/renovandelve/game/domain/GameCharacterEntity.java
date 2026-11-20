@@ -15,34 +15,18 @@ import lombok.*;
         @Index(name = "idx_game_character_game_state_game_state_id", columnList = "game_state_id")
 })
 public class GameCharacterEntity { //제외
-    @PositiveOrZero
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Id private Long characterId; // 슬릇 고유 ID
-
     /** 장비 보너스를 더하기 전의 기본 최대 HP */
     public static final int BASE_MAX_HP = 100;
+
     /** 장비 보너스를 더하기 전의 기본 공격력 */
     public static final int BASE_ATTACK = 10;
+
     /** 장비 보너스를 더하기 전의 기본 방어력 */
     public static final int BASE_DEFENSE = 5;
 
-    /**
-     * 원정을 시작할 때의 캐릭터. 기본 능력치에 장비 보너스를 더하고 HP는 가득 찬 상태로 시작한다.
-     *
-     * @param gameState 게임
-     * @param equipment 시작 장비
-     * @return 레벨 1 캐릭터
-     */
-    public static GameCharacterEntity start(GameStateEntity gameState, GameEquipmentEntity equipment) {
-        int maxHp = BASE_MAX_HP + equipment.helmetBonus();
-        return GameCharacterEntity.builder()
-                .gameState(gameState)
-                .maxHp(maxHp)
-                .currentHp(maxHp)
-                .attack(BASE_ATTACK + equipment.weaponBonus())
-                .defense(BASE_DEFENSE + equipment.armorBonus())
-                .build();
-    }
+    @PositiveOrZero
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id private Long characterId; // 슬릇 고유 ID
 
     @PositiveOrZero
     @Column(nullable = false)
@@ -69,6 +53,30 @@ public class GameCharacterEntity { //제외
     @Column(nullable = false, columnDefinition = "integer not null default 0")
     @Builder.Default
     private int exp = 0; // 누적 경험치 (레벨업 임계값 = level * 100)
+
+    /* FK 자식 */
+    @ToString.Exclude
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "game_state_id", nullable = false, foreignKey = @ForeignKey(name = "fk_game_character_game_state_game_state_id"))
+    private GameStateEntity gameState; // 게임 세션 ID (FK)
+
+    /**
+     * 원정을 시작할 때의 캐릭터. 기본 능력치에 장비 보너스를 더하고 HP는 가득 찬 상태로 시작한다.
+     *
+     * @param gameState 게임
+     * @param equipment 시작 장비
+     * @return 레벨 1 캐릭터
+     */
+    public static GameCharacterEntity start(GameStateEntity gameState, GameEquipmentEntity equipment) {
+        int maxHp = BASE_MAX_HP + equipment.helmetBonus();
+        return GameCharacterEntity.builder()
+                .gameState(gameState)
+                .maxHp(maxHp)
+                .currentHp(maxHp)
+                .attack(BASE_ATTACK + equipment.weaponBonus())
+                .defense(BASE_DEFENSE + equipment.armorBonus())
+                .build();
+    }
 
     /**
      * 피해 적용 (0 미만 방지)
@@ -135,10 +143,4 @@ public class GameCharacterEntity { //제외
         }
         return levelUps;
     }
-
-    /* FK 자식 */
-    @ToString.Exclude
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "game_state_id", nullable = false, foreignKey = @ForeignKey(name = "fk_game_character_game_state_game_state_id"))
-    private GameStateEntity gameState; // 게임 세션 ID (FK)
 }
