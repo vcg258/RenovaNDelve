@@ -21,8 +21,6 @@ import com.renovandelve.collection.repository.CollectionHelmetRepository;
 import com.renovandelve.collection.repository.CollectionRelicRepository;
 import com.renovandelve.collection.repository.CollectionSkillRepository;
 import com.renovandelve.collection.repository.CollectionWeaponRepository;
-import com.renovandelve.game.repository.GameRelicInventoryRepository;
-import com.renovandelve.game.repository.GameSkillSlotRepository;
 import com.renovandelve.game.repository.GameStateRepository;
 import com.renovandelve.catalog.repository.HelmetRepository;
 import com.renovandelve.catalog.repository.RelicRepository;
@@ -49,8 +47,6 @@ public class GameStateServiceImpl implements GameStateService {
     private final HelmetRepository helmetRepository;
     private final SkillRepository skillRepository;
     private final RelicRepository relicRepository;
-    private final GameSkillSlotRepository gameSkillSlotRepository;
-    private final GameRelicInventoryRepository gameRelicInventoryRepository;
     private final GameSessionService gameSessionService;
     private final CollectionWeaponRepository collectionWeaponRepository;
     private final CollectionArmorRepository collectionArmorRepository;

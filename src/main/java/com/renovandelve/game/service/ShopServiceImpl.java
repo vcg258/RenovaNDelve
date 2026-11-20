@@ -17,7 +17,6 @@ import com.renovandelve.catalog.repository.ArmorRepository;
 import com.renovandelve.catalog.repository.ConsumableRepository;
 import com.renovandelve.game.repository.GameConsumableInventoryRepository;
 import com.renovandelve.game.repository.GameRelicInventoryRepository;
-import com.renovandelve.game.repository.GameSkillSlotRepository;
 import com.renovandelve.game.repository.GameStateRepository;
 import com.renovandelve.catalog.repository.HelmetRepository;
 import com.renovandelve.catalog.repository.RelicRepository;
@@ -42,7 +41,6 @@ public class ShopServiceImpl implements ShopService {
     private final RelicRepository relicRepository;
     private final ConsumableRepository consumableRepository;
     private final GameStateRepository gameStateRepository;
-    private final GameSkillSlotRepository gameSkillSlotRepository;
     private final GameRelicInventoryRepository gameRelicInventoryRepository;
     private final GameConsumableInventoryRepository gameConsumableInventoryRepository;
     private final SkillSlotService skillSlotService;

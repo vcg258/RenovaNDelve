@@ -20,7 +20,6 @@ import com.renovandelve.collection.dto.response.IllustratedEncyclopediaDTO;
 import com.renovandelve.member.dto.response.MemberProfileDTO;
 import com.renovandelve.game.repository.GameStateRepository;
 import com.renovandelve.member.repository.MemberRepository;
-import com.renovandelve.ranking.repository.RankingRepository;
 import com.renovandelve.game.service.redis.GameSessionService;
 import com.renovandelve.auth.service.redis.TokenRevocationService;
 import com.renovandelve.auth.service.redis.SecurityTokenService;
@@ -39,7 +38,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MemberServiceImpl implements MemberService {
     private final MemberRepository memberRepository;
-    private final RankingRepository rankingRepository;
     private final GameStateRepository gameStateRepository;
     private final GameSessionService gameSessionService;
     private final SecurityTokenService securityTokenService;

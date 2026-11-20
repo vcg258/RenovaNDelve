@@ -24,7 +24,7 @@ class StatusEffectTest {
     @Test
     @DisplayName("전투 규칙과 스킬 조합이 같은 번호·키·예고 값을 쓴다")
     void sameValuesEverywhere() {
-        assertThat(StatusEffect.BURN.code()).isEqualTo((short) 2);
+        assertThat(StatusEffect.ofCode((short) 2)).isEqualTo(StatusEffect.BURN);
         assertThat(BattleServiceImpl.BUFF_POISON).isEqualTo("POISON");
         assertThat(BattleServiceImpl.INTENT_HEAVY).isEqualTo(MonsterIntent.HEAVY);
         assertThat(StatusEffect.labelOf("BLEED")).isEqualTo("출혈");

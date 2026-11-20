@@ -26,5 +26,4 @@ public interface MonsterRepository extends JpaRepository<MonsterEntity, Long> {
     List<MonsterEntity> findRandomMonsterBoss(Pageable pageable);
 
     // 타입별 몬스터 선택 (normal / elite / boss)
-    List<MonsterEntity> findByMonsterType(short monsterType);
 }

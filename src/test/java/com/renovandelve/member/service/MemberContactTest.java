@@ -7,7 +7,6 @@ import com.renovandelve.member.dto.request.ContactChangeRequest;
 import com.renovandelve.member.dto.request.SignupRequest;
 import com.renovandelve.game.repository.GameStateRepository;
 import com.renovandelve.member.repository.MemberRepository;
-import com.renovandelve.ranking.repository.RankingRepository;
 import com.renovandelve.game.service.redis.GameSessionService;
 import com.renovandelve.auth.service.redis.SecurityTokenService;
 import com.renovandelve.auth.service.redis.TokenRevocationService;
@@ -44,7 +43,7 @@ class MemberContactTest {
     @BeforeEach
     void setUp() {
         memberRepository = mock(MemberRepository.class);
-        memberService = new MemberServiceImpl(memberRepository, mock(RankingRepository.class),
+        memberService = new MemberServiceImpl(memberRepository,
                 mock(GameStateRepository.class), mock(GameSessionService.class), mock(SecurityTokenService.class),
                 mock(TokenRevocationService.class), passwordEncoder, mock(PersonalDataService.class),
                 mock(CollectionMapper.class), new MemberMapperImpl());

@@ -13,7 +13,6 @@ public interface RankingRepository extends JpaRepository<RankingEntity, Long> {
     List<RankingEntity> findTop10ByDifficultyOrderByBestScoreDesc(Difficulty difficulty);
 
     // 특정 유저 기록 조회
-    Optional<RankingEntity> findByMemberMemberIdAndDifficulty(Long memberId, Difficulty difficulty);
 
     Optional<RankingEntity> findByMemberAndDifficulty(MemberEntity member, Difficulty difficulty);
 }
