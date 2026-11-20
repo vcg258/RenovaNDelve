@@ -204,6 +204,91 @@ INSERT INTO relic (name, effect_desc, rarity, score_cost)
 SELECT '심연의 핵', '공격력 10% / 방어력 +2 증가', 'EPIC', 500 WHERE NOT EXISTS (SELECT 1 FROM relic WHERE name = '심연의 핵');
 
 -- =========================================================
+-- 콘텐츠 확장 (v0.12.0). 등급마다 둘 이상이 되게 채웠다. 새 유물 효과는 RelicEffects
+-- =========================================================
+-- 무기 (v0.12.0 추가)
+INSERT INTO weapon (name, type, atk_bonus, special_effect, score_cost, description, rarity)
+SELECT '순례자의 단검', 'DAGGER', 3, 0, 60, '천상으로 향하던 순례자의 짧은 칼. 가볍고 치명타 확률 +15%', 'COMMON' WHERE NOT EXISTS (SELECT 1 FROM weapon WHERE name = '순례자의 단검');
+INSERT INTO weapon (name, type, atk_bonus, special_effect, score_cost, description, rarity)
+SELECT '성벽 수비대의 철퇴', 'BLUNT', 7, 0, 120, '레노바 성벽을 지키던 수비대의 철퇴', 'COMMON' WHERE NOT EXISTS (SELECT 1 FROM weapon WHERE name = '성벽 수비대의 철퇴');
+INSERT INTO weapon (name, type, atk_bonus, special_effect, score_cost, description, rarity)
+SELECT '천상 기사의 검', 'SWORD', 12, 0, 250, '흰 빛이 깃든 장검. 천상 기사단이 정화의 증표로 들었다', 'RARE' WHERE NOT EXISTS (SELECT 1 FROM weapon WHERE name = '천상 기사의 검');
+INSERT INTO weapon (name, type, atk_bonus, special_effect, score_cost, description, rarity)
+SELECT '마계 군주의 단검', 'DAGGER', 9, 0, 280, '붉게 달아오른 칼날. 가볍고 치명타 확률 +15%', 'RARE' WHERE NOT EXISTS (SELECT 1 FROM weapon WHERE name = '마계 군주의 단검');
+INSERT INTO weapon (name, type, atk_bonus, special_effect, score_cost, description, rarity)
+SELECT '정화의 대검', 'SWORD', 18, 0, 380, '왕국을 통째로 태우려던 천상의 대검', 'EPIC' WHERE NOT EXISTS (SELECT 1 FROM weapon WHERE name = '정화의 대검');
+INSERT INTO weapon (name, type, atk_bonus, special_effect, score_cost, description, rarity)
+SELECT '심연의 철퇴', 'BLUNT', 22, 0, 420, '마계의 문 너머에서 끌어온 철퇴. 휘두를 때마다 바닥이 갈라진다', 'EPIC' WHERE NOT EXISTS (SELECT 1 FROM weapon WHERE name = '심연의 철퇴');
+
+-- 갑옷 (v0.12.0 추가)
+INSERT INTO armor (name, type, def_bonus, special_effect, score_cost, description, rarity)
+SELECT '순례자의 외투', 'CLOTH', 2, 0, 40, '먼 길을 걸어온 순례자의 두꺼운 외투', 'COMMON' WHERE NOT EXISTS (SELECT 1 FROM armor WHERE name = '순례자의 외투');
+INSERT INTO armor (name, type, def_bonus, special_effect, score_cost, description, rarity)
+SELECT '수비대 가죽 흉갑', 'LEATHER', 5, 0, 130, '성벽 수비대가 입던 질긴 가죽 흉갑', 'COMMON' WHERE NOT EXISTS (SELECT 1 FROM armor WHERE name = '수비대 가죽 흉갑');
+INSERT INTO armor (name, type, def_bonus, special_effect, score_cost, description, rarity)
+SELECT '마계 가죽 갑주', 'LEATHER', 9, 0, 220, '피에 젖어 굳은 가죽. 칼날이 미끄러진다', 'RARE' WHERE NOT EXISTS (SELECT 1 FROM armor WHERE name = '마계 가죽 갑주');
+INSERT INTO armor (name, type, def_bonus, special_effect, score_cost, description, rarity)
+SELECT '성기사의 사슬 갑옷', 'CHAIN', 10, 0, 240, '축성된 고리로 엮은 사슬 갑옷', 'RARE' WHERE NOT EXISTS (SELECT 1 FROM armor WHERE name = '성기사의 사슬 갑옷');
+INSERT INTO armor (name, type, def_bonus, special_effect, score_cost, description, rarity)
+SELECT '천상의 판금 갑옷', 'METAL', 18, 0, 420, '빛을 두드려 만든 판금. 천상 기사단장의 갑옷', 'EPIC' WHERE NOT EXISTS (SELECT 1 FROM armor WHERE name = '천상의 판금 갑옷');
+
+-- 투구 (v0.12.0 추가)
+INSERT INTO helmet (name, type, hp_bonus, special_effect, score_cost, description, rarity)
+SELECT '순례자의 후드', 'CLOTH', 15, 0, 50, '비와 먼지를 막아 주는 낡은 후드', 'COMMON' WHERE NOT EXISTS (SELECT 1 FROM helmet WHERE name = '순례자의 후드');
+INSERT INTO helmet (name, type, hp_bonus, special_effect, score_cost, description, rarity)
+SELECT '수비대 철모', 'METAL', 25, 0, 100, '성벽 수비대에 지급되던 둥근 철모', 'COMMON' WHERE NOT EXISTS (SELECT 1 FROM helmet WHERE name = '수비대 철모');
+INSERT INTO helmet (name, type, hp_bonus, special_effect, score_cost, description, rarity)
+SELECT '마녀의 후드', 'CLOTH', 35, 0, 180, '마계의 실로 짠 후드. 생명력이 스며 있다', 'RARE' WHERE NOT EXISTS (SELECT 1 FROM helmet WHERE name = '마녀의 후드');
+INSERT INTO helmet (name, type, hp_bonus, special_effect, score_cost, description, rarity)
+SELECT '성기사의 투구', 'METAL', 40, 0, 200, '눈 틈만 남긴 성기사의 투구', 'RARE' WHERE NOT EXISTS (SELECT 1 FROM helmet WHERE name = '성기사의 투구');
+INSERT INTO helmet (name, type, hp_bonus, special_effect, score_cost, description, rarity)
+SELECT '광륜의 투구', 'METAL', 75, 0, 380, '정수리에 빛의 고리가 떠 있는 천상의 투구', 'EPIC' WHERE NOT EXISTS (SELECT 1 FROM helmet WHERE name = '광륜의 투구');
+
+-- 스킬 (v0.12.0 추가)
+INSERT INTO skill (name, target, attack_count, coefficient, cost, cooldown, status_effect, effect_stack, description, rarity)
+SELECT '찌르기', 'EnemySingle', 1, 1.25, 90, 1, 0, 0, '빠르게 찌른다. 공격력의 125% 피해, 쿨타임 1턴', 'COMMON'
+WHERE NOT EXISTS (SELECT 1 FROM skill WHERE name = '찌르기');
+INSERT INTO skill (name, target, attack_count, coefficient, cost, cooldown, status_effect, effect_stack, description, rarity)
+SELECT '불씨 던지기', 'EnemySingle', 1, 0.80, 100, 2, 2, 1, '불씨를 던져 화상 1스택 부여', 'COMMON'
+WHERE NOT EXISTS (SELECT 1 FROM skill WHERE name = '불씨 던지기');
+INSERT INTO skill (name, target, attack_count, coefficient, cost, cooldown, status_effect, effect_stack, description, rarity)
+SELECT '독침', 'EnemySingle', 2, 0.50, 110, 2, 3, 1, '두 번 찔러 독 1스택 부여', 'COMMON'
+WHERE NOT EXISTS (SELECT 1 FROM skill WHERE name = '독침');
+INSERT INTO skill (name, target, attack_count, coefficient, cost, cooldown, status_effect, effect_stack, description, rarity)
+SELECT '방패 강타', 'EnemySingle', 1, 1.10, 190, 3, 4, 1, '방패로 내리쳐 적 하나를 1턴 기절시킨다', 'RARE'
+WHERE NOT EXISTS (SELECT 1 FROM skill WHERE name = '방패 강타');
+INSERT INTO skill (name, target, attack_count, coefficient, cost, cooldown, status_effect, effect_stack, description, rarity)
+SELECT '피의 소용돌이', 'EnemyAll', 1, 0.70, 210, 3, 1, 1, '칼날을 휘돌려 적 전체에 출혈 1스택', 'RARE'
+WHERE NOT EXISTS (SELECT 1 FROM skill WHERE name = '피의 소용돌이');
+INSERT INTO skill (name, target, attack_count, coefficient, cost, cooldown, status_effect, effect_stack, description, rarity)
+SELECT '독안개', 'EnemyAll', 1, 0.50, 220, 3, 3, 2, '독안개를 퍼뜨려 적 전체에 독 2스택', 'RARE'
+WHERE NOT EXISTS (SELECT 1 FROM skill WHERE name = '독안개');
+INSERT INTO skill (name, target, attack_count, coefficient, cost, cooldown, status_effect, effect_stack, description, rarity)
+SELECT '천상의 심판', 'EnemyAll', 1, 1.60, 380, 5, 0, 0, '빛의 창이 쏟아진다. 적 전체에 공격력의 160% 피해', 'EPIC'
+WHERE NOT EXISTS (SELECT 1 FROM skill WHERE name = '천상의 심판');
+INSERT INTO skill (name, target, attack_count, coefficient, cost, cooldown, status_effect, effect_stack, description, rarity)
+SELECT '마계의 계약검', 'EnemySingle', 3, 0.90, 360, 4, 1, 3, '계약의 대가로 받은 검술. 세 번 베어 출혈 3스택', 'EPIC'
+WHERE NOT EXISTS (SELECT 1 FROM skill WHERE name = '마계의 계약검');
+
+-- 유물 (v0.12.0 추가)
+INSERT INTO relic (name, effect_desc, rarity, score_cost)
+SELECT '순례자의 묵주', '전투에서 이길 때마다 HP 6 회복', 'COMMON', 140 WHERE NOT EXISTS (SELECT 1 FROM relic WHERE name = '순례자의 묵주');
+INSERT INTO relic (name, effect_desc, rarity, score_cost)
+SELECT '견습 학자의 수정', '경험치 획득량 20% 증가', 'COMMON', 150 WHERE NOT EXISTS (SELECT 1 FROM relic WHERE name = '견습 학자의 수정');
+INSERT INTO relic (name, effect_desc, rarity, score_cost)
+SELECT '수비대의 문장', '방어력 +2', 'COMMON', 160 WHERE NOT EXISTS (SELECT 1 FROM relic WHERE name = '수비대의 문장');
+INSERT INTO relic (name, effect_desc, rarity, score_cost)
+SELECT '상인의 반지', '상점 가격 15% 할인', 'RARE', 260 WHERE NOT EXISTS (SELECT 1 FROM relic WHERE name = '상인의 반지');
+INSERT INTO relic (name, effect_desc, rarity, score_cost)
+SELECT '결의의 반지', '공격력 8% 증가', 'RARE', 280 WHERE NOT EXISTS (SELECT 1 FROM relic WHERE name = '결의의 반지');
+INSERT INTO relic (name, effect_desc, rarity, score_cost)
+SELECT '천사의 부적', '전투에서 이길 때마다 HP 12 회복, 받는 피해 1 감소', 'RARE', 300 WHERE NOT EXISTS (SELECT 1 FROM relic WHERE name = '천사의 부적');
+INSERT INTO relic (name, effect_desc, rarity, score_cost)
+SELECT '마왕의 눈', '치명타 확률 15% 증가, 치명타 시 출혈 1스택 부여', 'EPIC', 480 WHERE NOT EXISTS (SELECT 1 FROM relic WHERE name = '마왕의 눈');
+INSERT INTO relic (name, effect_desc, rarity, score_cost)
+SELECT '왕관의 파편', '골드와 경험치 획득량 25% 증가', 'EPIC', 460 WHERE NOT EXISTS (SELECT 1 FROM relic WHERE name = '왕관의 파편');
+
+-- =========================================================
 -- 등급 (V8). 상점·전리품은 스테이지별 확률로 등급을 먼저 정한다 (RarityTable)
 -- 시작 장비(점수 0)와 기본 공격은 흔함. 여기에 적지 않은 항목은 컬럼 기본값(흔함)
 -- =========================================================

@@ -1402,6 +1402,7 @@ public class GameEngineServiceImpl implements GameEngineService {
         totalGold = (int) (totalGold * multiplier * effects.getGoldMultiplier() * alignment.goldMultiplier());
         // 고른 길은 경험치에도 걸린다 (v0.9.0: 위험한 길의 보상이 골드·점수뿐이라 실제 전투력으로 이어지지 않았다)
         totalExp = (int) Math.round(totalExp * path.rewardMultiplier());
+        totalExp = (int) Math.round(totalExp * effects.getExpMultiplier());
         KingdomState kingdom = gameState.kingdomState();
         if (kingdom != null) {
             totalGold = (int) (totalGold * kingdom.goldMultiplier());
@@ -1414,6 +1415,11 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         int levelUps = character.gainExp(totalExp);
         log.add("승리! 점수 +%d, 골드 +%d, 경험치 +%d".formatted(totalScore, totalGold, totalExp));
+        if (effects.getVictoryHeal() > 0) {
+            int healed = Math.min(effects.getVictoryHeal(), character.getMaxHp() - character.getCurrentHp());
+            character.heal(effects.getVictoryHeal());
+            if (healed > 0) log.add("유물의 가호로 HP %d 회복".formatted(healed));
+        }
         if (path.rewardNote() != null) {
             log.add(path.rewardNote()); // 고른 길이 보상에 반영됐음을 드러낸다
         }

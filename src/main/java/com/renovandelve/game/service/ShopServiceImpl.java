@@ -14,6 +14,8 @@ import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
 import com.renovandelve.game.engine.Pact;
 import com.renovandelve.game.engine.RarityTable;
+import com.renovandelve.game.domain.GameRelicInventoryEntity;
+import com.renovandelve.game.engine.RelicEffects;
 import com.renovandelve.game.engine.ShopStockItem;
 import com.renovandelve.catalog.repository.ArmorRepository;
 import com.renovandelve.catalog.repository.ConsumableRepository;
@@ -71,7 +73,8 @@ public class ShopServiceImpl implements ShopService {
     public List<ShopStockItem> generateStock(GameStateEntity gameState) {
         int stage = gameState.getCurrentStage();
         double stageFactor = (1.0 + 0.15 * (stage - 1)) // 깊이 내려갈수록 물가 상승
-                * (Pact.parse(gameState.getPacts()).contains(Pact.GREED_TAX) ? 1.3 : 1.0); // 서약: 탐욕의 세금
+                * (Pact.parse(gameState.getPacts()).contains(Pact.GREED_TAX) ? 1.3 : 1.0) // 서약: 탐욕의 세금
+                * (1.0 - relicDiscount(gameState)); // 유물: 상인의 반지
 
         List<ShopStockItem> stock = new ArrayList<>();
 
@@ -298,6 +301,18 @@ public class ShopServiceImpl implements ShopService {
         ShopStockItem item = stockItem(type, id, name, description, price);
         item.setBonus(bonus);
         return item;
+    }
+
+    /**
+     * 보유 유물의 상점 할인율.
+     *
+     * @param gameState 게임
+     * @return 할인율 (0 ~ {@link RelicEffects#MAX_SHOP_DISCOUNT})
+     */
+    private static double relicDiscount(GameStateEntity gameState) {
+        List<GameRelicInventoryEntity> inventory = gameState.getGameRelicInventory();
+        if (inventory == null || inventory.isEmpty()) return 0.0;
+        return RelicEffects.of(inventory.stream().map(i -> i.getRelic().getName()).toList()).getShopDiscount();
     }
 
     /**
