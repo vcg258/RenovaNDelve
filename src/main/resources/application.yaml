@@ -167,6 +167,10 @@ renovaNDelve:
   cookie:
     secure: ${COOKIE_SECURE:false}
 
+  # 다른 출처에서 API를 부를 수 있는 프론트 주소 (로컬 개발용 Vite 서버). 운영은 비운다 (application-prod.yaml)
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:4173,http://localhost:3000,http://localhost:4000
+
   # 개인정보 보관 기간
   privacy:
     # AI 대화 기록(가이드 챗봇 / 게임 서사)은 마지막 이용 후 이 기간이 지나면 자동 파기

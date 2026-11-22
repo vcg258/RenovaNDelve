@@ -18,6 +18,7 @@ import com.renovandelve.global.redis.RateLimitService;
 import com.renovandelve.auth.service.redis.TokenRevocationService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -43,6 +44,19 @@ public class SecurityConfig {
     private final RefreshCookieFactory refreshCookieFactory;
     private final RateLimitService rateLimitService;
     private final TokenRevocationService tokenRevocationService;
+
+    /** 화면 응답에 붙는 콘텐츠 보안 정책 */
+    static final String CONTENT_SECURITY_POLICY = String.join("; ",
+            "default-src 'self'",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data:",
+            "font-src 'self' data:",
+            "connect-src 'self'",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+            "frame-ancestors 'none'");
 
     /**
      * 보안 필터 체인을 구성한다.
@@ -71,6 +85,9 @@ public class SecurityConfig {
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .csrf(csrf -> csrf.disable())     // JWT + STATELESS 이므로 CSRF 토큰 불필요
                 .cors(Customizer.withDefaults())
+                // 함께 배포한 화면이 자기 주소의 스크립트·글꼴·API만 쓰도록 제한한다 (XSS가 생겨도 외부로 못 나가게 하는 한 겹)
+                // 인라인 style 속성은 React 화면이 쓰므로 허용한다
+                .headers(headers -> headers.contentSecurityPolicy(csp -> csp.policyDirectives(CONTENT_SECURITY_POLICY)))
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
@@ -150,6 +167,33 @@ public class SecurityConfig {
     public RefreshTokenFilter refreshTokenFilter() {
         return new RefreshTokenFilter("/api/auth/refresh", jwtUtil, securityTokenService, memberRepository,
                 refreshCookieFactory);
+    }
+
+    /**
+     * 토큰 검사 필터를 서블릿 필터로 따로 등록하지 않는다.
+     * 필터를 빈으로 만들면 스프링 부트가 서블릿 필터로도 자동 등록하는데, 이 필터는 보안 필터 체인 안에서만 돌아야 한다.
+     *
+     * @param filter 토큰 검사 필터
+     * @return 비활성 등록
+     */
+    @Bean
+    public FilterRegistrationBean<TokenCheckFilter> tokenCheckFilterRegistration(TokenCheckFilter filter) {
+        FilterRegistrationBean<TokenCheckFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    /**
+     * 재발급 필터를 서블릿 필터로 따로 등록하지 않는다 (위와 같은 이유).
+     *
+     * @param filter 재발급 필터
+     * @return 비활성 등록
+     */
+    @Bean
+    public FilterRegistrationBean<RefreshTokenFilter> refreshTokenFilterRegistration(RefreshTokenFilter filter) {
+        FilterRegistrationBean<RefreshTokenFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     /**
