@@ -43,7 +43,17 @@ spring:
 #      javax.persistence.schema-generation.scripts.create-target: init.sql # 엔티티 변경시 init.sql 추출 하기 위한 설정
       hibernate:
         format_sql: true #쿼리문 보여주는 설정
+        # 지연 로딩 컬렉션·연관을 한 건씩이 아니라 IN 절로 묶어 읽는다 (스킬 슬롯·유물 칸의 N+1 완화)
+        default_batch_fetch_size: 100
     show-sql: true #쿼리문 보여주는 설정
+
+  # @Async 작업(AI 프리페치, 메일)을 처리하는 기본 실행기. 기본값은 대기열이 무제한이라 몰리면 메모리를 계속 잡는다
+  task:
+    execution:
+      pool:
+        core-size: 8
+        max-size: 16
+        queue-capacity: 500
 
   # OpenAI
   ai:
@@ -181,3 +191,17 @@ renovaNDelve:
   admin:
     login-id: ${ADMIN_LOGIN_ID:admin}
     password: ${ADMIN_PASSWORD:}
+
+# 헬스 체크: /actuator/health 하나만 웹에 연다 (DB·Redis 상태를 합친 UP/DOWN만, 세부 내용은 숨김)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+  health:
+    # 메일 서버 상태는 넣지 않는다 (SMTP를 설정하지 않아도 서비스는 정상이고, 메일 장애로 서버를 재시작할 일은 없다)
+    mail:
+      enabled: false
