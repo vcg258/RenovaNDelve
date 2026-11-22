@@ -175,7 +175,7 @@ public class GameEngineServiceImpl implements GameEngineService {
     public GameViewDTO getView(MemberEntity member) {
         Optional<GameStateEntity> active = gameStateRepository.findByMember_MemberIdAndIsActiveTrue(member.getMemberId());
         if (active.isEmpty()) {
-            return new GameViewDTO("NONE", null, null, null, null, null, null);
+            return new GameViewDTO("NONE", null, null, null, null, null, null, null);
         }
         GameStateEntity gameState = active.get();
         GameSession session = gameSessionService.getOrCreate(gameState.getGameStateId());
@@ -196,7 +196,7 @@ public class GameEngineServiceImpl implements GameEngineService {
 
         Integer rerollCost = GameSession.PHASE_SHOP.equals(session.getPhase()) ? rerollCost(gameState, session) : null;
         return new GameViewDTO(session.getPhase(), statusAssembler.toStatusDTO(gameState), node, reward, shop, summary,
-                rerollCost);
+                rerollCost, session.getStory());
     }
 
     /* ==================== 노드 진행 ==================== */
