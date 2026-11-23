@@ -82,7 +82,7 @@ public class GameDataEtlService {
             return;
         }
         try {
-            log.info("[GameDataETL] {}", sync(false));
+            sync(false); // 결과 요약은 sync()가 남긴다
         } catch (Exception e) {
             log.warn("[GameDataETL] 기동 시 동기화 실패 (게임은 랜덤 폴백으로 정상 동작): {}", e.getMessage());
         }

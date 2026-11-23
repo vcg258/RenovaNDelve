@@ -37,15 +37,18 @@ public class MemberEntity {
     @Column(length = 50, unique = true)
     private String loginId; // 일반 로그인 아이디
 
+    @ToString.Exclude // 개인정보·인증 값은 로그에 실수로 찍혀도 나가지 않게 한다
     @Column(length = 60)
     private String passwordHash; // 비밀번호 해시값 (Bcrypt)
 
     @Column(length = 20)
     private String nickname; // 게임 내 표시 이름 (랭킹 노출용)
 
+    @ToString.Exclude // 개인정보·인증 값은 로그에 실수로 찍혀도 나가지 않게 한다
     @Column(length = 50)
     private String name; // 이름 (아이디 찾기 본인 확인용). 이 컬럼이 생기기 전에 가입한 계정은 NULL
 
+    @ToString.Exclude // 개인정보·인증 값은 로그에 실수로 찍혀도 나가지 않게 한다
     @Column(length = 254)
     private String email; // 이메일 (소문자로 정규화해 저장, 값이 있으면 중복 불가). 아이디 안내·비밀번호 재설정 링크가 가는 곳
 
@@ -64,9 +67,11 @@ public class MemberEntity {
 
     private LocalDateTime lastLoginAt; // 마지막 로그인 일시
 
+    @ToString.Exclude // 개인정보·인증 값은 로그에 실수로 찍혀도 나가지 않게 한다
     @Column(length = 512)
     private String socialToken; // 소셜 OAuth2 토큰
 
+    @ToString.Exclude // 개인정보·인증 값은 로그에 실수로 찍혀도 나가지 않게 한다
     @Column(length = 100)
     private String socialId; // 소셜 제공자 내 고유 ID
 

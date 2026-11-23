@@ -35,11 +35,11 @@ public class LoginFailureHandler implements AuthenticationFailureHandler {
         if (exception instanceof DisabledException) {
             message = "이용이 제한된 계정입니다. 운영자에게 문의해주세요.";
         } else if (loginAttemptService.isBlocked(attemptKey)) {
-            message = "로그인 시도 횟수를 초과했습니다. %d분 후 다시 시도해주세요.".formatted(loginAttemptService.blockMinutes());
+            message = "로그인 시도 횟수를 초과했습니다. %d분 후 다시 시도해주세요.".formatted(loginAttemptService.blockMinutes(attemptKey));
         } else {
             loginAttemptService.loginFailed(attemptKey);
             if (loginAttemptService.isBlocked(attemptKey)) {
-                message = "로그인 시도 횟수를 초과했습니다. %d분 후 다시 시도해주세요.".formatted(loginAttemptService.blockMinutes());
+                message = "로그인 시도 횟수를 초과했습니다. %d분 후 다시 시도해주세요.".formatted(loginAttemptService.blockMinutes(attemptKey));
             } else {
                 message = "아이디 또는 비밀번호가 올바르지 않습니다. (남은 시도 %d회)"
                         .formatted(loginAttemptService.remainingAttempts(attemptKey));

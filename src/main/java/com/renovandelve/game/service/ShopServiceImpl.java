@@ -21,7 +21,6 @@ import com.renovandelve.catalog.repository.ArmorRepository;
 import com.renovandelve.catalog.repository.ConsumableRepository;
 import com.renovandelve.game.repository.GameConsumableInventoryRepository;
 import com.renovandelve.game.repository.GameRelicInventoryRepository;
-import com.renovandelve.game.repository.GameStateRepository;
 import com.renovandelve.catalog.repository.HelmetRepository;
 import com.renovandelve.catalog.repository.RelicRepository;
 import com.renovandelve.catalog.repository.SkillRepository;
@@ -44,7 +43,6 @@ public class ShopServiceImpl implements ShopService {
     private final SkillRepository skillRepository;
     private final RelicRepository relicRepository;
     private final ConsumableRepository consumableRepository;
-    private final GameStateRepository gameStateRepository;
     private final GameRelicInventoryRepository gameRelicInventoryRepository;
     private final GameConsumableInventoryRepository gameConsumableInventoryRepository;
     private final SkillSlotService skillSlotService;
@@ -145,8 +143,7 @@ public class ShopServiceImpl implements ShopService {
             throw new BusinessException(ErrorCode.SKILL_SLOT_FULL, SkillSlotService.MAX_SLOTS);
         }
         // 골드 차감 (부족 시 예외)
-        gameState.deductGold(stockItem.getPrice());
-        gameStateRepository.save(gameState);
+        gameState.deductGold(stockItem.getPrice()); // 같은 트랜잭션에서 읽은 엔티티라 변경 감지로 반영된다
 
         switch (stockItem.getItemType()) {
             case "WEAPON" -> purchaseWeapon(gameState, member, stockItem.getItemId());

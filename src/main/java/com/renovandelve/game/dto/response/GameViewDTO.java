@@ -13,6 +13,7 @@ public record GameViewDTO(
         RewardViewDTO reward,
         List<ShopItemDTO> shop,
         GameSummaryDTO summary,
-        Integer shopRerollCost   // 상점 단계일 때 다음 재입고 비용 (그 외 단계는 null)
+        Integer shopRerollCost,  // 상점 단계일 때 다음 재입고 비용 (그 외 단계는 null)
+        String story             // 마지막 노드의 서사. 노드가 없는 단계(전리품·상점·탐험)에서 새로고침해도 서사 칸을 복원한다
 ) {
 }
