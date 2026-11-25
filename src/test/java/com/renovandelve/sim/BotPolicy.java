@@ -18,7 +18,9 @@ enum BotPolicy {
     /** 신중형 + 계약 서명만 */
     CONTRACT_ONLY("HEAVEN", 0.35, 0.6, false, true, false),
     /** 신중형 + 방어를 거의 하지 않음 */
-    RECKLESS_ONLY("HEAVEN", 0.8, 0.6, false, false, false);
+    RECKLESS_ONLY("HEAVEN", 0.8, 0.6, false, false, false),
+    /** 신중형 + 스킬을 조합 시너지 위주로 고름 (조합 배율이 겹칠 때의 영향을 재는 데 쓴다) */
+    SYNERGY("HEAVEN", 0.35, 0.6, false, false, false, true);
 
     /** 조우에서 고르는 세력 */
     final String faction;
@@ -32,14 +34,22 @@ enum BotPolicy {
     final boolean signContracts;
     /** 체력이 낮으면 은밀한 길 */
     final boolean ambushWhenHurt;
+    /** 스킬을 고를 때 새로 켜지는 조합 시너지를 점수에 더함 */
+    final boolean seekSynergy;
 
     BotPolicy(String faction, double guardIfIncomingOver, double restHealBelow,
               boolean dangerPath, boolean signContracts, boolean ambushWhenHurt) {
+        this(faction, guardIfIncomingOver, restHealBelow, dangerPath, signContracts, ambushWhenHurt, false);
+    }
+
+    BotPolicy(String faction, double guardIfIncomingOver, double restHealBelow,
+              boolean dangerPath, boolean signContracts, boolean ambushWhenHurt, boolean seekSynergy) {
         this.faction = faction;
         this.guardIfIncomingOver = guardIfIncomingOver;
         this.restHealBelow = restHealBelow;
         this.dangerPath = dangerPath;
         this.signContracts = signContracts;
         this.ambushWhenHurt = ambushWhenHurt;
+        this.seekSynergy = seekSynergy;
     }
 }
