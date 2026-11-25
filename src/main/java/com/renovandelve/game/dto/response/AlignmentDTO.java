@@ -7,6 +7,7 @@ import java.util.List;
  * dominant = 가호를 주는 세력 (HEAVEN / ABYSS / HUMAN, 없으면 null), blessing = 가호 설명
  * tier = 가호 단계 (0 = 없음, 1~3), nextTierAt = 다음 단계에 필요한 점수 (없으면 null)
  * factions = 세력별 설명과 단계표 (화면의 안내 말풍선용. 수치는 서버가 단일 소유한다)
+ * devotion = 3단계를 넘긴 뒤 그 세력을 고를 때마다 받는 헌신 보상
  */
 public record AlignmentDTO(
         int heaven,
@@ -18,8 +19,8 @@ public record AlignmentDTO(
         Integer nextTierAt,
         List<FactionInfo> factions
 ) {
-    /** 세력 한 곳의 안내: 조우에서의 경향과 단계별 가호 */
-    public record FactionInfo(String code, String label, String tendency, List<TierInfo> tiers) {
+    /** 세력 한 곳의 안내: 조우에서의 경향, 단계별 가호, 헌신 보상 */
+    public record FactionInfo(String code, String label, String tendency, List<TierInfo> tiers, String devotion) {
     }
 
     public record TierInfo(int tier, int requiredScore, String description) {

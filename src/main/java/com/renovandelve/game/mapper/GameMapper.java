@@ -187,14 +187,16 @@ public interface GameMapper {
                 alignment.tier(), alignment.nextTierAt(), factionTable());
     }
 
-    /** @return 세 세력의 경향과 단계별 가호 (규칙 상수에서 만든다) */
+    /** @return 세 세력의 경향, 단계별 가호, 헌신 보상 (규칙 상수에서 만든다) */
     private static List<AlignmentDTO.FactionInfo> factionTable() {
         return Arrays.stream(Faction.values())
                 .map(faction -> new AlignmentDTO.FactionInfo(faction.name(), faction.label(), faction.tendency(),
                         IntStream.rangeClosed(1, Alignment.MAX_TIER)
                                 .mapToObj(tier -> new AlignmentDTO.TierInfo(tier, Alignment.TIER_THRESHOLDS[tier - 1],
                                         Alignment.blessingText(faction, tier)))
-                                .toList()))
+                                .toList(),
+                        "성향 %d를 넘긴 뒤에는 고를 때마다 %s".formatted(Alignment.TIER_THRESHOLDS[Alignment.MAX_TIER - 1],
+                                Alignment.devotionText(faction))))
                 .toList();
     }
 }

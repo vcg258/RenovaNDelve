@@ -10,13 +10,18 @@ package com.renovandelve.game.engine;
  * 가호는 "가장 높은 성향이 임계치 이상이고 단독 1위"일 때만 발동한다.
  * 모든 선택지를 골고루 누르면 아무 가호도 얻지 못하므로, 한 길을 고집할 이유가 생긴다.
  *
- * 가호는 3단계다. 단독 1위인 세력의 점수가 3 / 6 / 9에 닿을 때마다 한 단계씩 오르고,
+ * 가호는 3단계다. 단독 1위인 세력의 점수가 3 / 7 / 12에 닿을 때마다 한 단계씩 오르고,
  * 3단계에서는 전투 보상 후보가 하나 늘어난다. 1단계 수치는 단계가 없던 때와 같다.
+ *
+ * 3단계를 넘어서도 같은 세력을 고르면 한 번마다 그 세력의 헌신 보상을 받는다(최대 HP / 공격력 / 골드).
+ * 3단계에 닿은 뒤 남은 조우에서도 성향 선택이 의미를 갖게 하려는 것이다.
+ * (기준이 3 / 6 / 9였을 때 시뮬레이션에서 3단계 도달이 평균 31~37번째 노드였고,
+ *  그 뒤 2~4번의 조우는 어느 쪽을 골라도 차이가 없었다)
  */
 public record Alignment(int heaven, int abyss, int human) {
     public static final int BLESSING_THRESHOLD = 3;
     /** 단계별 필요 점수 (1단계, 2단계, 3단계) */
-    public static final int[] TIER_THRESHOLDS = {3, 6, 9};
+    public static final int[] TIER_THRESHOLDS = {3, 7, 12};
     public static final int MAX_TIER = TIER_THRESHOLDS.length;
 
     // 인덱스 = 단계 (0은 가호 없음)
@@ -27,6 +32,11 @@ public record Alignment(int heaven, int abyss, int human) {
     /** 마계의 흡혈: 준 피해 중 HP로 되돌리는 비율 (v0.9.0: 마계에는 버틸 수단이 없었다) */
     private static final double[] ABYSS_LIFESTEAL = {0.0, 0.02, 0.04, 0.05};
     private static final double[] HUMAN_GOLD_MULTIPLIER = {1.0, 1.20, 1.30, 1.40};
+
+    /** 헌신 보상: 3단계를 넘긴 뒤 같은 세력을 한 번 더 고를 때마다 */
+    public static final int DEVOTION_MAX_HP = 6;
+    public static final int DEVOTION_ATTACK = 2;
+    public static final int DEVOTION_GOLD = 60;
 
     /** 가호를 주는 세력. 없으면 null */
     public Faction dominant() {
@@ -57,6 +67,26 @@ public record Alignment(int heaven, int abyss, int human) {
     public Integer nextTierAt() {
         int tier = tier();
         return tier == 0 || tier >= MAX_TIER ? null : TIER_THRESHOLDS[tier];
+    }
+
+    /**
+     * 방금 고른 세력이 헌신 보상을 받는지. 그 세력이 단독 1위이고, 점수가 3단계 기준을 넘었을 때다.
+     * 성향을 올린 뒤의 값으로 부른다(3단계 기준에 막 닿은 선택은 3단계 가호가 보상이다).
+     *
+     * @param chosen 방금 고른 세력
+     * @return 헌신 보상 대상이면 true
+     */
+    public boolean isDevotion(Faction chosen) {
+        return chosen != null && dominant() == chosen && score(chosen) > TIER_THRESHOLDS[MAX_TIER - 1];
+    }
+
+    /** 세력별 헌신 보상 설명 (화면의 단계표와 조우 결과 문구) */
+    public static String devotionText(Faction faction) {
+        return switch (faction) {
+            case HEAVEN -> "최대 HP +%d".formatted(DEVOTION_MAX_HP);
+            case ABYSS -> "공격력 +%d".formatted(DEVOTION_ATTACK);
+            case HUMAN -> "골드 +%d".formatted(DEVOTION_GOLD);
+        };
     }
 
     /**

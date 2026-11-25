@@ -574,6 +574,8 @@ public class GameEngineServiceImpl implements GameEngineService {
         // 선택이 성향으로 쌓이고, AI 대화 기록에 남아 다음 장면과 결말이 이 선택을 이어받는다
         Faction faction = Faction.parse(choice.getFaction());
         gameState.gainAffinity(faction);
+        String devotion = applyDevotion(gameState, character, faction);
+        if (devotion != null) outcome = outcome + " " + devotion;
         stats(session).recordEncounter();
         remember(gameState, "[플레이어의 선택] 상황: %s / %s선택: %s / 결과: %s / 현재 성향: %s".formatted(
                 shorten(session.getStory()), faction == null ? "" : "(" + faction.label() + "의 방식) ",
@@ -815,6 +817,8 @@ public class GameEngineServiceImpl implements GameEngineService {
                     case ABYSS -> "불씨 속의 속삭임에 이름을 내주었다. 마계 성향 +1.";
                     case HUMAN -> "누구에게도 빌지 않고 스스로에게 맹세했다. 인간 성향 +1.";
                 };
+                String devotion = applyDevotion(gameState, character, faction);
+                if (devotion != null) story = story + " " + devotion;
                 remember(gameState, "[플레이어의 선택] 보스를 쓰러뜨린 뒤 모닥불 앞에서 %s에 서원했다. 현재 성향: %s"
                         .formatted(faction.label(), gameState.alignment().describe()));
                 invalidatePrefetchedNode(gameState);
@@ -870,6 +874,28 @@ public class GameEngineServiceImpl implements GameEngineService {
     private GameCharacterEntity character(GameStateEntity gameState) {
         return gameState.getGameCharacter().stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("캐릭터 정보가 없습니다."));
+    }
+
+    /**
+     * 헌신 보상: 3단계 가호를 넘긴 세력을 한 번 더 골랐으면 그 세력의 보상을 준다.
+     * 성향을 올린 직후에 부른다.
+     *
+     * @param gameState 진행 중인 게임
+     * @param character 캐릭터
+     * @param faction   방금 고른 세력 (없으면 null)
+     * @return 결과 문구. 보상이 없으면 null
+     */
+    private String applyDevotion(GameStateEntity gameState, GameCharacterEntity character, Faction faction) {
+        if (!gameState.alignment().isDevotion(faction)) return null;
+        switch (faction) {
+            case HEAVEN -> {
+                character.applyMaxHpDelta(Alignment.DEVOTION_MAX_HP);
+                character.heal(Alignment.DEVOTION_MAX_HP);
+            }
+            case ABYSS -> character.applyAttackDelta(Alignment.DEVOTION_ATTACK);
+            case HUMAN -> gameState.gainGold(Alignment.DEVOTION_GOLD);
+        }
+        return "(%s의 헌신: %s)".formatted(faction.label(), Alignment.devotionText(faction));
     }
 
     /**
