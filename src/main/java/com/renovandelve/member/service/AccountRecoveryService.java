@@ -3,6 +3,7 @@ package com.renovandelve.member.service;
 import com.renovandelve.global.exception.BusinessException;
 import com.renovandelve.global.exception.ErrorCode;
 import com.renovandelve.global.mail.MailService;
+import com.renovandelve.global.mail.MailTemplates;
 
 import com.renovandelve.member.domain.MemberEntity;
 import com.renovandelve.member.domain.memberentity.MemberStatus;
@@ -77,13 +78,7 @@ public class AccountRecoveryService {
             if (found.isEmpty() || !mailAllowed(address)) return;
 
             MemberEntity member = found.get();
-            mailService.send(address, "[Renova & Delve] 아이디 안내", """
-                    %s 님, 요청하신 아이디를 알려드립니다.
-
-                    아이디: %s
-
-                    본인이 요청하지 않았다면 이 메일은 무시하셔도 됩니다. 계정에는 아무 변화가 없습니다.
-                    """.formatted(member.getName(), member.getLoginId()));
+            mailService.send(address, MailTemplates.loginId(member.getName(), member.getLoginId(), baseUrl + "/auth"));
         } catch (Exception e) {
             // 실패해도 응답은 달라지면 안 된다
             log.error("아이디 찾기 처리 실패: {}", e.getMessage());
@@ -109,14 +104,7 @@ public class AccountRecoveryService {
             String token = tokenStore.issue(found.get().getMemberId());
             // 토큰은 주소의 # 뒤(fragment)에 둔다. 서버로 전송되지 않아 접속 로그나 Referer에 남지 않는다
             String link = baseUrl + "/reset-password#token=" + token;
-            mailService.send(address, "[Renova & Delve] 비밀번호 재설정 안내", """
-                    비밀번호 재설정을 요청하셨습니다. 아래 주소를 열어 새 비밀번호를 정해주세요.
-
-                    %s
-
-                    - 이 주소는 %d분 동안, 한 번만 쓸 수 있습니다.
-                    - 본인이 요청하지 않았다면 이 메일은 무시하셔도 됩니다. 비밀번호는 바뀌지 않습니다.
-                    """.formatted(link, PasswordResetTokenStore.TTL.toMinutes()));
+            mailService.send(address, MailTemplates.passwordReset(link, PasswordResetTokenStore.TTL.toMinutes()));
         } catch (Exception e) {
             log.error("비밀번호 재설정 요청 처리 실패: {}", e.getMessage());
         }
@@ -157,11 +145,7 @@ public class AccountRecoveryService {
         log.info("비밀번호 재설정 완료 memberId={}", member.getMemberId());
 
         if (member.getEmail() != null) {
-            mailService.send(member.getEmail(), "[Renova & Delve] 비밀번호가 변경되었습니다", """
-                    계정(%s)의 비밀번호가 방금 재설정되었습니다. 모든 기기에서 로그아웃되었습니다.
-
-                    본인이 한 일이 아니라면 곧바로 비밀번호 찾기로 다시 재설정하고, 이메일 계정의 비밀번호도 바꿔주세요.
-                    """.formatted(member.getLoginId()));
+            mailService.send(member.getEmail(), MailTemplates.passwordChanged(member.getLoginId(), baseUrl + "/recover"));
         }
     }
 

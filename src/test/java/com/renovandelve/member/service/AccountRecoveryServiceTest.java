@@ -1,6 +1,7 @@
 package com.renovandelve.member.service;
 
 import com.renovandelve.global.exception.BusinessException;
+import com.renovandelve.global.mail.MailContent;
 import com.renovandelve.global.mail.MailService;
 
 import com.renovandelve.member.domain.MemberEntity;
@@ -27,7 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -84,9 +85,11 @@ class AccountRecoveryServiceTest {
     void findIdSendsLoginId() {
         service.sendLoginId(" 김용사 ", "  Hero@Example.COM ");
 
-        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
-        verify(mailService).send(eq(EMAIL), contains("아이디"), body.capture());
-        assertThat(body.getValue()).contains("hero01");
+        ArgumentCaptor<MailContent> mail = ArgumentCaptor.forClass(MailContent.class);
+        verify(mailService).send(eq(EMAIL), mail.capture());
+        assertThat(mail.getValue().subject()).contains("아이디");
+        assertThat(mail.getValue().text()).contains("hero01");
+        assertThat(mail.getValue().html()).contains("hero01").contains("김용사");
     }
 
     @Test
@@ -94,7 +97,7 @@ class AccountRecoveryServiceTest {
     void findIdWithWrongNameSendsNothing() {
         assertThatCode(() -> service.sendLoginId("박마법", EMAIL)).doesNotThrowAnyException();
 
-        verify(mailService, never()).send(anyString(), anyString(), anyString());
+        verify(mailService, never()).send(anyString(), any(MailContent.class));
     }
 
     @Test
@@ -104,7 +107,7 @@ class AccountRecoveryServiceTest {
 
         assertThatCode(() -> service.sendLoginId("김용사", "nobody@example.com")).doesNotThrowAnyException();
 
-        verify(mailService, never()).send(anyString(), anyString(), anyString());
+        verify(mailService, never()).send(anyString(), any(MailContent.class));
     }
 
     @Test
@@ -118,7 +121,7 @@ class AccountRecoveryServiceTest {
 
         service.sendLoginId("김용사", EMAIL);
 
-        verify(mailService, never()).send(anyString(), anyString(), anyString());
+        verify(mailService, never()).send(anyString(), any(MailContent.class));
     }
 
     @Test
@@ -129,7 +132,7 @@ class AccountRecoveryServiceTest {
         assertThatCode(() -> service.sendLoginId("김용사", EMAIL)).doesNotThrowAnyException();
         assertThatCode(() -> service.requestPasswordReset("hero01", EMAIL)).doesNotThrowAnyException();
 
-        verify(mailService, never()).send(anyString(), anyString(), anyString());
+        verify(mailService, never()).send(anyString(), any(MailContent.class));
         verify(tokenStore, never()).issue(anyLong());
     }
 
@@ -152,11 +155,13 @@ class AccountRecoveryServiceTest {
 
         service.requestPasswordReset("hero01", EMAIL);
 
-        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
-        verify(mailService).send(eq(EMAIL), contains("재설정"), body.capture());
+        ArgumentCaptor<MailContent> mail = ArgumentCaptor.forClass(MailContent.class);
+        verify(mailService).send(eq(EMAIL), mail.capture());
+        assertThat(mail.getValue().subject()).contains("재설정");
         // 토큰은 # 뒤에 둔다 (서버 접속 로그에 남지 않게). 기준 주소 끝의 /는 겹치지 않는다
-        assertThat(body.getValue()).contains(BASE_URL + "/reset-password#token=TOKEN123");
-        assertThat(body.getValue()).doesNotContain("oldPass123"); // 비밀번호를 메일로 보내지 않는다
+        assertThat(mail.getValue().text()).contains(BASE_URL + "/reset-password#token=TOKEN123");
+        assertThat(mail.getValue().html()).contains(BASE_URL + "/reset-password#token=TOKEN123");
+        assertThat(mail.getValue().text() + mail.getValue().html()).doesNotContain("oldPass123"); // 비밀번호를 메일로 보내지 않는다
     }
 
     @Test
@@ -165,7 +170,7 @@ class AccountRecoveryServiceTest {
         assertThatCode(() -> service.requestPasswordReset("someone", EMAIL)).doesNotThrowAnyException();
 
         verify(tokenStore, never()).issue(anyLong());
-        verify(mailService, never()).send(anyString(), anyString(), anyString());
+        verify(mailService, never()).send(anyString(), any(MailContent.class));
     }
 
     @Test
@@ -177,7 +182,7 @@ class AccountRecoveryServiceTest {
         service.requestPasswordReset("social01", EMAIL);
 
         verify(tokenStore, never()).issue(anyLong());
-        verify(mailService, never()).send(anyString(), anyString(), anyString());
+        verify(mailService, never()).send(anyString(), any(MailContent.class));
     }
 
     @Test
@@ -188,7 +193,7 @@ class AccountRecoveryServiceTest {
         assertThatCode(() -> service.requestPasswordReset("hero01", EMAIL)).doesNotThrowAnyException();
 
         verify(tokenStore, never()).issue(anyLong());
-        verify(mailService, never()).send(anyString(), anyString(), anyString());
+        verify(mailService, never()).send(anyString(), any(MailContent.class));
     }
 
     @Test
@@ -197,7 +202,7 @@ class AccountRecoveryServiceTest {
         when(tokenStore.issue(7L)).thenThrow(new IllegalStateException("redis down"));
 
         assertThatCode(() -> service.requestPasswordReset("hero01", EMAIL)).doesNotThrowAnyException();
-        verify(mailService, never()).send(anyString(), anyString(), anyString());
+        verify(mailService, never()).send(anyString(), any(MailContent.class));
     }
 
     /* ==================== 재설정 확정 ==================== */
@@ -215,7 +220,7 @@ class AccountRecoveryServiceTest {
         verify(securityTokenService).logout("hero01");
         verify(tokenRevocationService).revoke("hero01");
         verify(loginAttemptService).clearAccount("hero01"); // 잠긴 계정도 새 비밀번호로 바로 들어온다
-        verify(mailService).send(eq(EMAIL), contains("변경"), anyString()); // 본인에게 변경 사실을 알린다
+        verify(mailService).send(eq(EMAIL), argThat(mail -> mail.subject().contains("변경"))); // 본인에게 변경 사실을 알린다
     }
 
     @Test
@@ -231,7 +236,7 @@ class AccountRecoveryServiceTest {
         assertThat(member.getPasswordHash()).isEqualTo(before);
         verify(memberRepository, never()).save(any());
         verifyNoInteractions(securityTokenService, tokenRevocationService);
-        verify(mailService, never()).send(anyString(), anyString(), anyString());
+        verify(mailService, never()).send(anyString(), any(MailContent.class));
     }
 
     @Test
