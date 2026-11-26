@@ -39,7 +39,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class PersonalDataService {
     /** 현재 시행 중인 약관·개인정보 처리방침 버전 (프론트 legal 문서의 시행일과 맞춘다) */
-    public static final String POLICY_VERSION = "2026-11-14";
+    public static final String POLICY_VERSION = "2026-11-26";
 
     private static final int HISTORY_LIMIT = 30;
 
