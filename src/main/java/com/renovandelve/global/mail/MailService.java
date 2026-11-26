@@ -3,8 +3,10 @@ package com.renovandelve.global.mail;
 import com.renovandelve.member.util.EmailNormalizer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Service;
  * - 발송은 비동기다. SMTP 응답을 기다리면 요청이 느려질 뿐 아니라,
  *   "메일을 보낸 경우에만 응답이 늦다"는 차이로 계정 존재 여부가 드러난다.
  * - 본문(재설정 링크 포함)과 받는 사람 주소 전체는 로그에 남기지 않는다.
+ * - 본문은 텍스트와 HTML을 함께 보낸다(multipart/alternative). 문구와 HTML은 {@link MailTemplates}.
  */
 @Slf4j
 @Service
@@ -69,20 +72,27 @@ public class MailService {
      * 메일을 비동기로 보낸다. 설정이 없거나 실패하면 로그만 남긴다(받는 주소는 가려서).
      *
      * @param to      받는 주소
-     * @param subject 제목
-     * @param text    본문
+     * @param content 제목과 본문 (텍스트 + HTML)
      */
     @Async
-    public void send(String to, String subject, String text) {
+    public void send(String to, MailContent content) {
+        String subject = content.subject();
         if (!isConfigured()) {
             log.warn("[메일] SMTP 미설정으로 발송 생략 to={} subject={}", EmailNormalizer.mask(to), subject);
             return;
         }
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setFrom(from);
-        message.setTo(to);
-        message.setSubject(subject);
-        message.setText(text);
+        MimeMessage message;
+        try {
+            message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(from);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(content.text(), content.html());
+        } catch (MessagingException e) {
+            log.error("[메일] 메일을 만들지 못했습니다 to={} subject={} 원인={}", EmailNormalizer.mask(to), subject, e.getMessage());
+            return;
+        }
         for (int attempt = 1; attempt <= RETRY_DELAYS_MS.length + 1; attempt++) {
             try {
                 mailSender.send(message);

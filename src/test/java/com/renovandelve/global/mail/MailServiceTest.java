@@ -38,22 +38,39 @@ class MailServiceTest {
     }
 
     @Test
-    @DisplayName("SMTP로 메일이 전송된다: 받는 사람, 보내는 사람, 제목, 본문(한글과 링크)")
+    @DisplayName("SMTP로 메일이 전송된다: 받는 사람, 보내는 사람, 제목, 텍스트 + HTML 본문(한글과 링크)")
     void sendsMailOverSmtp() throws Exception {
         MailService mailService = new MailService(senderTo(greenMail.getSmtp().getPort()),
                 "sender", "smtp.example.com", "sender@example.com");
         String link = "http://localhost:5173/reset-password#token=abc_DEF-123";
 
-        mailService.send("hero@example.com", "[Renova & Delve] 비밀번호 재설정 안내", "아래 주소를 열어주세요.\n\n" + link);
+        mailService.send("hero@example.com", MailTemplates.passwordReset(link, 30));
 
         MimeMessage[] received = greenMail.getReceivedMessages();
         assertThat(received).hasSize(1);
         assertThat(received[0].getAllRecipients()[0].toString()).isEqualTo("hero@example.com");
         assertThat(received[0].getFrom()[0].toString()).isEqualTo("sender@example.com");
         assertThat(received[0].getSubject()).isEqualTo("[Renova & Delve] 비밀번호 재설정 안내");
-        String body = received[0].getContent().toString();
-        assertThat(body).contains("아래 주소를 열어주세요.").contains(link);
+        String raw = GreenMailUtil.getWholeMessage(received[0]);
+        assertThat(raw).contains("multipart/alternative").contains("text/plain").contains("text/html");
         assertThat(GreenMailUtil.getHeaders(received[0])).contains("UTF-8");
+
+        String text = partOf(received[0], "text/plain");
+        String html = partOf(received[0], "text/html");
+        assertThat(text).contains("새 비밀번호를 정해주세요").contains(link);
+        assertThat(html).contains("<h1").contains("href=\"" + link + "\"");
+    }
+
+    /** 여러 겹의 multipart 안에서 처음 나오는 해당 형식의 본문 */
+    private static String partOf(jakarta.mail.Part part, String type) throws Exception {
+        if (part.isMimeType(type)) return part.getContent().toString();
+        if (part.getContent() instanceof jakarta.mail.Multipart multipart) {
+            for (int i = 0; i < multipart.getCount(); i++) {
+                String found = partOf(multipart.getBodyPart(i), type);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     @Test
@@ -62,7 +79,7 @@ class MailServiceTest {
         MailService mailService = new MailService(senderTo(greenMail.getSmtp().getPort()), "", "smtp.naver.com", "");
 
         assertThat(mailService.isConfigured()).isFalse();
-        assertThatCode(() -> mailService.send("hero@example.com", "제목", "본문")).doesNotThrowAnyException();
+        assertThatCode(() -> mailService.send("hero@example.com", new MailContent("제목", "본문", "<p>본문</p>"))).doesNotThrowAnyException();
         assertThat(greenMail.getReceivedMessages()).isEmpty();
     }
 
@@ -73,23 +90,25 @@ class MailServiceTest {
         MailService mailService = new MailService(senderTo(1), "sender", "smtp.example.com", "sender@example.com");
         mailService.RETRY_DELAYS_MS = new long[]{1, 1};
 
-        assertThatCode(() -> mailService.send("hero@example.com", "제목", "본문")).doesNotThrowAnyException();
+        assertThatCode(() -> mailService.send("hero@example.com", new MailContent("제목", "본문", "<p>본문</p>"))).doesNotThrowAnyException();
     }
 
     @Test
     @DisplayName("일시적인 SMTP 오류는 다시 시도해 결국 보낸다")
     void retriesTransientFailure() {
         org.springframework.mail.javamail.JavaMailSender sender = org.mockito.Mockito.mock(org.springframework.mail.javamail.JavaMailSender.class);
+        org.mockito.Mockito.when(sender.createMimeMessage())
+                .thenReturn(new MimeMessage(jakarta.mail.Session.getInstance(new java.util.Properties())));
         org.mockito.Mockito.doThrow(new org.springframework.mail.MailSendException("일시 오류"))
                 .doNothing()
-                .when(sender).send(org.mockito.ArgumentMatchers.any(org.springframework.mail.SimpleMailMessage.class));
+                .when(sender).send(org.mockito.ArgumentMatchers.any(MimeMessage.class));
         MailService mailService = new MailService(sender, "sender", "smtp.example.com", "sender@example.com");
         mailService.RETRY_DELAYS_MS = new long[]{1, 1};
 
-        mailService.send("hero@example.com", "제목", "본문");
+        mailService.send("hero@example.com", new MailContent("제목", "본문", "<p>본문</p>"));
 
         org.mockito.Mockito.verify(sender, org.mockito.Mockito.times(2))
-                .send(org.mockito.ArgumentMatchers.any(org.springframework.mail.SimpleMailMessage.class));
+                .send(org.mockito.ArgumentMatchers.any(MimeMessage.class));
     }
 
     @Test
