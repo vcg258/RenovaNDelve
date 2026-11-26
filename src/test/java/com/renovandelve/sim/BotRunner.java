@@ -3,6 +3,7 @@ package com.renovandelve.sim;
 import com.renovandelve.catalog.domain.Rarity;
 
 import com.renovandelve.catalog.domain.consumableentity.Type;
+import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.catalog.domain.skillentity.Target;
 import com.renovandelve.catalog.dto.ArmorDTO;
 import com.renovandelve.catalog.dto.HelmetDTO;
@@ -24,6 +25,7 @@ import com.renovandelve.game.dto.response.RewardViewDTO;
 import com.renovandelve.game.dto.response.SetupOptionsDTO;
 import com.renovandelve.game.dto.response.ShopItemDTO;
 import com.renovandelve.game.dto.response.StatusDTO;
+import com.renovandelve.game.engine.SkillSynergies;
 import com.renovandelve.game.service.GameEngineService;
 import com.renovandelve.game.service.GameStateService;
 import com.renovandelve.member.domain.MemberEntity;
@@ -64,6 +66,8 @@ class BotRunner {
             for (int i = 0; i < MAX_ACTIONS; i++) {
                 GameViewDTO view = engine.getView(member);
                 status = view.status();
+                trackAlignment();
+                trackSynergies();
                 switch (view.phase()) {
                     case "EXPLORE" -> explore();
                     case "BATTLE" -> {
@@ -115,14 +119,17 @@ class BotRunner {
         HelmetDTO helmet = best(options.helmets(), HelmetDTO::scoreCost, (int) (options.budget() * 0.15));
         budget -= helmet == null ? 0 : helmet.scoreCost();
         List<Long> skills = new ArrayList<>();
+        List<SkillInfoDTO> chosen = new ArrayList<>();
         List<SkillInfoDTO> candidates = new ArrayList<>(options.skills());
-        candidates.sort(Comparator.comparingDouble(BotRunner::skillPower).reversed());
-        for (SkillInfoDTO skill : candidates) {
-            if (skills.size() >= 3) break;
-            if (skill.cost() <= budget && skill.cost() > 0) {
-                skills.add(skill.skillId());
-                budget -= skill.cost();
-            }
+        while (chosen.size() < 3) {
+            int left = budget;
+            SkillInfoDTO pick = candidates.stream()
+                    .filter(sk -> sk.cost() > 0 && sk.cost() <= left && !chosen.contains(sk))
+                    .max(Comparator.comparingDouble(sk -> skillScore(sk, chosen))).orElse(null);
+            if (pick == null) break;
+            chosen.add(pick);
+            skills.add(pick.skillId());
+            budget -= pick.cost();
         }
         return new NewGameRequest(difficulty, weapon == null ? null : weapon.weaponId(),
                 armor == null ? null : armor.armorId(), helmet == null ? null : helmet.helmetId(),
@@ -142,6 +149,7 @@ class BotRunner {
         String path = "SAFE";
         if (policy.dangerPath && hpRatio() > 0.6) path = "DANGER";
         else if (policy.ambushWhenHurt && hpRatio() < 0.45) path = "AMBUSH";
+        result.nodesVisited++;
         NodeDTO node = engine.nextNode(member, path);
         if ("WRAITH".equals(node.nodeType())) result.wraiths++;
     }
@@ -219,6 +227,62 @@ class BotRunner {
         return coefficient * hits * targets / Math.max(1, skill.cooldown() * 0.5 + 0.5) + skill.effectStack() * 0.2;
     }
 
+    /* ==================== 스킬 조합 ==================== */
+
+    /** 시너지 하나의 값. 스킬 위력(대개 1~3)과 같은 단위로 본다 */
+    private static final double SYNERGY_WEIGHT = 1.5;
+
+    /** 스킬 점수: 위력 + (조합을 보는 봇이면) 이 스킬로 새로 켜지는 시너지 */
+    private double skillScore(SkillInfoDTO skill, List<SkillInfoDTO> owned) {
+        double power = skillPower(skill);
+        if (!policy.seekSynergy) return power;
+        List<SkillInfoDTO> after = new ArrayList<>(owned);
+        after.add(skill);
+        return power + SYNERGY_WEIGHT * (synergyCount(after) - synergyCount(owned));
+    }
+
+    private double loadoutValue(List<SkillInfoDTO> skills) {
+        return skills.stream().mapToDouble(BotRunner::skillPower).sum() + SYNERGY_WEIGHT * synergyCount(skills);
+    }
+
+    /** 실제 엔진의 판정({@link SkillSynergies})으로 센다 */
+    private static int synergyCount(List<SkillInfoDTO> skills) {
+        return SkillSynergies.of(skills.stream().map(BotRunner::toEntity).toList()).getActiveSynergies().size();
+    }
+
+    private static SkillEntity toEntity(SkillInfoDTO dto) {
+        return SkillEntity.builder().skillId(dto.skillId()).name(dto.name()).target(dto.target())
+                .attackCount(dto.attackCount()).coefficient(dto.coefficient()).statusEffect(dto.statusEffect())
+                .effectStack(dto.effectStack()).build();
+    }
+
+    private List<SkillInfoDTO> ownedSkills() {
+        return status.getSkillSlotDTO().stream().map(GameSkillSlotDTO::getSkill).filter(java.util.Objects::nonNull)
+                .map(BotRunner::toInfo).toList();
+    }
+
+    private static SkillInfoDTO toInfo(com.renovandelve.catalog.dto.SkillDTO sk) {
+        return new SkillInfoDTO(null, sk.name(), sk.target(), sk.attackCount(), sk.coefficient(), sk.cost(),
+                sk.cooldown(), sk.statusEffect(), sk.effectStack(), sk.description(), sk.basic(), sk.rarity());
+    }
+
+    /* ==================== 가호 ==================== */
+
+    /** 원정 중 한 번이라도 켜진 스킬 시너지를 모은다 (끝난 뒤의 상태에는 스킬 정보가 없다) */
+    private void trackSynergies() {
+        if (status == null || status.getSkillSynergies() == null || status.getSkillSynergies().isEmpty()) return;
+        List<String> names = status.getSkillSynergies().stream().map(s -> s.split(" — ")[0]).toList();
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>(result.skillSynergies);
+        seen.addAll(names);
+        result.skillSynergies = List.copyOf(seen);
+        if (names.contains("빈틈 찌르기") && names.contains("재앙의 조율")) result.heavyAndAfflictedTogether = true;
+    }
+
+    private void trackAlignment() {
+        if (result.tier3AtNode >= 0 || status == null || status.getAlignment() == null) return;
+        if (status.getAlignment().tier() >= 3) result.tier3AtNode = result.nodesVisited;
+    }
+
     /* ==================== 조우 ==================== */
 
     private void encounter(NodeDTO node) {
@@ -230,6 +294,7 @@ class BotRunner {
             if (sign) result.contracts++;
         } else {
             choice = Math.max(0, factions.indexOf(policy.faction));
+            if (result.tier3AtNode >= 0) result.encountersAfterTier3++;
         }
         engine.chooseEncounter(member, new EncounterChoiceRequest(choice));
     }
@@ -246,7 +311,8 @@ class BotRunner {
             engine.selectReward(member, new RewardSelectRequest("RELIC", relic.relicId(), null));
             return;
         }
-        SkillInfoDTO bestSkill = reward.skills().stream().max(Comparator.comparingDouble(BotRunner::skillPower)).orElse(null);
+        List<SkillInfoDTO> owned = ownedSkills();
+        SkillInfoDTO bestSkill = reward.skills().stream().max(Comparator.comparingDouble(sk -> skillScore(sk, owned))).orElse(null);
         if (bestSkill != null && tryLearn(bestSkill, "SKILL", false)) return;
         var potion = reward.consumables().stream().filter(c -> c.effectType() == Type.RECOVERY).findFirst();
         if (potion.isPresent()) {
@@ -261,7 +327,26 @@ class BotRunner {
         List<GameSkillSlotDTO> slots = status.getSkillSlotDTO();
         Long replace = null;
         int max = status.getMaxSkillSlots() == 0 ? 8 : status.getMaxSkillSlots();
-        if (slots.size() >= max) {
+        if (slots.size() >= max && policy.seekSynergy) {
+            // 조합을 보는 봇: 바꾼 뒤의 (스킬 위력 합 + 시너지) 가 가장 큰 칸과 바꾸고, 나아지지 않으면 배우지 않는다
+            List<SkillInfoDTO> owned = ownedSkills();
+            double before = loadoutValue(owned);
+            GameSkillSlotDTO bestSlot = null;
+            double bestValue = before;
+            for (GameSkillSlotDTO slot : slots) {
+                if (slot.getSkill() == null || slot.getSkill().cost() == 0) continue;
+                List<SkillInfoDTO> after = new ArrayList<>(owned);
+                after.remove(toInfo(slot.getSkill()));
+                after.add(skill);
+                double value = loadoutValue(after);
+                if (value > bestValue) {
+                    bestValue = value;
+                    bestSlot = slot;
+                }
+            }
+            if (bestSlot == null) return false;
+            replace = bestSlot.getSlotId();
+        } else if (slots.size() >= max) {
             GameSkillSlotDTO weakest = slots.stream().filter(s -> s.getSkill() != null && s.getSkill().cost() > 0)
                     .min(Comparator.comparingDouble(s -> slotPower(s, 1))).orElse(null);
             if (weakest == null || slotPower(weakest, 1) >= skillPower(skill)) return false;

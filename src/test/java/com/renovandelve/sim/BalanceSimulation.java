@@ -113,12 +113,17 @@ class BalanceSimulation {
         }
 
         StringBuilder report = new StringBuilder();
+        StringBuilder extra = new StringBuilder();
         report.append(Summary.HEADER);
+        extra.append(System.lineSeparator()).append(Summary.EXTRA_HEADER);
         for (var entry : futures.entrySet()) {
             List<RunResult> results = new ArrayList<>();
             for (Future<List<RunResult>> f : entry.getValue()) results.addAll(f.get());
-            report.append(Summary.of(entry.getKey(), results).row()).append(System.lineSeparator());
+            Summary summary = Summary.of(entry.getKey(), results);
+            report.append(summary.row()).append(System.lineSeparator());
+            extra.append(summary.extraRow()).append(System.lineSeparator());
         }
+        report.append(extra);
         pool.shutdown();
 
         String out = System.getenv().getOrDefault("RD_SIM_OUT", "build/balance-report.md");

@@ -40,4 +40,32 @@ record Summary(String key, List<RunResult> runs) {
                 ok.stream().mapToInt(r -> r.wraiths).sum(), ok.stream().mapToInt(r -> r.contracts).sum(),
                 runs.size() - n, firstError.length() > 60 ? firstError.substring(0, 60) : firstError);
     }
+
+    static final String EXTRA_HEADER = """
+            | 난이도/봇 | 판 | 켜 본 스킬 시너지 수 | 빈틈 찌르기 + 재앙의 조율 | 시너지별 보유율 | 가호 3단계 도달 | 도달 노드(평균) | 지나온 노드(평균) | 3단계 뒤 조우(평균) |
+            |---|---|---|---|---|---|---|---|---|
+            """;
+
+    private static final List<String> SYNERGIES = List.of("피의 연계", "번지는 불길", "상처에 스민 독", "휩쓸기", "빈틈 찌르기", "재앙의 조율");
+
+    /** 스킬 조합과 가호 단계 지표 */
+    String extraRow() {
+        List<RunResult> ok = runs.stream().filter(r -> r.error == null).toList();
+        int n = Math.max(1, ok.size());
+        double avgSynergies = ok.stream().mapToInt(r -> r.skillSynergies.size()).average().orElse(0);
+        long both = ok.stream().filter(r -> r.heavyAndAfflictedTogether).count();
+        StringBuilder each = new StringBuilder();
+        for (String name : SYNERGIES) {
+            long c = ok.stream().filter(r -> r.skillSynergies.contains(name)).count();
+            if (!each.isEmpty()) each.append(", ");
+            each.append("%s %.0f%%".formatted(name, 100.0 * c / n));
+        }
+        List<RunResult> reached = ok.stream().filter(r -> r.tier3AtNode >= 0).toList();
+        return "| %s | %d | %.2f | %.0f%% | %s | %.0f%% | %.1f | %.1f | %.1f |".formatted(
+                key, ok.size(), avgSynergies, 100.0 * both / n, each,
+                100.0 * reached.size() / n,
+                reached.stream().mapToInt(r -> r.tier3AtNode).average().orElse(0),
+                ok.stream().mapToInt(r -> r.nodesVisited).average().orElse(0),
+                reached.stream().mapToInt(r -> r.encountersAfterTier3).average().orElse(0));
+    }
 }

@@ -332,6 +332,44 @@ class GameEngineServiceImplTest {
         verify(stageCacheService).delete(CONVERSATION_ID, 1, 3);
     }
 
+    @Test
+    @DisplayName("3단계를 넘긴 세력을 또 고르면 헌신 보상을 받고, 결과 문구에 드러난다")
+    void devotionBeyondThirdTier() {
+        GameStateEntity gameState = activeGame(1, 2);
+        for (int i = 0; i < 12; i++) gameState.gainAffinity(com.renovandelve.game.engine.Faction.ABYSS);
+        GameCharacterEntity character = gameState.getGameCharacter().get(0);
+        session.setPhase(GameSession.PHASE_ENCOUNTER);
+        session.setChoices(new ArrayList<>(List.of(choice("HEAVEN", "NOTHING"), choice("ABYSS", "NOTHING"))));
+
+        var outcome = engine.chooseEncounter(member, new EncounterChoiceRequest(1));
+
+        assertThat(gameState.getAbyssAffinity()).isEqualTo(13);
+        assertThat(character.getAttack()).isEqualTo(10 + com.renovandelve.game.engine.Alignment.DEVOTION_ATTACK);
+        assertThat(outcome.text()).contains("마계").contains("헌신");
+    }
+
+    @Test
+    @DisplayName("3단계에 막 닿는 선택이나 다른 세력을 고른 선택에는 헌신 보상이 없다")
+    void noDevotionAtThresholdOrOtherFaction() {
+        GameStateEntity gameState = activeGame(1, 2);
+        for (int i = 0; i < 11; i++) gameState.gainAffinity(com.renovandelve.game.engine.Faction.ABYSS);
+        GameCharacterEntity character = gameState.getGameCharacter().get(0);
+        session.setPhase(GameSession.PHASE_ENCOUNTER);
+        session.setChoices(new ArrayList<>(List.of(choice("HEAVEN", "NOTHING"), choice("ABYSS", "NOTHING"))));
+
+        var reached = engine.chooseEncounter(member, new EncounterChoiceRequest(1)); // 11 → 12: 3단계 도달
+
+        assertThat(character.getAttack()).isEqualTo(10);
+        assertThat(reached.text()).doesNotContain("헌신");
+
+        session.setPhase(GameSession.PHASE_ENCOUNTER);
+        session.setChoices(new ArrayList<>(List.of(choice("HEAVEN", "NOTHING"), choice("ABYSS", "NOTHING"))));
+        var other = engine.chooseEncounter(member, new EncounterChoiceRequest(0)); // 천상을 고름
+
+        assertThat(character.getMaxHp()).isEqualTo(50);
+        assertThat(other.text()).doesNotContain("헌신");
+    }
+
     /* ==================== 갈림길 ==================== */
 
     private NodeDTO enterBattle(String path) {
@@ -492,11 +530,11 @@ class GameEngineServiceImplTest {
         winBattleOn("SAFE");
         assertThat(session.getReward().getRelicIds()).hasSize(1);
 
-        // 같은 전투를 마계 성향 9로 다시 치른다
+        // 같은 전투를 마계 성향 12(3단계)로 다시 치른다
         GameCharacterEntity character = GameCharacterEntity.builder().currentHp(50).maxHp(50).attack(10).defense(3).build();
         SkillEntity skill = SkillEntity.builder().skillId(1L).name("기본 공격").target(Target.EnemySingle).build();
         GameStateEntity abyss = GameStateEntity.builder()
-                .gameStateId(GAME_ID).currentStage(1).currentNodeId(3L).abyssAffinity(9)
+                .gameStateId(GAME_ID).currentStage(1).currentNodeId(3L).abyssAffinity(12)
                 .gameCharacter(new ArrayList<>(List.of(character)))
                 .gameSkillSlot(new ArrayList<>(List.of(
                         GameSkillSlotEntity.builder().slotId(1L).slotIndex(0).skill(skill).build())))
@@ -1033,7 +1071,7 @@ class GameEngineServiceImplTest {
         GameCharacterEntity character = GameCharacterEntity.builder().currentHp(20).maxHp(50).attack(10).defense(3).build();
         SkillEntity skill = SkillEntity.builder().skillId(1L).name("기본 공격").target(Target.EnemySingle).build();
         GameStateEntity abyss = GameStateEntity.builder()
-                .gameStateId(GAME_ID).currentStage(1).currentNodeId(3L).abyssAffinity(9) // 3단계: 5%
+                .gameStateId(GAME_ID).currentStage(1).currentNodeId(3L).abyssAffinity(12) // 3단계: 5%
                 .gameCharacter(new ArrayList<>(List.of(character)))
                 .gameSkillSlot(new ArrayList<>(List.of(GameSkillSlotEntity.builder().slotId(1L).slotIndex(0).skill(skill).build())))
                 .build();
