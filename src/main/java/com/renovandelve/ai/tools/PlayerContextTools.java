@@ -73,7 +73,7 @@ public class PlayerContextTools {
             sb.append("[스탯] Lv.%d / HP %d-%d / 공격력 %d / 방어력 %d / 경험치 %d(다음 레벨까지 %d)\n"
                     .formatted(character.getLevel(), character.getCurrentHp(), character.getMaxHp(),
                             character.getAttack(), character.getDefense(), character.getExp(),
-                            Math.max(0, character.getLevel() * 100 - character.getExp())));
+                            Math.max(0, character.expToNextLevel() - character.getExp())));
         }
 
         String gear = describeEquipment(game.getGameEquipment());

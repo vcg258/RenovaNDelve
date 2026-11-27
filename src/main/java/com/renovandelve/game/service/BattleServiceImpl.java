@@ -35,7 +35,6 @@ public class BattleServiceImpl implements BattleService {
     public static final String INTENT_HEAVY = MonsterIntent.HEAVY;
     public static final String INTENT_GUARD = MonsterIntent.GUARD;
 
-    private static final double HEAVY_MULTIPLIER = 1.6;
     private static final double GUARD_DAMAGE_TAKEN = 0.5;
     private static final double ENRAGE_ATK_MULTIPLIER = 1.3;
     // 방어력이 공격력을 넘어서면 모든 피해가 1이 되어 후반 전투가 무의미해진다.
@@ -229,7 +228,7 @@ public class BattleServiceImpl implements BattleService {
             }
 
             boolean heavy = INTENT_HEAVY.equals(monster.getIntent());
-            int power = heavy ? (int) Math.round(monster.getAtk() * HEAVY_MULTIPLIER) : monster.getAtk();
+            int power = heavy ? (int) Math.round(monster.getAtk() * MonsterIntent.HEAVY_MULTIPLIER) : monster.getAtk();
             int floor = Math.max(1, (int) Math.ceil(power * MIN_DAMAGE_RATIO));
             int damage = Math.max(floor, power - defense - flatReduction);
             damage = Math.max(1, (int) Math.round(damage * incomingMultiplier));

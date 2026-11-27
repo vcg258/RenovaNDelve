@@ -76,6 +76,7 @@ public class GameStateServiceImpl implements GameStateService {
         return new SetupOptionsDTO(
                 STARTING_BUDGET + bonus,
                 bonus,
+                MAX_START_SKILLS - 1,
                 catalogMapper.toWeaponDTOs(weaponRepository.findAll()),
                 catalogMapper.toArmorDTOs(armorRepository.findAll()),
                 catalogMapper.toHelmetDTOs(helmetRepository.findAll()),
