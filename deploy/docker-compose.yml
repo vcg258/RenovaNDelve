@@ -1,0 +1,57 @@
+# 서버 배포용. 이 파일과 .env(.env.example을 복사해 채운 것)를 서버의 한 폴더에 두고
+#   docker compose up -d
+# 앱만 127.0.0.1:8083으로 열고, 바깥 접속은 Nginx(HTTPS)가 받는다. DB와 Redis는 포트를 열지 않는다.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: rd_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - rd_pgdata:/var/lib/postgresql/data
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: rd_redis
+    restart: unless-stopped
+    # 게임 세션이 Redis에 있으므로 재시작해도 남도록 AOF로 디스크에 쓴다
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - rd_redisdata:/data
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    image: vcg258/renova-delve:${APP_TAG:-latest}
+    container_name: rd_app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${DB_NAME}?currentSchema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "127.0.0.1:8083:8080"
+    mem_limit: 1g
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  rd_pgdata:
+  rd_redisdata:
