@@ -10,6 +10,26 @@ ARM(aarch64) 리눅스 서버 한 대에 다른 서비스와 함께 올리는 �
 
 DB와 Redis는 compose 내부 네트워크에서만 보인다. 스키마는 첫 기동 때 Flyway가 만들고, VectorStore 테이블과 임베딩은 Spring AI와 기동 시 ETL이 채운다.
 
+## 자동 배포 (GitHub Actions)
+
+| 워크플로 | 언제 | 하는 일 |
+|---|---|---|
+| `CI` (두 저장소) | `dev`·`main`으로 가는 PR, `dev` 푸시 | 백엔드: pgvector·Redis 서비스 컨테이너를 띄우고 전체 테스트. 프론트: `npm test`, `npm run build` |
+| `Deploy` (백엔드) | `main` 푸시, 또는 Actions 탭에서 수동 실행 | 프론트 `main`을 받아 화면까지 묶은 jar → arm64 이미지 → Docker Hub → 서버에서 이미지 교체 후 헬스 체크 |
+
+배포 순서: 프론트 `dev` → `main` 병합, 그다음 백엔드 `dev` → `main` 병합. 프론트만 바뀌었으면 프론트 `main` 병합 뒤 백엔드 저장소 Actions 탭에서 `Deploy`를 수동 실행한다.
+
+이미지 태그는 `버전-커밋`(예: `0.11.0-fd832d4`), `버전`, `latest` 세 개다. 서버 `.env`의 `APP_TAG`에는 `버전-커밋`이 들어가므로, 되돌릴 때는 `APP_TAG`를 이전 태그로 바꾸고 `docker compose up -d app`.
+
+| 등록 위치 | 이름 |
+|---|---|
+| 시크릿 | `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `SERVER_HOST`, `SERVER_USERNAME`, `SERVER_KEY`, `FRONT_DEPLOY_KEY`(프론트 저장소 읽기 전용 배포 키) |
+| 변수 | `VITE_OPERATOR_NAME`, `VITE_OPERATOR_CONTACT`, `VITE_PRIVACY_OFFICER_NAME` |
+
+앱 비밀값(OpenAI 키, DB 비밀번호 등)은 Actions에 두지 않는다. 서버 `~/renova/.env`에만 있다.
+
+아래 1~5는 수동으로 배포하거나 서버를 처음 준비할 때의 순서다.
+
 ## 1. 이미지 만들기 (로컬)
 
 화면에 박히는 값(`VITE_`)은 빌드할 때 정해진다. 운영자 이름과 문의처를 넣고 jar를 만든다.
