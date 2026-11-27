@@ -1,0 +1,101 @@
+# CD: main에 푸시되면(dev → main 병합) 화면까지 묶은 이미지를 만들어 서버에 배포한다.
+# 화면은 프론트 저장소의 main을 받아 함께 빌드한다. 프론트만 바뀐 경우에는 Actions 탭에서 수동 실행(workflow_dispatch).
+#
+# 시크릿: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, SERVER_HOST, SERVER_USERNAME, SERVER_KEY,
+#         FRONT_DEPLOY_KEY (프론트 저장소 읽기 전용 배포 키)
+# 변수:   VITE_OPERATOR_NAME, VITE_OPERATOR_CONTACT, VITE_PRIVACY_OFFICER_NAME (화면에 박히는 운영자 정보)
+# 앱 비밀값(OpenAI 키, DB 비밀번호 등)은 서버 ~/renova/.env에만 있다.
+name: Deploy
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+        with:
+          repository: vcg258/renova-delve-front
+          ref: main
+          path: renova-delve-front
+          ssh-key: ${{ secrets.FRONT_DEPLOY_KEY }}
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: renova-delve-front/package-lock.json
+
+      - name: Read version
+        id: version
+        run: |
+          v=$(sed -n "s/^version = '\(.*\)'/\1/p" build.gradle)
+          echo "value=$v" >> "$GITHUB_OUTPUT"
+          # 같은 버전을 여러 번 배포해도 되돌릴 수 있게 커밋을 붙인 태그도 만든다
+          echo "tag=$v-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Build jar (with frontend)
+        env:
+          VITE_OPERATOR_NAME: ${{ vars.VITE_OPERATOR_NAME }}
+          VITE_OPERATOR_CONTACT: ${{ vars.VITE_OPERATOR_CONTACT }}
+          VITE_PRIVACY_OFFICER_NAME: ${{ vars.VITE_PRIVACY_OFFICER_NAME }}
+        run: ./gradlew bootJar -PwithFrontend -PfrontendDir=renova-delve-front -x test
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          build-args: VERSION=${{ steps.version.outputs.value }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/renova-delve:${{ steps.version.outputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/renova-delve:${{ steps.version.outputs.value }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/renova-delve:latest
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1
+        env:
+          APP_TAG: ${{ steps.version.outputs.tag }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_KEY }}
+          envs: APP_TAG
+          script_stop: true
+          script: |
+            cd ~/renova
+            sed -i "s/^APP_TAG=.*/APP_TAG=${APP_TAG}/" .env
+            docker compose pull app
+            docker compose up -d app
+            for i in $(seq 1 30); do
+              if curl -fs http://127.0.0.1:8083/actuator/health > /dev/null; then echo "healthy (${APP_TAG})"; docker image prune -f; exit 0; fi
+              sleep 5
+            done
+            echo "app did not become healthy"; docker logs --tail 50 rd_app; exit 1

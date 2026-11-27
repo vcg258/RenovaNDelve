@@ -1,0 +1,52 @@
+# 운영 프로파일 (--spring.profiles.active=prod)
+# application.yaml(로컬 개발 기본값) 위에 덮어쓰는 값만 둔다.
+
+spring:
+  # 운영 DB는 Flyway로 처음부터 만든다. 이력 테이블 없는 DB에 잘못 붙었을 때 조용히 V1로 간주하지 않고 기동을 멈춘다
+  flyway:
+    baseline-on-migrate: false
+  # 운영에서는 접속 정보에 기본값을 두지 않는다. 환경변수가 빠지면 기동 단계에서 실패해야
+  # 로컬용 기본 계정(postgres/postgres)으로 조용히 붙는 사고가 없다.
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    # ddl-auto는 기본 설정(application.yaml)에서 이미 validate다. 스키마는 Flyway만 바꾼다.
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+server:
+  # 리버스 프록시(Nginx, ALB) 뒤에서 실제 접속 IP와 HTTPS 여부를 인식 -> IP 단위 요청 제한이 정확해진다
+  forward-headers-strategy: native
+  error:
+    include-message: never
+    include-stacktrace: never
+
+# API 문서는 운영에 노출하지 않는다 (공격자에게 전체 엔드포인트 목록을 주는 셈)
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    org:
+      springframework: INFO
+      # DEBUG면 프롬프트 전문(사용자가 챗봇에 입력한 내용 포함)이 로그에 남는다
+      springframework.ai: INFO
+    com:
+      renovandelve: INFO
+
+renovaNDelve:
+  cookie:
+    secure: true
+  # 화면과 API를 같은 주소로 배포하므로 다른 출처의 요청은 받지 않는다. 화면을 따로 배포하면 그 주소를 적는다
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+  # 운영에서는 재설정 링크가 가리킬 주소에 기본값(localhost)을 두지 않는다
+  app:
+    base-url: ${APP_BASE_URL}

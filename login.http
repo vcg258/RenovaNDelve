@@ -4,7 +4,11 @@ Content-Type: application/json
 
 {
   "loginId": "tester",
-  "password": "1234"
+  "password": "test1234",
+  "nickname": "테스터",
+  "agreeTerms": true,
+  "agreePrivacy": true,
+  "ageConfirmed": true
 }
 
 ### 로그인 (응답의 accessToken을 아래 @token에 복사)

@@ -14,21 +14,46 @@ spring:
           no-store: true
           must-revalidate: true
 
-# JPA 초기 INSERT 설정
-  sql:
-    init:
-      mode: always
-      data-locations: classpath:db/data.sql
+# 스키마 마이그레이션 (classpath:db/migration)
+# - 시드 데이터는 반복 마이그레이션 R__seed_data.sql 이다. 내용이 바뀐 기동에서만 다시 실행된다.
+#   (예전의 spring.sql.init + data.sql 방식은 Flyway와 함께 쓸 수 없어 옮겼다)
+# - 빈 DB: V1(기준 스키마)부터 차례로 적용한다.
+# - Flyway 도입 전에 ddl-auto로 만들어진 기존 DB: 이력 테이블이 없으므로 현재 상태를 V1로 간주(baseline)하고
+#   V2부터 적용한다.
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+    # 시드 데이터(R__seed_data.sql)에 '${'가 들어가도 Flyway 자리표시자로 해석하지 않는다
+    placeholder-replacement: false
+
   jpa:
-    defer-datasource-initialization: true
+    # OSIV 끔: 영속성 컨텍스트(DB 커넥션)를 트랜잭션이 끝날 때 닫는다.
+    # 켜 두면 요청이 끝날 때까지 커넥션을 붙잡아, LLM 응답을 기다리는 노드 전진 같은 긴 요청이
+    # 커넥션 풀을 고갈시킨다. 대신 지연 로딩은 반드시 @Transactional 안(서비스)에서 끝내고,
+    # 컨트롤러에는 DTO만 넘긴다.
+    open-in-view: false
     hibernate:
-      ddl-auto: update # 테이블 자동 생성
+      # 스키마는 Flyway만 바꾼다. Hibernate는 엔티티와 테이블이 맞는지 검사만 한다(전 프로파일 공통).
+      # 엔티티를 바꾸면 같은 변경을 db/migration에 V{n}__설명.sql 로 추가해야 기동된다.
+      # (update로 두면 마이그레이션을 빠뜨려도 로컬에서는 돌아서, 운영에서야 문제가 드러난다)
+      ddl-auto: validate
     properties:
 #      javax.persistence.schema-generation.scripts.action: create # 엔티티 변경시 init.sql 추출 하기 위한 설정
 #      javax.persistence.schema-generation.scripts.create-target: init.sql # 엔티티 변경시 init.sql 추출 하기 위한 설정
       hibernate:
         format_sql: true #쿼리문 보여주는 설정
+        # 지연 로딩 컬렉션·연관을 한 건씩이 아니라 IN 절로 묶어 읽는다 (스킬 슬롯·유물 칸의 N+1 완화)
+        default_batch_fetch_size: 100
     show-sql: true #쿼리문 보여주는 설정
+
+  # @Async 작업(AI 프리페치, 메일)을 처리하는 기본 실행기. 기본값은 대기열이 무제한이라 몰리면 메모리를 계속 잡는다
+  task:
+    execution:
+      pool:
+        core-size: 8
+        max-size: 16
+        queue-capacity: 500
 
   # OpenAI
   ai:
@@ -73,15 +98,38 @@ spring:
 #PostgreSQL 설정
   datasource:
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://localhost:5432/renova_n_delve?currentSchema=public
-    username: postgres
-    password: postgres
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/renova_n_delve?currentSchema=public}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+
+# 메일 (아이디 찾기 / 비밀번호 재설정)
+# 계정 정보는 저장소에 두지 않는다 (.env 또는 환경변수). 비워 두면 서버는 그대로 기동되고 메일 발송만 생략된다.
+# 네이버: 메일 설정에서 POP3/SMTP 사용을 켜야 한다. 2단계 인증을 쓰면 애플리케이션 비밀번호를 MAIL_PASSWORD에 넣는다.
+  mail:
+    host: ${MAIL_HOST:smtp.naver.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          # 465는 처음부터 TLS(SSL), 587은 STARTTLS. 587을 쓰려면 MAIL_PORT=587, MAIL_SSL=false
+          ssl:
+            enable: ${MAIL_SSL:true}
+          starttls:
+            enable: true
+          # SMTP 서버가 응답하지 않아도 스레드가 묶이지 않게 한다
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
 # Redis 설정
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
   # Auth2 Google
   security:
@@ -89,8 +137,9 @@ spring:
       client:
         registration:
           google:
-            client-id: 972477145934-8rh7h31q6dme93klmfj3i0aks06akfn2.apps.googleusercontent.com
-            client-secret: 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
+            # 시크릿은 저장소에 두지 않는다 (.env 또는 환경변수로 주입). 미설정 시 구글 로그인만 동작하지 않는다.
+            client-id: ${GOOGLE_CLIENT_ID:unset}
+            client-secret: ${GOOGLE_CLIENT_SECRET:unset}
             scope:
               - email
               - profile
@@ -112,5 +161,47 @@ renovaNDelve:
   jwt:
     secret: ${JWT_SECRET_KEY}
   ai:
-    # 서버 기동 시 RDB 몬스터 -> VectorStore 자동 임베딩 동기화 (비용: 몬스터 수 만큼의 임베딩 1회)
-    sync-monsters-on-startup: true
+    # 서버 기동 시 RDB(몬스터/장비/스킬/유물/소모품) -> VectorStore 증분 동기화
+    # 변경된 행만 재임베딩하므로 2회차부터는 임베딩 API 호출이 거의 발생하지 않는다.
+    sync-on-startup: true
+
+  # 메일에 넣는 링크의 기준 주소 (프론트 주소). 요청의 Host 헤더로 만들지 않는다 (위조된 Host로 링크를 바꿔치기하는 것 방지)
+  app:
+    base-url: ${APP_BASE_URL:http://localhost:5173}
+
+  mail:
+    # 보내는 주소. 비워 두면 MAIL_USERNAME으로 만든다 (네이버는 로그인한 계정의 주소로만 보낼 수 있다)
+    from: ${MAIL_FROM:}
+
+  # RefreshToken 쿠키의 Secure 속성 (HTTPS 전용). 로컬 개발은 false, 운영은 true (application-prod.yaml)
+  cookie:
+    secure: ${COOKIE_SECURE:false}
+
+  # 다른 출처에서 API를 부를 수 있는 프론트 주소 (로컬 개발용 Vite 서버). 운영은 비운다 (application-prod.yaml)
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:4173,http://localhost:3000,http://localhost:4000
+
+  # 개인정보 보관 기간
+  privacy:
+    # AI 대화 기록(가이드 챗봇 / 게임 서사)은 마지막 이용 후 이 기간이 지나면 자동 파기
+    chat-retention-days: 30
+
+  # 최초 관리자 계정 (관리자가 한 명도 없을 때만 생성됨)
+  # password를 비워두면 서버가 임의 생성해 기동 로그에 1회만 출력한다.
+  admin:
+    login-id: ${ADMIN_LOGIN_ID:admin}
+    password: ${ADMIN_PASSWORD:}
+
+# 헬스 체크: /actuator/health 하나만 웹에 연다 (DB·Redis 상태를 합친 UP/DOWN만, 세부 내용은 숨김)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+  health:
+    # 메일 서버 상태는 넣지 않는다 (SMTP를 설정하지 않아도 서비스는 정상이고, 메일 장애로 서버를 재시작할 일은 없다)
+    mail:
+      enabled: false
