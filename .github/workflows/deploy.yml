@@ -1,5 +1,5 @@
 # CD: main에 푸시되면(dev → main 병합) 화면까지 묶은 이미지를 만들어 서버에 배포한다.
-# 화면은 프론트 저장소의 main을 받아 함께 빌드한다. 프론트만 바뀐 경우에는 Actions 탭에서 수동 실행(workflow_dispatch).
+# 화면은 프론트 저장소의 main을 받아 함께 빌드한다. 프론트 main 푸시 때는 프론트 저장소가 이 워크플로를 호출한다(workflow_dispatch).
 #
 # 시크릿: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, SERVER_HOST, SERVER_USERNAME, SERVER_KEY,
 #         FRONT_DEPLOY_KEY (프론트 저장소 읽기 전용 배포 키)
@@ -49,8 +49,10 @@ jobs:
         run: |
           v=$(sed -n "s/^version = '\(.*\)'/\1/p" build.gradle)
           echo "value=$v" >> "$GITHUB_OUTPUT"
-          # 같은 버전을 여러 번 배포해도 되돌릴 수 있게 커밋을 붙인 태그도 만든다
-          echo "tag=$v-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          # 같은 버전을 여러 번 배포해도 되돌릴 수 있게 백엔드·프론트 커밋을 붙인 태그도 만든다
+          # (프론트만 바뀐 배포는 백엔드 커밋이 같으므로 프론트 커밋이 있어야 태그가 겹치지 않는다)
+          front=$(git -C renova-delve-front rev-parse --short=7 HEAD)
+          echo "tag=$v-${GITHUB_SHA::7}-$front" >> "$GITHUB_OUTPUT"
 
       - name: Build jar (with frontend)
         env:
