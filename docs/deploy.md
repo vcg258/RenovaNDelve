@@ -15,9 +15,9 @@ DB와 Redis는 compose 내부 네트워크에서만 보인다. 스키마는 첫 
 | 워크플로 | 언제 | 하는 일 |
 |---|---|---|
 | `CI` (두 저장소) | `dev`·`main`으로 가는 PR, `dev` 푸시 | 백엔드: pgvector·Redis 서비스 컨테이너를 띄우고 전체 테스트. 프론트: `npm test`, `npm run build` |
-| `Deploy` (백엔드) | `main` 푸시, 또는 Actions 탭에서 수동 실행 | 프론트 `main`을 받아 화면까지 묶은 jar → arm64 이미지 → Docker Hub → 서버에서 이미지 교체 후 헬스 체크 |
+| `Deploy` (백엔드) | 백엔드 `main` 푸시, 프론트 `main` 푸시(프론트의 `Trigger backend deploy`가 호출), Actions 탭에서 수동 실행 | 프론트 `main`을 받아 화면까지 묶은 jar → arm64 이미지 → Docker Hub → 서버에서 이미지 교체 후 헬스 체크 |
 
-배포 순서: 프론트 `dev` → `main` 병합, 그다음 백엔드 `dev` → `main` 병합. 프론트만 바뀌었으면 프론트 `main` 병합 뒤 백엔드 저장소 Actions 탭에서 `Deploy`를 수동 실행한다.
+배포 순서: 프론트 `dev` → `main` 병합, 그다음 백엔드 `dev` → `main` 병합. 프론트만 바뀌었으면 프론트 `main` 병합만으로 배포된다. 두 배포가 겹치면 차례로 실행된다(같은 동시 실행 그룹).
 
 이미지 태그는 `버전-커밋`(예: `0.11.0-fd832d4`), `버전`, `latest` 세 개다. 서버 `.env`의 `APP_TAG`에는 `버전-커밋`이 들어가므로, 되돌릴 때는 `APP_TAG`를 이전 태그로 바꾸고 `docker compose up -d app`.
 
@@ -25,6 +25,7 @@ DB와 Redis는 compose 내부 네트워크에서만 보인다. 스키마는 첫 
 |---|---|
 | 시크릿 | `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `SERVER_HOST`, `SERVER_USERNAME`, `SERVER_KEY`, `FRONT_DEPLOY_KEY`(프론트 저장소 읽기 전용 배포 키) |
 | 변수 | `VITE_OPERATOR_NAME`, `VITE_OPERATOR_CONTACT`, `VITE_PRIVACY_OFFICER_NAME` |
+| 프론트 저장소 시크릿 | `BACKEND_DEPLOY_TOKEN` (fine-grained 토큰, 이 저장소만, Actions 읽기·쓰기) |
 
 앱 비밀값(OpenAI 키, DB 비밀번호 등)은 Actions에 두지 않는다. 서버 `~/renova/.env`에만 있다.
 
