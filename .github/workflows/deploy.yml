@@ -49,8 +49,10 @@ jobs:
         run: |
           v=$(sed -n "s/^version = '\(.*\)'/\1/p" build.gradle)
           echo "value=$v" >> "$GITHUB_OUTPUT"
-          # 같은 버전을 여러 번 배포해도 되돌릴 수 있게 커밋을 붙인 태그도 만든다
-          echo "tag=$v-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          # 같은 버전을 여러 번 배포해도 되돌릴 수 있게 백엔드·프론트 커밋을 붙인 태그도 만든다
+          # (프론트만 바뀐 배포는 백엔드 커밋이 같으므로 프론트 커밋이 있어야 태그가 겹치지 않는다)
+          front=$(git -C renova-delve-front rev-parse --short=7 HEAD)
+          echo "tag=$v-${GITHUB_SHA::7}-$front" >> "$GITHUB_OUTPUT"
 
       - name: Build jar (with frontend)
         env:
