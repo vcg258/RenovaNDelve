@@ -60,6 +60,7 @@ public interface GameMapper {
      * @return DTO (버프는 세션에 있어 비움)
      */
     @Mapping(target = "currentExp", source = "exp")
+    @Mapping(target = "expToNext", expression = "java(character.expToNextLevel())")
     @Mapping(target = "gameState", ignore = true)
     @Mapping(target = "buffDTOS", ignore = true)
     GameCharacterDTO toCharacterDTO(GameCharacterEntity character);
@@ -105,6 +106,7 @@ public interface GameMapper {
      * @return 화면용 몬스터 (예고가 비어 있으면 공격)
      */
     @Mapping(target = "intent", defaultValue = MonsterIntent.ATTACK)
+    @Mapping(target = "intentAtk", expression = "java(com.renovandelve.game.engine.MonsterIntent.expectedAttack(monster.getIntent(), monster.getAtk()))")
     BattleMonsterDTO toBattleMonsterDTO(SessionMonster monster);
 
     /**

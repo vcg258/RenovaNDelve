@@ -18,6 +18,7 @@ public record BattleMonsterDTO(
         Map<String, Integer> buffs, // BLEED / BURN / POISON / STUN -> 스택
         String description,
         String intent,          // 이번 턴 행동 예고: ATTACK(공격) / HEAVY(강공) / GUARD(방어 태세)
+        int intentAtk,          // 예고대로 움직일 때의 공격력 (강공은 배율 적용, 방어 태세는 0)
         boolean enraged         // 보스 격노 상태
 ) {
 }

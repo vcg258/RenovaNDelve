@@ -14,6 +14,7 @@ import java.util.List;
 public record SetupOptionsDTO(
         int budget,       // 총 예산 (기본 + 도감 보너스)
         int bonusBudget,  // 그중 도감 수집으로 얻은 보너스
+        int maxSkillPicks, // 고를 수 있는 스킬 수 (기본 공격 제외)
         List<WeaponDTO> weapons,
         List<ArmorDTO> armors,
         List<HelmetDTO> helmets,

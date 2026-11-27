@@ -126,14 +126,23 @@ public class GameCharacterEntity { //제외
     }
 
     /**
+     * 다음 레벨까지 필요한 경험치 (레벨 x 100). 화면의 경험치 막대도 이 값을 쓴다.
+     *
+     * @return 이번 레벨의 레벨업 기준값
+     */
+    public int expToNextLevel() {
+        return this.level * 100;
+    }
+
+    /**
      * 경험치 획득 + 레벨업 처리
      * @return 상승한 레벨 수
      */
     public int gainExp(int amount) {
         this.exp += Math.max(0, amount);
         int levelUps = 0;
-        while (this.exp >= this.level * 100) {
-            this.exp -= this.level * 100;
+        while (this.exp >= expToNextLevel()) {
+            this.exp -= expToNextLevel();
             this.level += 1;
             this.maxHp += 15;
             this.attack += 3;
