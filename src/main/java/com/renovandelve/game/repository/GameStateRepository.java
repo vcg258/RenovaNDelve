@@ -1,5 +1,6 @@
 package com.renovandelve.game.repository;
 
+import com.renovandelve.game.domain.gamestateentity.Difficulty;
 import com.renovandelve.game.domain.gamestateentity.GameStateEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -7,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface GameStateRepository extends JpaRepository<GameStateEntity, Long> {
     // 진행 중인 게임 조회
@@ -31,4 +33,8 @@ public interface GameStateRepository extends JpaRepository<GameStateEntity, Long
     @Query("SELECT g.member.memberId, SUM(g.heavenAffinity), SUM(g.abyssAffinity), SUM(g.humanAffinity) "
             + "FROM GameStateEntity g WHERE g.createdAt >= :since GROUP BY g.member.memberId")
     List<Object[]> sumAffinityByMemberSince(@Param("since") java.time.LocalDateTime since);
+
+    // 원정 준비의 목표: 이 회원이 클리어한 적 있는 난이도
+    @Query("SELECT DISTINCT g.difficulty FROM GameStateEntity g WHERE g.member.memberId = :memberId AND g.result = 'CLEAR'")
+    Set<Difficulty> findClearedDifficulties(@Param("memberId") Long memberId);
 }

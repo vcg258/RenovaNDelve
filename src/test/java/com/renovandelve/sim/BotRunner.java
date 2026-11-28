@@ -52,7 +52,8 @@ class BotRunner {
     private boolean guardedLastTurn;
 
     BotRunner(GameEngineService engine, GameStateService gameStateService, MemberEntity member,
-              BotPolicy policy, String difficulty) {
+              BotPolicy policy, String difficulty, int runIndex) {
+        this.result.runIndex = runIndex;
         this.engine = engine;
         this.gameStateService = gameStateService;
         this.member = member;
@@ -112,15 +113,20 @@ class BotRunner {
     /** 예산 안에서 무기 → 갑옷 → 투구 → 스킬 순으로 가장 비싼 것을 산다 (비싼 것이 좋다고 본다) */
     private NewGameRequest setup(SetupOptionsDTO options) {
         int budget = options.budget();
-        WeaponDTO weapon = best(options.weapons(), WeaponDTO::scoreCost, (int) (budget * 0.35));
+        var locked = options.locked();
+        WeaponDTO weapon = best(options.weapons().stream().filter(w -> !locked.weapons().contains(w.weaponId())).toList(),
+                WeaponDTO::scoreCost, (int) (budget * 0.35));
         budget -= weapon == null ? 0 : weapon.scoreCost();
-        ArmorDTO armor = best(options.armors(), ArmorDTO::scoreCost, (int) (options.budget() * 0.25));
+        ArmorDTO armor = best(options.armors().stream().filter(a -> !locked.armors().contains(a.armorId())).toList(),
+                ArmorDTO::scoreCost, (int) (options.budget() * 0.25));
         budget -= armor == null ? 0 : armor.scoreCost();
-        HelmetDTO helmet = best(options.helmets(), HelmetDTO::scoreCost, (int) (options.budget() * 0.15));
+        HelmetDTO helmet = best(options.helmets().stream().filter(h -> !locked.helmets().contains(h.helmetId())).toList(),
+                HelmetDTO::scoreCost, (int) (options.budget() * 0.15));
         budget -= helmet == null ? 0 : helmet.scoreCost();
         List<Long> skills = new ArrayList<>();
         List<SkillInfoDTO> chosen = new ArrayList<>();
-        List<SkillInfoDTO> candidates = new ArrayList<>(options.skills());
+        List<SkillInfoDTO> candidates = new ArrayList<>(options.skills().stream()
+                .filter(sk -> !locked.skills().contains(sk.skillId())).toList());
         while (chosen.size() < 3) {
             int left = budget;
             SkillInfoDTO pick = candidates.stream()
@@ -150,8 +156,17 @@ class BotRunner {
         if (policy.dangerPath && hpRatio() > 0.6) path = "DANGER";
         else if (policy.ambushWhenHurt && (policy == BotPolicy.AMBUSH_ONLY || hpRatio() < 0.45)) path = "AMBUSH";
         result.nodesVisited++;
+        double hpBefore = hpRatio();
         NodeDTO node = engine.nextNode(member, path);
         if ("WRAITH".equals(node.nodeType())) result.wraiths++;
+        if ("BOSS".equals(node.nodeType())) {
+            result.bossEntryHp += hpBefore;
+            result.bossEntries++;
+            result.lastBossEntryHp = hpBefore;
+        } else if ("BATTLE".equals(node.nodeType()) || "ELITE".equals(node.nodeType())) {
+            result.battleEntryHp += hpBefore;
+            result.battleEntries++;
+        }
     }
 
     /* ==================== 전투 ==================== */
