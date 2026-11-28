@@ -411,7 +411,7 @@ class GameEngineServiceImplTest {
             assertThat(monster.getAtk()).isEqualTo(safeAtk);
         });
         assertThat(node.monsters()).allSatisfy(monster -> assertThat(monster.buffs()).containsKey("STUN"));
-        assertThat(node.pathNote()).contains("기습");
+        assertThat(node.pathNote()).contains("첫 턴에 움직이지 못한다").contains("20%");
     }
 
     @Test
@@ -495,9 +495,9 @@ class GameEngineServiceImplTest {
         assertThat(danger.log()).anyMatch(line -> line.contains("위험한 길") && line.contains("+50%"));
 
         TurnResultDTO ambush = winBattleOn("AMBUSH");
-        assertThat(lastGame.getScore()).isEqualTo(28);
-        assertThat(lastGame.getGameCharacter().get(0).getExp()).isEqualTo(21);
-        assertThat(ambush.log()).anyMatch(line -> line.contains("은밀한 길") && line.contains("-30%"));
+        assertThat(lastGame.getScore()).isEqualTo(32); // 은밀한 길 -20%
+        assertThat(lastGame.getGameCharacter().get(0).getExp()).isEqualTo(24);
+        assertThat(ambush.log()).anyMatch(line -> line.contains("전리품 일부를 두고 왔다") && line.contains("-20%"));
     }
 
     @Test

@@ -20,7 +20,9 @@ enum BotPolicy {
     /** 신중형 + 방어를 거의 하지 않음 */
     RECKLESS_ONLY("HEAVEN", 0.8, 0.6, false, false, false),
     /** 신중형 + 스킬을 조합 시너지 위주로 고름 (조합 배율이 겹칠 때의 영향을 재는 데 쓴다) */
-    SYNERGY("HEAVEN", 0.35, 0.6, false, false, false, true);
+    SYNERGY("HEAVEN", 0.35, 0.6, false, false, false, true),
+    /** 신중형 + 매번 은밀한 길 (은밀한 길의 대가가 너무 작아 늘 고르는 게 최선이 되지 않는지 재는 데 쓴다) */
+    AMBUSH_ONLY("HEAVEN", 0.35, 0.6, false, false, true);
 
     /** 조우에서 고르는 세력 */
     final String faction;

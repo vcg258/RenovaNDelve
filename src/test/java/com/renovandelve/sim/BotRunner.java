@@ -148,7 +148,7 @@ class BotRunner {
         if (hpRatio() < 0.5 && drinkPotion()) return;
         String path = "SAFE";
         if (policy.dangerPath && hpRatio() > 0.6) path = "DANGER";
-        else if (policy.ambushWhenHurt && hpRatio() < 0.45) path = "AMBUSH";
+        else if (policy.ambushWhenHurt && (policy == BotPolicy.AMBUSH_ONLY || hpRatio() < 0.45)) path = "AMBUSH";
         result.nodesVisited++;
         NodeDTO node = engine.nextNode(member, path);
         if ("WRAITH".equals(node.nodeType())) result.wraiths++;
