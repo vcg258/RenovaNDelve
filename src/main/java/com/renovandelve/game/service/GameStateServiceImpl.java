@@ -13,7 +13,9 @@ import com.renovandelve.catalog.domain.skillentity.SkillEntity;
 import com.renovandelve.catalog.domain.weaponentity.WeaponEntity;
 import com.renovandelve.game.dto.request.NewGameRequest;
 import com.renovandelve.game.dto.response.SetupOptionsDTO;
+import com.renovandelve.game.dto.response.SetupLocksDTO;
 import com.renovandelve.game.engine.Pact;
+import com.renovandelve.game.engine.SetupUnlocks;
 import com.renovandelve.catalog.repository.ArmorRepository;
 import com.renovandelve.collection.repository.CollectionArmorRepository;
 import com.renovandelve.collection.repository.CollectionConsumableRepository;
@@ -57,15 +59,16 @@ public class GameStateServiceImpl implements GameStateService {
     private final CatalogMapper catalogMapper;
     private final GameMapper gameMapper;
 
-    public static final int STARTING_BUDGET = 800;   // 스타팅 포인트 기본 예산
+    public static final int STARTING_BUDGET = 500;   // 스타팅 포인트 기본 예산 (처음 원정은 흔함 장비로 가볍게 시작한다)
     // 메타 진행: 도감에 등록한 항목 1종마다 다음 판의 예산이 늘어난다 (죽어도 남는 성장)
-    public static final int BUDGET_PER_COLLECTION = 5;
-    public static final int MAX_BONUS_BUDGET = 200;
+    public static final int BUDGET_PER_COLLECTION = 10;
+    public static final int MAX_BONUS_BUDGET = 500;
     private static final int MAX_START_SKILLS = 4;
     private static final String DEFAULT_SKILL_NAME = "기본 공격";
 
     /**
-     * 원정 준비 화면의 선택지와 예산. 예산은 기본 800에 도감 수집 보너스(1종당 5, 최대 200)를 더한다.
+     * 원정 준비 화면의 선택지와 예산. 예산은 기본 예산에 도감 수집 보너스를 더한다.
+     * 희귀·영웅 항목은 도감에 등록한 것만 고를 수 있고, 나머지는 잠긴 채로 함께 보낸다(다음 목표로 보이게).
      *
      * @param member 회원
      * @return 원정 준비 옵션
@@ -73,16 +76,33 @@ public class GameStateServiceImpl implements GameStateService {
     @Override
     public SetupOptionsDTO getSetupOptions(MemberEntity member) {
         int bonus = bonusBudget(member);
+        SetupUnlocks unlocks = unlocks(member);
+        List<WeaponEntity> weapons = weaponRepository.findAll();
+        List<ArmorEntity> armors = armorRepository.findAll();
+        List<HelmetEntity> helmets = helmetRepository.findAll();
+        List<SkillEntity> skills = skillRepository.findAll();
+        List<RelicEntity> relics = relicRepository.findAll();
+        SetupLocksDTO locked = new SetupLocksDTO(
+                weapons.stream().filter(w -> !unlocks.weapon(w.getWeaponId(), w.getRarity())).map(WeaponEntity::getWeaponId).toList(),
+                armors.stream().filter(a -> !unlocks.armor(a.getArmorId(), a.getRarity())).map(ArmorEntity::getArmorId).toList(),
+                helmets.stream().filter(h -> !unlocks.helmet(h.getHelmetId(), h.getRarity())).map(HelmetEntity::getHelmetId).toList(),
+                skills.stream().filter(sk -> !unlocks.skill(sk.getSkillId(), sk.getRarity())).map(SkillEntity::getSkillId).toList(),
+                relics.stream().filter(r -> !unlocks.relic(r.getRelicId(), r.getRarity())).map(RelicEntity::getRelicId).toList());
         return new SetupOptionsDTO(
                 STARTING_BUDGET + bonus,
                 bonus,
                 MAX_START_SKILLS - 1,
-                catalogMapper.toWeaponDTOs(weaponRepository.findAll()),
-                catalogMapper.toArmorDTOs(armorRepository.findAll()),
-                catalogMapper.toHelmetDTOs(helmetRepository.findAll()),
-                catalogMapper.toSkillInfoDTOs(skillRepository.findAll()),
-                catalogMapper.toRelicDTOs(relicRepository.findAll()),
-                Arrays.stream(Pact.values()).map(gameMapper::toPactDTO).toList()
+                catalogMapper.toWeaponDTOs(weapons),
+                catalogMapper.toArmorDTOs(armors),
+                catalogMapper.toHelmetDTOs(helmets),
+                catalogMapper.toSkillInfoDTOs(skills),
+                catalogMapper.toRelicDTOs(relics),
+                Arrays.stream(Pact.values()).map(gameMapper::toPactDTO).toList(),
+                locked,
+                BUDGET_PER_COLLECTION,
+                MAX_BONUS_BUDGET,
+                gameStateRepository.findClearedDifficulties(member.getMemberId()).stream()
+                        .max(Comparator.naturalOrder()).orElse(null)
         );
     }
 
@@ -128,6 +148,9 @@ public class GameStateServiceImpl implements GameStateService {
         // 서약 (알 수 없는 코드는 400)
         Set<Pact> pacts = Pact.fromCodes(request.pacts());
 
+        // 해금 검증 (희귀·영웅은 도감에 등록한 것만)
+        requireUnlocked(unlocks(member), weapon, armor, helmet, skills, relics);
+
         // 예산 검증
         int cost = weapon.getScoreCost() + armor.getScoreCost() + helmet.getScoreCost()
                 + skills.stream().mapToInt(SkillEntity::getCost).sum()
@@ -169,6 +192,38 @@ public class GameStateServiceImpl implements GameStateService {
     }
 
     /* HELPER METHODS */
+
+    /** 이 회원의 도감으로 정해지는 원정 준비 해금 상태 */
+    private SetupUnlocks unlocks(MemberEntity member) {
+        return new SetupUnlocks(
+                collectionWeaponRepository.findWeaponIdsByMember(member),
+                collectionArmorRepository.findArmorIdsByMember(member),
+                collectionHelmetRepository.findHelmetIdsByMember(member),
+                collectionSkillRepository.findSkillIdsByMember(member),
+                collectionRelicRepository.findRelicIdsByMember(member));
+    }
+
+    /**
+     * 고른 항목이 모두 해금되어 있는지 본다. 화면은 잠긴 항목을 막지만, 요청을 직접 보내는 경우를 서버가 막는다.
+     *
+     * @throws BusinessException 해금되지 않은 항목이 있으면
+     */
+    private void requireUnlocked(SetupUnlocks unlocks, WeaponEntity weapon, ArmorEntity armor, HelmetEntity helmet,
+                                 List<SkillEntity> skills, List<RelicEntity> relics) {
+        if (!unlocks.weapon(weapon.getWeaponId(), weapon.getRarity())) throw locked(weapon.getName());
+        if (!unlocks.armor(armor.getArmorId(), armor.getRarity())) throw locked(armor.getName());
+        if (!unlocks.helmet(helmet.getHelmetId(), helmet.getRarity())) throw locked(helmet.getName());
+        for (SkillEntity skill : skills) {
+            if (!unlocks.skill(skill.getSkillId(), skill.getRarity())) throw locked(skill.getName());
+        }
+        for (RelicEntity relic : relics) {
+            if (!unlocks.relic(relic.getRelicId(), relic.getRarity())) throw locked(relic.getName());
+        }
+    }
+
+    private static BusinessException locked(String name) {
+        return new BusinessException(ErrorCode.SETUP_ITEM_LOCKED, name);
+    }
 
     /** 도감 수집 수에 비례한 스타팅 포인트 보너스 */
     /**

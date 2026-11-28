@@ -49,6 +49,8 @@ public enum ErrorCode {
     UNKNOWN_DIFFICULTY(HttpStatus.BAD_REQUEST, "알 수 없는 난이도: %s"),
     UNKNOWN_PACT(HttpStatus.BAD_REQUEST, "알 수 없는 서약: %s"),
     BUDGET_EXCEEDED(HttpStatus.BAD_REQUEST, "스타팅 포인트 예산 초과: 사용 %d / 예산 %d"),
+    /** 원정 준비에서 아직 해금하지 않은 희귀·영웅 항목을 골랐다 */
+    SETUP_ITEM_LOCKED(HttpStatus.BAD_REQUEST, "%s은(는) 아직 해금되지 않았습니다. 원정에서 한 번 손에 넣으면 도감에 등록되어 고를 수 있습니다."),
     NOT_ENOUGH_GOLD(HttpStatus.BAD_REQUEST, "골드가 부족합니다. 보유: %d, 필요: %d"),
     /** 상점·보상에서 고른 품목이 카탈로그에 없다. 문구는 품목 종류마다 다르다 */
     ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "%s"),

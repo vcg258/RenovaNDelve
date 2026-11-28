@@ -6,6 +6,8 @@ import com.renovandelve.catalog.dto.RelicDTO;
 import com.renovandelve.game.dto.SkillInfoDTO;
 import com.renovandelve.catalog.dto.WeaponDTO;
 
+import com.renovandelve.game.domain.gamestateentity.Difficulty;
+
 import java.util.List;
 
 /**
@@ -20,6 +22,10 @@ public record SetupOptionsDTO(
         List<HelmetDTO> helmets,
         List<SkillInfoDTO> skills,
         List<RelicDTO> relics,
-        List<PactDTO> pacts   // 선택 가능한 서약 (스스로 거는 제약, 점수 보너스)
+        List<PactDTO> pacts,  // 선택 가능한 서약 (스스로 거는 제약, 점수 보너스)
+        SetupLocksDTO locked, // 아직 고를 수 없는 항목 (희귀·영웅은 도감에 등록하면 해금)
+        int budgetPerCollection, // 도감 1종마다 늘어나는 예산
+        int maxBonusBudget,      // 도감 보너스 상한
+        Difficulty bestCleared   // 클리어한 가장 높은 난이도 (없으면 null). 화면이 다음 목표를 보여 준다
 ) {
 }

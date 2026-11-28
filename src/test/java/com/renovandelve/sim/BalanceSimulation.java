@@ -103,7 +103,7 @@ class BalanceSimulation {
                     list.add(pool.submit(() -> {
                         List<RunResult> results = new ArrayList<>();
                         for (int i = 0; i < count; i++) {
-                            results.add(new BotRunner(engine, gameStateService, member, policy, difficulty).play());
+                            results.add(new BotRunner(engine, gameStateService, member, policy, difficulty, i + 1).play());
                         }
                         return results;
                     }));
@@ -114,16 +114,19 @@ class BalanceSimulation {
 
         StringBuilder report = new StringBuilder();
         StringBuilder extra = new StringBuilder();
+        StringBuilder growth = new StringBuilder();
         report.append(Summary.HEADER);
         extra.append(System.lineSeparator()).append(Summary.EXTRA_HEADER);
+        growth.append(System.lineSeparator()).append(Summary.GROWTH_HEADER);
         for (var entry : futures.entrySet()) {
             List<RunResult> results = new ArrayList<>();
             for (Future<List<RunResult>> f : entry.getValue()) results.addAll(f.get());
             Summary summary = Summary.of(entry.getKey(), results);
             report.append(summary.row()).append(System.lineSeparator());
             extra.append(summary.extraRow()).append(System.lineSeparator());
+            growth.append(summary.growthRow()).append(System.lineSeparator());
         }
-        report.append(extra);
+        report.append(extra).append(growth);
         pool.shutdown();
 
         String out = System.getenv().getOrDefault("RD_SIM_OUT", "build/balance-report.md");

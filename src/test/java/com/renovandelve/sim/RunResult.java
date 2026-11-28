@@ -23,4 +23,14 @@ class RunResult {
     int encountersAfterTier3;
     /** 지나온 노드 수 */
     int nodesVisited;
+    /** 이 회원이 플레이한 몇 번째 판인가 (1부터, 도감이 쌓이는 메타 성장을 보는 데 쓴다) */
+    int runIndex;
+    /** 보스전에 들어갈 때의 HP 비율 합과 횟수 */
+    double bossEntryHp;
+    int bossEntries;
+    /** 마지막으로 들어간 보스전의 HP 비율 */
+    double lastBossEntryHp;
+    /** 일반·엘리트 전투에 들어갈 때의 HP 비율 합과 횟수 */
+    double battleEntryHp;
+    int battleEntries;
 }

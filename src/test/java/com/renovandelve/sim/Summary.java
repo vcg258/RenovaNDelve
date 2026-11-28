@@ -68,4 +68,28 @@ record Summary(String key, List<RunResult> runs) {
                 ok.stream().mapToInt(r -> r.nodesVisited).average().orElse(0),
                 reached.stream().mapToInt(r -> r.encountersAfterTier3).average().orElse(0));
     }
+
+    static final String GROWTH_HEADER = """
+            | 난이도/봇 | 판 | 보스 진입 HP | 전투 진입 HP | 판당 물약 | 1~3판 클리어 | 4~10판 | 11판~ | 보스 사망 중 보스 진입 HP 50% 미만 |
+            |---|---|---|---|---|---|---|---|---|
+            """;
+
+    /** 회복 여유(전투에 들어갈 때 남은 HP)와 판 순서별 클리어율 (도감이 쌓일수록 강해지는지) */
+    String growthRow() {
+        List<RunResult> ok = runs.stream().filter(r -> r.error == null).toList();
+        double boss = ok.stream().mapToDouble(r -> r.bossEntryHp).sum() / Math.max(1, ok.stream().mapToInt(r -> r.bossEntries).sum());
+        double battle = ok.stream().mapToDouble(r -> r.battleEntryHp).sum() / Math.max(1, ok.stream().mapToInt(r -> r.battleEntries).sum());
+        List<RunResult> bossDeaths = ok.stream().filter(r -> !r.cleared && r.node >= 10 && r.bossEntries > 0).toList();
+        long lowEntry = bossDeaths.stream().filter(r -> r.lastBossEntryHp < 0.5).count();
+        return "| %s | %d | %.0f%% | %.0f%% | %.1f | %s | %s | %s | %s |".formatted(
+                key, ok.size(), 100 * boss, 100 * battle, ok.stream().mapToInt(r -> r.potions).average().orElse(0),
+                clearRate(ok, 1, 3), clearRate(ok, 4, 10), clearRate(ok, 11, Integer.MAX_VALUE),
+                bossDeaths.isEmpty() ? "-" : "%.0f%%".formatted(100.0 * lowEntry / bossDeaths.size()));
+    }
+
+    private static String clearRate(List<RunResult> runs, int from, int to) {
+        List<RunResult> part = runs.stream().filter(r -> r.runIndex >= from && r.runIndex <= to).toList();
+        if (part.isEmpty()) return "-";
+        return "%.0f%% (%d)".formatted(100.0 * part.stream().filter(r -> r.cleared).count() / part.size(), part.size());
+    }
 }
